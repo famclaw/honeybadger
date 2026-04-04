@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build all targets
+        run: make cross
+
+      - name: HoneyBadger self-check
+        run: |
+          ./bin/honeybadger-linux-amd64 scan github.com/famclaw/honeybadger \
+            --paranoia strict --format ndjson | tee self-report.json
+          verdict=$(grep '"type":"result"' self-report.json | jq -r .verdict || echo "UNKNOWN")
+          if [ "$verdict" = "FAIL" ]; then
+            echo "Self-check FAILED"
+            exit 1
+          fi
+
+      - name: Generate SHA256SUMS
+        run: sha256sum bin/* > SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: bin/*
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign with cosign
+        run: |
+          for f in bin/*; do
+            cosign sign-blob --yes "$f" --bundle "${f}.bundle"
+          done
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/*
+            SHA256SUMS
+            sbom.cyclonedx.json
+            self-report.json

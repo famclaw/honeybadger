@@ -1,52 +1,63 @@
 # HoneyBadger
 
-Standalone Go security scanner for auditing git repositories before installation.
+Security scanner for skills, tools, and MCP servers used by AI assistant runtimes.
 
-## Status
+**HoneyBadger don't care. HoneyBadger checks anyway.**
 
-**Wave 5 (MCP Server + SKILL.md) -- complete.**
+## What it does
 
-- Project skeleton with Go module, CLI entry point, types, helpers, and report interface
-- **Full CLI pipeline** wired end-to-end in `cmd/honeybadger/main.go`:
-  - Paranoia level parsing and validation
-  - `--force` flag bypasses scan with PASS result
-  - Tier detection (online/offline) via GitHub API HEAD + DNS fallback
-  - Sandbox detection (Docker, macOS sandbox-exec, Termux) with effective paranoia capping
-  - Emitter selection (NDJSON or text) based on `--format` flag
-  - Repository fetching via `fetch.Route()` with token and subpath support
-  - Scanner execution via `scan.RunAll()` with streaming finding emission
-  - Health event emission from repo metadata
-  - LLM verdict integration (when paranoia >= family and endpoint configured)
-  - Rules-based verdict computation with paranoia-aware thresholds, strict/paranoid WARN-to-FAIL escalation, and LLM verdict merging (worst verdict wins)
-  - Finding counts, CVE aggregation, and full result event emission
-  - Exit codes: PASS=0, WARN=1, FAIL=2, unknown=3
-  - `--installed-sha` update verification (SHA256 of repo content)
-  - `--installed-tool-hash` verification (detects mcp-go tool registration changes)
-  - `--db` audit trail (appends JSON result to file)
-- **MCP server mode** (`--mcp-server` flag) — JSON-RPC over stdio using mcp-go v0.46.0:
-  - Exposes `honeybadger_scan` tool with full input schema (repo_url, paranoia, installed_sha, installed_tool_hash, path)
-  - Runs the same fetch -> scan -> report pipeline as the CLI
-  - Returns structured JSON result with verdict, reasoning, finding counts, and metadata
-  - In-process test suite using mcp-go's client for tool registration, local repo scanning, and error handling
-- **SKILL.md** — AgentSkills manifest for famclaw/PicoClaw/OpenClaw skill registries
-- **Audit store** (`internal/store/audit.go`) — lightweight JSONL file append for scan results
-- Scan types: Finding, ParanoiaLevel, Options, severity constants, block thresholds
-- Helper functions: WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
-- Report Emitter interface defined
-- **Secrets scanner** using gitleaks v8 as in-process library (800+ credential patterns)
-- **Supply chain scanner** with 16 regex patterns plus typosquat detection
-- **Dependency parser** supporting 8 lockfile formats
-- **CVE scanner** querying osv.dev batch API
-- **Meta scanner** for SKILL.md metadata analysis
-- **Attestation scanner** for verification of signed artifacts
-- **Concurrent scan runner** with fan-in architecture, paranoia-gated scanner selection, panic recovery
-- **NDJSON reporter** — streaming newline-delimited JSON emitter, thread-safe
-- **Text reporter** — human-readable output with severity markers, verdict block formatting
-- **LLM integration** — prompt assembly with 32K token budget, OpenAI-compatible API calling
-- Makefile with build, cross-compile, test, and self-check targets
-- All tests passing, go vet clean
+Before anything gets installed on a family home server running AI assistants, HoneyBadger checks it.
 
-## Project Structure
+## Usage
+
+### CLI
+
+    honeybadger scan <repo-url> [flags]
+
+    Flags:
+      --paranoia string      off|minimal|family|strict|paranoid (default: family)
+      --format string        ndjson|text (default: ndjson)
+      --llm string           LLM endpoint override
+      --db string            Path to audit trail file
+      --installed-sha string SHA256 of installed version
+      --installed-tool-hash  SHA256 of installed MCP tool definitions
+      --force                Skip scan, exit 0
+      --offline              Skip network calls, scan local only
+      --path string          Subdirectory within repo to scan
+
+### MCP Server
+
+    honeybadger --mcp-server
+
+Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
+
+## What it checks
+
+| Check | Scanner | Description |
+|-------|---------|-------------|
+| Secrets | gitleaks v8 | 800+ credential patterns, noise reduction |
+| Supply chain | regex + typosquat | curl\|bash, eval, reverse shell, crypto mining, etc. |
+| CVEs | osv.dev | Batch API across Go, npm, PyPI, Rust, Ruby, Maven |
+| SKILL.md | meta checker | Declared vs actual permissions |
+| Attestation | GitHub API | Build provenance, cosign, SHA256SUMS (strict/paranoid) |
+
+## Paranoia levels
+
+| Level | Scanners | LLM | Blocks on |
+|-------|----------|-----|-----------|
+| off | None | No | Nothing |
+| minimal | secrets, cve | No | CRITICAL |
+| family | secrets, cve, supplychain, meta | Yes | HIGH+ |
+| strict | all + attestation | Yes | MEDIUM+ (WARN=FAIL) |
+| paranoid | all + allowlist | Yes | LOW+ |
+
+## Output
+
+Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, health, attestation, sandbox, result.
+
+Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error.
+
+## Project structure
 
 ```
 honeybadger/
@@ -72,7 +83,7 @@ honeybadger/
 │   │   └── llm_test.go
 │   ├── scan/
 │   │   ├── types.go          # Finding, ParanoiaLevel, Options, constants
-│   │   ├── types_test.go     # Table-driven tests
+│   │   ├── types_test.go
 │   │   ├── helpers.go        # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
 │   │   ├── secrets.go        # Secrets scanner (gitleaks-powered)
 │   │   ├── secrets_test.go
@@ -86,22 +97,46 @@ honeybadger/
 │   │   ├── meta_test.go
 │   │   ├── attestation.go    # Attestation verification scanner
 │   │   ├── attestation_test.go
-│   │   ├── runner.go          # Concurrent scan runner with fan-in
+│   │   ├── runner.go         # Concurrent scan runner with fan-in
 │   │   └── runner_test.go
 │   └── store/
-│       ├── audit.go           # JSONL audit trail writer
+│       ├── audit.go          # JSONL audit trail writer
 │       └── audit_test.go
+├── .github/
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── ci.yml
+│       ├── codeql.yml
+│       └── release.yml
 ├── .gitignore
 ├── go.mod
+├── go.sum
 ├── Makefile
 ├── README.md
-└── SKILL.md                   # AgentSkills manifest for skill registries
+├── SECURITY.md
+└── SKILL.md                  # AgentSkills manifest for skill registries
 ```
 
-## Build
+## Status
 
-```bash
-make build        # build for current platform
-make cross        # cross-compile all targets
-make test         # run all tests
-```
+Wave 6 complete. All packages implemented:
+- Core types and shared helpers
+- Fetch layer (GitHub, GitLab, tarball, local)
+- Five scanners (secrets, supply chain, CVE, meta, attestation)
+- Concurrent runner with panic recovery
+- NDJSON and text reporters + LLM verdict
+- Full CLI pipeline with tier/sandbox detection
+- MCP server mode
+- SKILL.md cross-runtime interface
+- CI/CD: govulncheck, CodeQL, dependabot, release pipeline
+
+## Building
+
+    make build          # current platform
+    make cross          # all 5 targets (linux arm64/armv7/amd64, darwin arm64/amd64)
+    make test           # run all tests
+    make self-check     # scan ourselves at strict paranoia
+
+## License
+
+MIT
