@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mark3labs/mcp-go/server"
+
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -546,8 +548,8 @@ func checkToolHash(repo *fetch.Repo, expectedHash string) []scan.Finding {
 }
 
 func serveMCP() error {
-	fmt.Println("not implemented")
-	return nil
+	s := newMCPServer()
+	return server.ServeStdio(s)
 }
 
 func envOrDefault(key, fallback string) string {

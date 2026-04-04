@@ -4,7 +4,7 @@ Standalone Go security scanner for auditing git repositories before installation
 
 ## Status
 
-**Wave 4 (CLI Wiring + Store) -- complete.**
+**Wave 5 (MCP Server + SKILL.md) -- complete.**
 
 - Project skeleton with Go module, CLI entry point, types, helpers, and report interface
 - **Full CLI pipeline** wired end-to-end in `cmd/honeybadger/main.go`:
@@ -23,6 +23,12 @@ Standalone Go security scanner for auditing git repositories before installation
   - `--installed-sha` update verification (SHA256 of repo content)
   - `--installed-tool-hash` verification (detects mcp-go tool registration changes)
   - `--db` audit trail (appends JSON result to file)
+- **MCP server mode** (`--mcp-server` flag) — JSON-RPC over stdio using mcp-go v0.46.0:
+  - Exposes `honeybadger_scan` tool with full input schema (repo_url, paranoia, installed_sha, installed_tool_hash, path)
+  - Runs the same fetch -> scan -> report pipeline as the CLI
+  - Returns structured JSON result with verdict, reasoning, finding counts, and metadata
+  - In-process test suite using mcp-go's client for tool registration, local repo scanning, and error handling
+- **SKILL.md** — AgentSkills manifest for famclaw/PicoClaw/OpenClaw skill registries
 - **Audit store** (`internal/store/audit.go`) — lightweight JSONL file append for scan results
 - Scan types: Finding, ParanoiaLevel, Options, severity constants, block thresholds
 - Helper functions: WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
@@ -46,7 +52,9 @@ Standalone Go security scanner for auditing git repositories before installation
 honeybadger/
 ├── cmd/honeybadger/
 │   ├── main.go              # CLI entry point — full pipeline wiring
-│   └── main_test.go         # Table-driven tests for verdict, exit codes, tool hash
+│   ├── main_test.go         # Table-driven tests for verdict, exit codes, tool hash
+│   ├── mcp.go               # MCP server mode — JSON-RPC over stdio
+│   └── mcp_test.go          # MCP server tests via in-process client
 ├── internal/
 │   ├── fetch/
 │   │   ├── fetch.go         # Repo type, Route(), Fetcher interface
@@ -86,7 +94,8 @@ honeybadger/
 ├── .gitignore
 ├── go.mod
 ├── Makefile
-└── README.md
+├── README.md
+└── SKILL.md                   # AgentSkills manifest for skill registries
 ```
 
 ## Build
