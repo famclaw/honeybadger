@@ -12,8 +12,6 @@ import (
 
 // RunSecrets scans repository files for hardcoded secrets using gitleaks.
 func RunSecrets(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
-
 	// Create gitleaks detector with default config (800+ credential patterns).
 	detector, err := detect.NewDetectorDefaultConfig()
 	if err != nil {

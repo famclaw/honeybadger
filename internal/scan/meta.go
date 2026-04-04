@@ -160,8 +160,6 @@ func detectBehavior(files map[string][]byte) (network, filesystem, exec bool) {
 
 // RunMeta scans a repository's SKILL.md for metadata issues and permission mismatches.
 func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
-
 	// Find SKILL.md in repo files
 	var skillContent []byte
 	var found bool

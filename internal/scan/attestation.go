@@ -20,8 +20,6 @@ var AttestationAPIBase = "https://api.github.com"
 
 // RunAttestation checks build provenance and attestation for a repository.
 func RunAttestation(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
-
 	// Only run at strict or paranoid paranoia levels.
 	if opts.Paranoia != ParanoiaStrict && opts.Paranoia != ParanoiaParanoid {
 		return

@@ -85,7 +85,7 @@ func isBinaryContent(data []byte) bool {
 
 // RunSupplyChain scans repository files for supply chain risk patterns.
 func RunSupplyChain(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
+
 	for path, content := range repo.Files {
 		select {
 		case <-ctx.Done():

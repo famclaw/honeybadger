@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -89,7 +90,10 @@ func AssembleLLMPrompt(repo *fetch.Repo, findings []scan.Finding, opts LLMOption
 	}
 
 	// Marshal findings
-	findingsJSON, _ := json.Marshal(findings)
+	findingsJSON, err := json.Marshal(findings)
+	if err != nil {
+		findingsJSON = []byte("[]")
+	}
 
 	// Build the header (everything except source files)
 	header := fmt.Sprintf(promptTemplate,
@@ -235,13 +239,15 @@ func CallLLM(ctx context.Context, prompt string, endpoint, apiKey, model string)
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	llmClient := &http.Client{Timeout: 120 * time.Second}
+	resp, err := llmClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("llm request send: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Limit response to 1MB to prevent memory exhaustion from rogue endpoints
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, fmt.Errorf("llm response read: %w", err)
 	}

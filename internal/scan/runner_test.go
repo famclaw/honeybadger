@@ -10,9 +10,10 @@ import (
 
 // --- Mock scanner helpers ---
 
+// Mock scanners do NOT close the out channel — the runner owns channel lifecycle.
+
 func mockScanner(findings ...Finding) ScanFunc {
 	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-		defer close(out)
 		for _, f := range findings {
 			select {
 			case out <- f:
@@ -25,14 +26,12 @@ func mockScanner(findings ...Finding) ScanFunc {
 
 func panicScanner() ScanFunc {
 	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-		defer close(out)
 		panic("intentional test panic")
 	}
 }
 
 func blockingScanner() ScanFunc {
 	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-		defer close(out)
 		<-ctx.Done()
 	}
 }

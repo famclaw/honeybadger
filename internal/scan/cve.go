@@ -56,7 +56,7 @@ var osvEndpoint = osvBatchURL
 
 // RunCVE queries osv.dev for known vulnerabilities in the repo's dependencies.
 func RunCVE(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
+
 	deps := ParseDeps(repo)
 	if len(deps) == 0 || opts.Offline {
 		return

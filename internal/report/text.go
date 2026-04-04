@@ -41,8 +41,10 @@ func (e *TextEmitter) Emit(v any) error {
 		file, _ := m["file"].(string)
 		line, _ := m["line"].(float64)
 		msg, _ := m["message"].(string)
-		if file != "" {
+		if file != "" && int(line) > 0 {
 			return e.writef("[%s] %s:%d — %s\n", sev, file, int(line), msg)
+		} else if file != "" {
+			return e.writef("[%s] %s — %s\n", sev, file, msg)
 		}
 		return e.writef("[%s] %s\n", sev, msg)
 

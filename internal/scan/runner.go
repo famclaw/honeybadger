@@ -43,11 +43,13 @@ func RunAllWith(ctx context.Context, repo *fetch.Repo, opts Options, scanners []
 				}
 			}()
 
-			// Run scanner synchronously so panic recovery works
+			// Run scanner synchronously so panic recovery works.
+			// Runner owns ch lifecycle — close it after scanner returns
+			// (even if scanner panics), so fan-in goroutine always terminates.
 			func() {
+				defer close(ch)
 				defer func() {
 					if r := recover(); r != nil {
-						// ch is already closed by the scanner's defer close(out)
 						out <- Finding{
 							Type:     "finding",
 							Severity: SevError,
