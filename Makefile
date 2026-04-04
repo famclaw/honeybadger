@@ -1,0 +1,32 @@
+BINARY    := honeybadger
+BUILD_DIR := ./bin
+VERSION   := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS   := -ldflags "-s -w -X main.Version=$(VERSION)"
+
+.PHONY: build cross test self-check clean
+
+build:
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) ./cmd/honeybadger
+
+cross:
+	@mkdir -p $(BUILD_DIR)
+	GOOS=linux  GOARCH=arm64       CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY)-linux-arm64  ./cmd/honeybadger
+	GOOS=linux  GOARCH=arm GOARM=7 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY)-linux-armv7  ./cmd/honeybadger
+	GOOS=linux  GOARCH=amd64       CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY)-linux-amd64  ./cmd/honeybadger
+	GOOS=darwin GOARCH=arm64       CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY)-darwin-arm64 ./cmd/honeybadger
+	GOOS=darwin GOARCH=amd64       CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY)-darwin-amd64 ./cmd/honeybadger
+	@echo "All targets built"
+
+android-install:
+	CGO_ENABLED=0 go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
+
+test:
+	go test ./... -v
+
+self-check: build
+	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia strict
+	@echo "Self-check passed"
+
+clean:
+	rm -rf $(BUILD_DIR)

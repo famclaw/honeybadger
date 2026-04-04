@@ -1,0 +1,8 @@
+bin/
+vendor/
+*.exe
+*.dll
+*.so
+*.dylib
+Thumbs.db
+.DS_Store
