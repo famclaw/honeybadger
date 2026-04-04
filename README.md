@@ -4,7 +4,7 @@ Standalone Go security scanner for auditing git repositories before installation
 
 ## Status
 
-**Wave 2 (Scanners) -- in progress.**
+**Wave 3 (Runner + Reporters) -- complete.**
 
 - Project skeleton with Go module, CLI entry point, types, helpers, and report interface
 - CLI parses all flags and env vars; `scan` and `mcp-server` subcommands are stubs
@@ -18,6 +18,12 @@ Standalone Go security scanner for auditing git repositories before installation
 - **Supply chain scanner** with 16 regex patterns (curl-pipe-bash, reverse shell, crypto mining, webhook exfil, etc.) plus typosquat detection via edit distance
 - **Dependency parser** supporting 8 lockfile formats: go.mod, package-lock.json, yarn.lock, requirements.txt, Pipfile.lock, Cargo.lock, Gemfile.lock, pom.xml
 - **CVE scanner** querying osv.dev batch API with CVSS score mapping and fixed version extraction
+- **Meta scanner** for SKILL.md metadata analysis
+- **Attestation scanner** for verification of signed artifacts
+- **Concurrent scan runner** with fan-in architecture, paranoia-gated scanner selection, panic recovery, and context cancellation support
+- **NDJSON reporter** — streaming newline-delimited JSON emitter, thread-safe with mutex
+- **Text reporter** — human-readable output with severity markers, verdict block formatting
+- **LLM integration** — prompt assembly with 32K token budget, priority-based file inclusion, OpenAI-compatible API calling with verdict parsing
 - Makefile with build, cross-compile, test, and self-check targets
 - All tests passing, go vet clean
 
@@ -35,7 +41,13 @@ honeybadger/
 │   │   ├── gitlab.go        # GitLab fetcher
 │   │   └── tarball.go       # Tarball fetcher
 │   ├── report/
-│   │   └── types.go         # Emitter interface
+│   │   ├── types.go         # Emitter interface
+│   │   ├── ndjson.go        # NDJSON streaming emitter
+│   │   ├── ndjson_test.go
+│   │   ├── text.go          # Human-readable text emitter
+│   │   ├── text_test.go
+│   │   ├── llm.go           # LLM prompt assembly + verdict calling
+│   │   └── llm_test.go
 │   └── scan/
 │       ├── types.go          # Finding, ParanoiaLevel, Options, constants
 │       ├── types_test.go     # Table-driven tests
@@ -51,7 +63,9 @@ honeybadger/
 │       ├── meta.go           # SKILL.md meta scanner
 │       ├── meta_test.go
 │       ├── attestation.go    # Attestation verification scanner
-│       └── attestation_test.go
+│       ├── attestation_test.go
+│       ├── runner.go          # Concurrent scan runner with fan-in
+│       └── runner_test.go     # Runner tests (6 test cases)
 ├── .gitignore
 ├── go.mod
 ├── Makefile
