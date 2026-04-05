@@ -166,6 +166,24 @@ func TestCLI_TextFormat(t *testing.T) {
 	}
 }
 
+// Regression: text format verdict block showed "0 critical, 0 high, 0 medium, 0 low"
+// even when there were actual findings, because the emitter read the wrong key.
+func TestCLI_TextFormatFindingCounts(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.SecretsRepo())
+	cmd := exec.Command(testBinary, "scan", dir, "--format", "text", "--paranoia", "family", "--offline")
+	out, _ := cmd.CombinedOutput()
+	output := string(out)
+
+	if !strings.Contains(output, "VERDICT") {
+		t.Fatalf("text output should contain VERDICT block, got:\n%s", output)
+	}
+	// The secrets fixture produces at least one finding. The verdict block must NOT
+	// show all-zero counts, which was the symptom of the bug.
+	if strings.Contains(output, "0 critical, 0 high, 0 medium, 0 low") {
+		t.Errorf("finding counts are all zero in verdict block — regression: finding_counts key mismatch\noutput:\n%s", output)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // MCP in-process tests
 // ---------------------------------------------------------------------------
