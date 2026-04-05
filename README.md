@@ -107,15 +107,22 @@ honeybadger/
 │   │   └── attestation/
 │   │       ├── attestation.go   # Attestation verification scanner
 │   │       └── attestation_test.go
-│   └── store/
-│       ├── audit.go          # JSONL audit trail writer
-│       └── audit_test.go
+│   ├── store/
+│   │   ├── audit.go          # JSONL audit trail writer
+│   │   └── audit_test.go
+│   └── testfixture/
+│       ├── fixtures.go       # Builder functions returning *fetch.Repo with in-memory files
+│       ├── fixtures_test.go  # Smoke tests for all fixtures
+│       └── mock_osv.go       # Mock osv.dev server for testing CVE scanner
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/
 │       ├── ci.yml
 │       ├── codeql.yml
 │       └── release.yml
+├── docs/
+│   ├── OPENCLAW.md           # Installation guide for FamClaw, OpenClaw, PicoClaw
+│   └── EXAMPLES.md           # CLI and MCP usage examples
 ├── .gitignore
 ├── go.mod
 ├── go.sum
@@ -127,7 +134,18 @@ honeybadger/
 
 ## Status
 
-Wave 7 complete. Restructured to follow Go best practices:
+Wave 9 complete. Added installation and usage documentation:
+- `docs/OPENCLAW.md` -- installation guide for FamClaw, OpenClaw, and PicoClaw runtimes
+- `docs/EXAMPLES.md` -- CLI and MCP usage examples, NDJSON event format, exit codes, CI/CD
+
+Wave 8 complete. Added test fixture package:
+- `internal/testfixture/` with 7 builder functions returning `*fetch.Repo` for integration/E2E tests
+- Fixtures: CleanRepo, SecretsRepo, SupplyChainRepo, CVERepo, MetaMismatchRepo, AttestationRepo, FullyCleanSkillRepo
+- `WriteToDir` helper writes repo files to a temp directory for CLI subprocess tests
+- Mock OSV server for testing CVE scanner without network
+- All secrets built at runtime to avoid GitHub push protection
+
+Previous waves:
 - Each scanner in its own package under `internal/scanner/`
 - Core types (Finding, Options, ParanoiaLevel) in `internal/scan/`
 - Shared helpers (WalkCode, Redact, EditDistance) in `internal/scan/helpers.go`
