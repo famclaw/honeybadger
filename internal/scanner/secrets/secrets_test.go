@@ -25,7 +25,13 @@ func TestRunSecrets(t *testing.T) {
 	fakeAWSKey := fakeSecret("AKIA", "R7MYB2VN", "KCZW3Q5X")
 	fakeGHToken := fakeSecret("ghp_", "x8Kj2mLp9Qr4sT7v", "W0yZ3bN6dF1hA5cE8gI")
 	fakeStripeKey := fakeSecret("sk_live_", "1234567890abcdef", "ghijklmn")
-	fakePEM := fakeSecret("-----BEGIN RSA PRIVATE KEY-----", "\nMIIEowIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF068", "\n-----END RSA PRIVATE KEY-----")
+	fakePEM := fakeSecret(
+		"-----BEGIN RSA PRIVATE KEY-----\n",
+		"MIIEpAIBAAKCAQEA2a2rwplBQLT8KjMvwLFLkhEE",
+		"Gp5YoS7ckPNFRCqGJv1VqsD1234567890abcdefg",
+		"hijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV",
+		"\n-----END RSA PRIVATE KEY-----",
+	)
 
 	tests := []struct {
 		name            string
