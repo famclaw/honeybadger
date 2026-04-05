@@ -21,26 +21,52 @@ Available targets:
 - `honeybadger-darwin-arm64` -- macOS Apple Silicon
 - `honeybadger-darwin-amd64` -- macOS Intel
 
+### Docker
+    docker pull ghcr.io/famclaw/honeybadger:latest
+    docker run --rm ghcr.io/famclaw/honeybadger scan github.com/someone/some-skill
+
+Multi-arch image available for `linux/amd64` and `linux/arm64`.
+
 ### Android / Termux
     pkg install golang
     go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
 Note: Sandbox unavailable on Termux. Effective paranoia capped at `family`.
 
-## MCP Server Configuration
+## Verifying Downloads
+
+All release binaries are signed with Sigstore cosign (keyless). Verify before use:
+
+    cosign verify-blob honeybadger-linux-arm64 \
+      --bundle honeybadger-linux-arm64.bundle \
+      --certificate-identity-regexp=".*famclaw/honeybadger.*" \
+      --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+
+    gh attestation verify honeybadger-linux-arm64 --repo famclaw/honeybadger
+
+## MCP Server Mode
 
 HoneyBadger runs as an MCP server over stdio, exposing the `honeybadger_scan` tool.
+Any MCP-compatible runtime can call it.
 
-### FamClaw
+    honeybadger --mcp-server
 
-In `config.yaml`:
+## Integration: FamClaw
+
+FamClaw discovers MCP tools automatically via the `tools/list` handshake.
+Add honeybadger to your `config.yaml`:
+
 ```yaml
 skills:
+  auto_seccheck: true
+  block_on_fail: true
+
   mcp_servers:
     honeybadger:
       transport: stdio
       command: honeybadger
       args: ["--mcp-server"]
+
   credentials:
     honeybadger:
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
@@ -49,7 +75,27 @@ skills:
 Credentials are injected as environment variables when the MCP server process
 is spawned. They never appear in LLM context.
 
-### OpenClaw
+**How it works in FamClaw:**
+1. A family member asks to install a skill or vet a repo
+2. FamClaw's policy engine evaluates the request (parent approval may be required)
+3. If allowed, the agent calls `honeybadger_scan` via MCP
+4. HoneyBadger fetches the repo, runs all scanners, returns PASS/WARN/FAIL
+5. FamClaw blocks installation if verdict is FAIL
+
+**Remote mode** (for constrained devices like Android):
+```yaml
+skills:
+  mcp_servers:
+    honeybadger:
+      transport: http
+      url: "http://192.168.1.10:8090/mcp"
+      headers:
+        Authorization: "Bearer ${MCP_TOKEN}"
+```
+
+Run honeybadger on a LAN server and point constrained devices to it.
+
+## Integration: OpenClaw
 
 In your OpenClaw MCP config:
 ```yaml
@@ -61,7 +107,7 @@ mcp_servers:
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
 ```
 
-### PicoClaw
+## Integration: PicoClaw
 
 In PicoClaw's tool configuration:
 ```yaml
@@ -69,6 +115,25 @@ tools:
   - name: honeybadger
     type: mcp
     command: honeybadger --mcp-server
+```
+
+## Integration: Claude Code
+
+See [CLAUDE_CODE.md](CLAUDE_CODE.md) for full Claude Code setup instructions.
+
+Quick setup -- add to your project's `.claude/settings.local.json`:
+```json
+{
+  "mcpServers": {
+    "honeybadger": {
+      "command": "honeybadger",
+      "args": ["--mcp-server"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
 ```
 
 ## SKILL.md Registration
@@ -120,3 +185,5 @@ Set globally in your runtime config or per-scan via the MCP tool parameter.
 **Binary not found** -- Ensure honeybadger is in your PATH, or use the absolute path in your runtime config.
 
 **Termux sandbox warning** -- Expected. Sandbox is unavailable on Android. Paranoia is capped at `family`.
+
+**Docker permission denied** -- Run `docker run --rm ghcr.io/famclaw/honeybadger ...` without volume mounts. HoneyBadger fetches repos over the network inside the container.

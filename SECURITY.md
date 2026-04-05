@@ -22,8 +22,31 @@ We will acknowledge receipt within 48 hours and aim to provide a fix within 7 da
 
 ## Security Practices
 
-- All releases include SLSA Build L3 provenance attestation
-- Release binaries are signed with Sigstore cosign (keyless)
-- CycloneDX SBOM attached to every release
-- `govulncheck` runs in CI and blocks merge on known CVEs
-- HoneyBadger self-checks before every release
+- All releases include GitHub build provenance attestation (SLSA Build L2)
+- Release binaries are signed with Sigstore cosign (keyless via GitHub OIDC)
+- Cosign signatures are verified in-pipeline before release publication
+- SPDX SBOM generated and attested for every release
+- `govulncheck` and `gosec` run in CI (warn mode due to gitleaks transitive deps)
+- CodeQL static analysis runs on push, PR, and weekly schedule
+- HoneyBadger self-checks at strict paranoia before every release
+- All GitHub Actions SHA-pinned to immutable commit hashes
+- Container images signed with cosign and pushed to GHCR
+
+## Verifying Release Artifacts
+
+```bash
+# Verify binary signature
+cosign verify-blob bin/honeybadger-linux-amd64 \
+  --bundle bin/honeybadger-linux-amd64.bundle \
+  --certificate-identity-regexp=".*famclaw/honeybadger.*" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+
+# Verify container image
+cosign verify ghcr.io/famclaw/honeybadger:latest \
+  --certificate-identity-regexp=".*famclaw/honeybadger.*" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+
+# Verify GitHub attestation
+gh attestation verify bin/honeybadger-linux-amd64 \
+  --repo famclaw/honeybadger
+```
