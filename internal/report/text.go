@@ -51,6 +51,27 @@ func (e *TextEmitter) Emit(v any) error {
 	case "result":
 		return e.writeVerdict(m)
 
+	case "sandbox":
+		avail, _ := m["available"].(bool)
+		reason, _ := m["reason"].(string)
+		ep, _ := m["effective_paranoia"].(string)
+		if avail {
+			return e.writef("[sandbox] Available (%s), effective paranoia: %s\n", reason, ep)
+		}
+		return e.writef("[sandbox] Unavailable (%s), effective paranoia: %s\n", reason, ep)
+
+	case "health":
+		stars, _ := m["stars"].(float64)
+		contribs, _ := m["contributors"].(float64)
+		age, _ := m["age_days"].(float64)
+		license, _ := m["has_license"].(bool)
+		licStr := "no"
+		if license {
+			licStr = "yes"
+		}
+		return e.writef("[health] Stars: %d | Contributors: %d | Age: %d days | License: %s\n",
+			int(stars), int(contribs), int(age), licStr)
+
 	default:
 		return e.writef("[info] %s\n", string(raw))
 	}
@@ -60,19 +81,16 @@ func (e *TextEmitter) writeVerdict(m map[string]any) error {
 	verdict, _ := m["verdict"].(string)
 	reasoning, _ := m["reasoning"].(string)
 
-	counts, _ := m["counts"].(map[string]any)
+	counts, _ := m["finding_counts"].(map[string]any)
 	critical, _ := counts["critical"].(float64)
 	high, _ := counts["high"].(float64)
 	medium, _ := counts["medium"].(float64)
 	low, _ := counts["low"].(float64)
 
-	cveCount := float64(0)
+	cveCount, _ := m["cve_count"].(float64)
 	cveMaxSev := "none"
-	if cves, ok := m["cves"].(map[string]any); ok {
-		cveCount, _ = cves["count"].(float64)
-		if s, ok := cves["max_severity"].(string); ok && s != "" {
-			cveMaxSev = s
-		}
+	if s, ok := m["cve_max_severity"].(string); ok && s != "" {
+		cveMaxSev = s
 	}
 
 	durationMs, _ := m["duration_ms"].(float64)
