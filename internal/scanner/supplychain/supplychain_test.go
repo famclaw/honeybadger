@@ -1,10 +1,11 @@
-package scan
+package supplychain
 
 import (
 	"context"
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 func TestRunSupplyChain_Patterns(t *testing.T) {
@@ -137,10 +138,11 @@ func TestRunSupplyChain_Patterns(t *testing.T) {
 				},
 			}
 
-			out := make(chan Finding, 100)
-			RunSupplyChain(context.Background(), repo, Options{}, out)
+			out := make(chan scan.Finding, 100)
+			Run(context.Background(), repo, scan.Options{}, out)
+			close(out)
 
-			var findings []Finding
+			var findings []scan.Finding
 			for f := range out {
 				findings = append(findings, f)
 			}
@@ -170,10 +172,11 @@ func TestRunSupplyChain_SkipsBinaryContent(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunSupplyChain(context.Background(), repo, Options{}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
 
-	var findings []Finding
+	var findings []scan.Finding
 	for f := range out {
 		findings = append(findings, f)
 	}
@@ -195,10 +198,11 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunSupplyChain(context.Background(), repo, Options{}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
 
-	var typosquats []Finding
+	var typosquats []scan.Finding
 	for f := range out {
 		if f.Check == "supplychain" && f.Package != "" {
 			typosquats = append(typosquats, f)
@@ -224,10 +228,11 @@ func TestRunSupplyChain_NoFalsePositiveOnCleanFile(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunSupplyChain(context.Background(), repo, Options{}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
 
-	var findings []Finding
+	var findings []scan.Finding
 	for f := range out {
 		findings = append(findings, f)
 	}

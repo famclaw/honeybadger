@@ -2,22 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"os/exec"
-	"regexp"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -136,13 +130,13 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 4. Tier detection
-	tier := detectTier(offline)
+	tier := engine.DetectTier(offline)
 
 	// 5. Sandbox detection and event
-	sandboxAvailable, sandboxType, reason := detectSandbox()
+	sandboxAvailable, sandboxType, reason := engine.DetectSandbox()
 	effectiveParanoia := string(paranoia)
 
-	if isTermux() {
+	if engine.IsTermux() {
 		sandboxAvailable = false
 		reason = "Termux does not support sandboxing"
 		if scan.SeverityRank(string(paranoia)) > scan.SeverityRank(string(scan.ParanoiaFamily)) {
@@ -159,7 +153,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	})
 
 	// 6. Fetch repo
-	emitter.Emit(progressEvent("fetch", "Fetching repository...")) //nolint:errcheck
+	emitter.Emit(engine.ProgressEvent("fetch", "Fetching repository...")) //nolint:errcheck
 
 	fetcher, err := fetch.Route(repoURL)
 	if err != nil {
@@ -179,7 +173,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 
 	// 13a. Update verification: --installed-sha
 	if installedSHA != "" {
-		archiveHash := computeRepoHash(repo)
+		archiveHash := engine.ComputeRepoHash(repo)
 		if archiveHash == installedSHA {
 			result := map[string]any{
 				"type":      "result",
@@ -211,9 +205,10 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		GitlabToken:       gitlabToken,
 	}
 
-	emitter.Emit(progressEvent("scan", "Running security scanners...")) //nolint:errcheck
+	emitter.Emit(engine.ProgressEvent("scan", "Running security scanners...")) //nolint:errcheck
 
-	findings := scan.RunAll(ctx, repo, scanOpts)
+	scanners := engine.BuildScannerList(scanOpts)
+	findings := scan.RunAll(ctx, repo, scanOpts, scanners)
 
 	var allFindings []scan.Finding
 	for f := range findings {
@@ -223,7 +218,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 
 	// 13b. Update verification: --installed-tool-hash
 	if installedToolHash != "" {
-		toolFindings := checkToolHash(repo, installedToolHash)
+		toolFindings := engine.CheckToolHash(repo, installedToolHash)
 		for _, f := range toolFindings {
 			emitter.Emit(f) //nolint:errcheck
 			allFindings = append(allFindings, f)
@@ -248,7 +243,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
 	if paranoia >= scan.ParanoiaFamily && llmEndpoint != "" {
-		emitter.Emit(progressEvent("llm", "Asking LLM for verdict...")) //nolint:errcheck
+		emitter.Emit(engine.ProgressEvent("llm", "Asking LLM for verdict...")) //nolint:errcheck
 
 		llmOpts := report.LLMOptions{
 			Paranoia: string(paranoia),
@@ -259,7 +254,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		v, err := report.CallLLM(ctx, prompt, llmEndpoint, llmKey, llmModel)
 		if err != nil {
 			// LLM failure is non-fatal; emit a warning and continue
-			emitter.Emit(progressEvent("llm", fmt.Sprintf("LLM call failed: %v", err))) //nolint:errcheck
+			emitter.Emit(engine.ProgressEvent("llm", fmt.Sprintf("LLM call failed: %v", err))) //nolint:errcheck
 		} else if v != nil {
 			llmVerdict = v
 			llmUsed = true
@@ -267,7 +262,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 10. Compute final verdict
-	verdict, reasoning, keyFinding := computeVerdict(allFindings, paranoia, llmVerdict)
+	verdict, reasoning, keyFinding := engine.ComputeVerdict(allFindings, paranoia, llmVerdict)
 
 	// Count findings by severity
 	findingCounts := map[string]int{
@@ -329,222 +324,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 12. Exit code
-	return exitCodeForVerdict(verdict), nil
-}
-
-// computeVerdict determines the final verdict from findings, paranoia, and optional LLM verdict.
-func computeVerdict(findings []scan.Finding, paranoia scan.ParanoiaLevel, llmVerdict *report.LLMVerdict) (string, string, string) {
-	if paranoia == scan.ParanoiaOff {
-		return "PASS", "Scanning disabled (paranoia=off)", ""
-	}
-
-	threshold, ok := scan.BlockThresholds[paranoia]
-	if !ok {
-		threshold = scan.SevHigh // default to family
-	}
-
-	thresholdRank := scan.SeverityRank(threshold)
-	warnRank := thresholdRank - 1
-
-	verdict := "PASS"
-	reasoning := "No findings at or above threshold"
-	keyFinding := ""
-	maxSevRank := 0
-
-	for _, f := range findings {
-		rank := scan.SeverityRank(f.Severity)
-		if rank > maxSevRank {
-			maxSevRank = rank
-			keyFinding = f.Message
-		}
-
-		if rank >= thresholdRank {
-			verdict = "FAIL"
-			reasoning = fmt.Sprintf("Finding at %s severity meets or exceeds %s threshold", f.Severity, threshold)
-		} else if rank >= warnRank && verdict != "FAIL" {
-			verdict = "WARN"
-			reasoning = fmt.Sprintf("Finding at %s severity is one level below %s threshold", f.Severity, threshold)
-		}
-	}
-
-	// Strict and paranoid: WARN becomes FAIL
-	if (paranoia == scan.ParanoiaStrict || paranoia == scan.ParanoiaParanoid) && verdict == "WARN" {
-		verdict = "FAIL"
-		reasoning = reasoning + " (escalated: strict/paranoid mode treats WARN as FAIL)"
-	}
-
-	// Combine with LLM verdict (take the worse one)
-	if llmVerdict != nil {
-		llmRank := verdictRank(llmVerdict.Verdict)
-		rulesRank := verdictRank(verdict)
-		if llmRank > rulesRank {
-			verdict = llmVerdict.Verdict
-			reasoning = fmt.Sprintf("LLM verdict: %s", llmVerdict.Reasoning)
-			if llmVerdict.KeyFinding != "" {
-				keyFinding = llmVerdict.KeyFinding
-			}
-		}
-	}
-
-	return verdict, reasoning, keyFinding
-}
-
-// verdictRank returns a numeric ranking for verdict comparison.
-func verdictRank(v string) int {
-	switch v {
-	case "PASS":
-		return 0
-	case "WARN":
-		return 1
-	case "FAIL":
-		return 2
-	default:
-		return -1
-	}
-}
-
-// exitCodeForVerdict maps verdict to exit code.
-func exitCodeForVerdict(verdict string) int {
-	switch verdict {
-	case "PASS":
-		return 0
-	case "WARN":
-		return 1
-	case "FAIL":
-		return 2
-	default:
-		return 3
-	}
-}
-
-// detectTier determines if we're online or offline.
-func detectTier(offline bool) string {
-	if offline {
-		return "offline"
-	}
-
-	// Try HEAD to GitHub API
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodHead, "https://api.github.com", nil)
-	if err == nil {
-		resp, err := client.Do(req)
-		if err == nil {
-			resp.Body.Close()
-			return "online"
-		}
-	}
-
-	// Fallback: TCP dial to dns.google:443
-	conn, err := net.DialTimeout("tcp", "dns.google:443", 5*time.Second)
-	if err == nil {
-		conn.Close()
-		return "online"
-	}
-
-	return "offline"
-}
-
-// isTermux detects the Termux environment.
-func isTermux() bool {
-	if os.Getenv("TERMUX_VERSION") != "" {
-		return true
-	}
-	_, err := os.Stat("/data/data/com.termux")
-	return err == nil
-}
-
-// detectSandbox checks for available sandbox mechanisms.
-func detectSandbox() (available bool, sandboxType, reason string) {
-	// Check Docker
-	if _, err := exec.LookPath("docker"); err == nil {
-		return true, "docker", "Docker available"
-	}
-
-	// Check macOS sandbox-exec
-	if runtime.GOOS == "darwin" {
-		return true, "sandbox-exec", "macOS sandbox-exec available"
-	}
-
-	return false, "none", "No sandbox mechanism detected"
-}
-
-// progressEvent creates a progress event map.
-func progressEvent(phase, message string) map[string]any {
-	return map[string]any{
-		"type":    "progress",
-		"phase":   phase,
-		"message": message,
-	}
-}
-
-// computeRepoHash computes a SHA256 hash of all repo file contents in sorted order.
-func computeRepoHash(repo *fetch.Repo) string {
-	paths := make([]string, 0, len(repo.Files))
-	for p := range repo.Files {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-
-	h := sha256.New()
-	for _, p := range paths {
-		h.Write([]byte(p))
-		h.Write(repo.Files[p])
-	}
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-// checkToolHash searches for MCP tool registrations and compares hash.
-func checkToolHash(repo *fetch.Repo, expectedHash string) []scan.Finding {
-	toolPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`mcp\.NewTool\(\s*"([^"]+)"`),
-		regexp.MustCompile(`server\.AddTool\(\s*"([^"]+)"`),
-		regexp.MustCompile(`tool\.New\(\s*"([^"]+)"`),
-	}
-
-	toolNames := make(map[string]bool)
-	for path, content := range repo.Files {
-		_ = path
-		src := string(content)
-		for _, pat := range toolPatterns {
-			matches := pat.FindAllStringSubmatch(src, -1)
-			for _, m := range matches {
-				if len(m) > 1 {
-					toolNames[m[1]] = true
-				}
-			}
-		}
-	}
-
-	if len(toolNames) == 0 {
-		return []scan.Finding{{
-			Type:     "finding",
-			Severity: scan.SevLow,
-			Check:    "tool-hash",
-			Message:  "Could not extract tool registrations from source; tool hash verification skipped",
-		}}
-	}
-
-	// Sort and hash tool names
-	names := make([]string, 0, len(toolNames))
-	for n := range toolNames {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-
-	toolJSON, _ := json.Marshal(names)
-	h := sha256.Sum256(toolJSON)
-	actualHash := fmt.Sprintf("%x", h[:])
-
-	if actualHash != expectedHash {
-		return []scan.Finding{{
-			Type:     "finding",
-			Severity: scan.SevHigh,
-			Check:    "tool-hash",
-			Message:  fmt.Sprintf("Tool hash mismatch: expected %s, got %s", expectedHash, actualHash),
-		}}
-	}
-
-	return nil
+	return engine.ExitCodeForVerdict(verdict), nil
 }
 
 func serveMCP() error {

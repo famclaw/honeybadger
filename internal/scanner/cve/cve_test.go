@@ -1,4 +1,4 @@
-package scan
+package cve
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 func TestRunCVE_WithVulnerabilities(t *testing.T) {
@@ -75,10 +76,11 @@ func TestRunCVE_WithVulnerabilities(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunCVE(context.Background(), repo, Options{}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
 
-	var findings []Finding
+	var findings []scan.Finding
 	for f := range out {
 		findings = append(findings, f)
 	}
@@ -94,7 +96,7 @@ func TestRunCVE_WithVulnerabilities(t *testing.T) {
 	if f.ID != "GHSA-1234-5678-9abc" {
 		t.Errorf("expected ID 'GHSA-1234-5678-9abc', got %q", f.ID)
 	}
-	if f.Severity != SevCritical {
+	if f.Severity != scan.SevCritical {
 		t.Errorf("expected severity CRITICAL for score 9.8, got %q", f.Severity)
 	}
 	if f.FixedIn != "4.17.21" {
@@ -112,10 +114,11 @@ func TestRunCVE_EmptyDeps(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunCVE(context.Background(), repo, Options{}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
 
-	var findings []Finding
+	var findings []scan.Finding
 	for f := range out {
 		findings = append(findings, f)
 	}
@@ -142,10 +145,11 @@ func TestRunCVE_OfflineMode(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunCVE(context.Background(), repo, Options{Offline: true}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{Offline: true}, out)
+	close(out)
 
-	var findings []Finding
+	var findings []scan.Finding
 	for f := range out {
 		findings = append(findings, f)
 	}
@@ -177,10 +181,11 @@ func TestRunCVE_NoVulnerabilities(t *testing.T) {
 		},
 	}
 
-	out := make(chan Finding, 100)
-	RunCVE(context.Background(), repo, Options{}, out)
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out)
+	close(out)
 
-	var findings []Finding
+	var findings []scan.Finding
 	for f := range out {
 		findings = append(findings, f)
 	}
@@ -196,11 +201,11 @@ func TestMapOSVSeverity(t *testing.T) {
 		score    string
 		expected string
 	}{
-		{"critical", "9.8", SevCritical},
-		{"high", "7.5", SevHigh},
-		{"medium", "5.0", SevMedium},
-		{"low", "2.0", SevLow},
-		{"no_score", "", SevMedium},
+		{"critical", "9.8", scan.SevCritical},
+		{"high", "7.5", scan.SevHigh},
+		{"medium", "5.0", scan.SevMedium},
+		{"low", "2.0", scan.SevLow},
+		{"no_score", "", scan.SevMedium},
 	}
 
 	for _, tt := range tests {

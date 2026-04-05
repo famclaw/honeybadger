@@ -63,10 +63,12 @@ Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error.
 honeybadger/
 ├── cmd/honeybadger/
 │   ├── main.go              # CLI entry point — full pipeline wiring
-│   ├── main_test.go         # Table-driven tests for verdict, exit codes, tool hash
 │   ├── mcp.go               # MCP server mode — JSON-RPC over stdio
 │   └── mcp_test.go          # MCP server tests via in-process client
 ├── internal/
+│   ├── engine/
+│   │   ├── engine.go        # Verdict computation, tier/sandbox detection, scanner list builder
+│   │   └── engine_test.go
 │   ├── fetch/
 │   │   ├── fetch.go         # Repo type, Route(), Fetcher interface
 │   │   ├── fetch_test.go
@@ -82,23 +84,29 @@ honeybadger/
 │   │   ├── llm.go           # LLM prompt assembly + verdict calling
 │   │   └── llm_test.go
 │   ├── scan/
-│   │   ├── types.go          # Finding, ParanoiaLevel, Options, constants
-│   │   ├── types_test.go
-│   │   ├── helpers.go        # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
-│   │   ├── secrets.go        # Secrets scanner (gitleaks-powered)
-│   │   ├── secrets_test.go
-│   │   ├── supplychain.go    # Supply chain risk pattern scanner + typosquat detection
-│   │   ├── supplychain_test.go
-│   │   ├── deps.go           # Dependency parser (8 lockfile formats)
-│   │   ├── deps_test.go
-│   │   ├── cve.go            # CVE scanner via osv.dev API
-│   │   ├── cve_test.go
-│   │   ├── meta.go           # SKILL.md meta scanner
-│   │   ├── meta_test.go
-│   │   ├── attestation.go    # Attestation verification scanner
-│   │   ├── attestation_test.go
-│   │   ├── runner.go         # Concurrent scan runner with fan-in
-│   │   └── runner_test.go
+│   │   ├── finding.go       # Finding struct, severity constants, ParanoiaLevel, Options
+│   │   ├── finding_test.go
+│   │   ├── scan.go          # ScanFunc type, RunAll (concurrent runner with fan-in)
+│   │   ├── scan_test.go
+│   │   └── helpers.go       # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
+│   ├── scanner/
+│   │   ├── secrets/
+│   │   │   ├── secrets.go       # Secrets scanner (gitleaks-powered)
+│   │   │   └── secrets_test.go
+│   │   ├── supplychain/
+│   │   │   ├── supplychain.go   # Supply chain risk patterns + typosquat detection
+│   │   │   └── supplychain_test.go
+│   │   ├── cve/
+│   │   │   ├── cve.go           # CVE scanner via osv.dev API
+│   │   │   ├── deps.go          # Dependency parser (8 lockfile formats)
+│   │   │   ├── cve_test.go
+│   │   │   └── deps_test.go
+│   │   ├── meta/
+│   │   │   ├── meta.go          # SKILL.md meta scanner
+│   │   │   └── meta_test.go
+│   │   └── attestation/
+│   │       ├── attestation.go   # Attestation verification scanner
+│   │       └── attestation_test.go
 │   └── store/
 │       ├── audit.go          # JSONL audit trail writer
 │       └── audit_test.go
@@ -119,15 +127,17 @@ honeybadger/
 
 ## Status
 
-Wave 6 complete. All packages implemented:
-- Core types and shared helpers
+Wave 7 complete. Restructured to follow Go best practices:
+- Each scanner in its own package under `internal/scanner/`
+- Core types (Finding, Options, ParanoiaLevel) in `internal/scan/`
+- Shared helpers (WalkCode, Redact, EditDistance) in `internal/scan/helpers.go`
+- Concurrent runner in `internal/scan/scan.go`
+- Scanner list builder in `internal/engine/` (avoids import cycles)
+- All existing functionality preserved — pure refactor, zero behavior change
 - Fetch layer (GitHub, GitLab, tarball, local)
-- Five scanners (secrets, supply chain, CVE, meta, attestation)
-- Concurrent runner with panic recovery
 - NDJSON and text reporters + LLM verdict
 - Full CLI pipeline with tier/sandbox detection
 - MCP server mode
-- SKILL.md cross-runtime interface
 - CI/CD: govulncheck, CodeQL, dependabot, release pipeline
 
 ## Building

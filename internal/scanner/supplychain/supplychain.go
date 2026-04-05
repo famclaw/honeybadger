@@ -1,4 +1,4 @@
-package scan
+package supplychain
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 var supplyChainPatterns = []struct {
@@ -83,8 +84,8 @@ func isBinaryContent(data []byte) bool {
 	return false
 }
 
-// RunSupplyChain scans repository files for supply chain risk patterns.
-func RunSupplyChain(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+// Run scans repository files for supply chain risk patterns.
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 
 	for path, content := range repo.Files {
 		select {
@@ -101,14 +102,14 @@ func RunSupplyChain(ctx context.Context, repo *fetch.Repo, opts Options, out cha
 		for lineNum, line := range lines {
 			for _, p := range compiledPatterns {
 				if p.re.MatchString(line) {
-					out <- Finding{
+					out <- scan.Finding{
 						Type:     "finding",
 						Severity: p.severity,
 						Check:    "supplychain",
 						File:     path,
 						Line:     lineNum + 1,
 						Message:  p.message,
-						Snippet:  Redact(strings.TrimSpace(line), 120),
+						Snippet:  scan.Redact(strings.TrimSpace(line), 120),
 					}
 				}
 			}
@@ -121,19 +122,19 @@ func RunSupplyChain(ctx context.Context, repo *fetch.Repo, opts Options, out cha
 
 // checkTyposquats parses dependency names from package.json and requirements.txt
 // and compares them against popular packages using edit distance.
-func checkTyposquats(repo *fetch.Repo, out chan<- Finding) {
+func checkTyposquats(repo *fetch.Repo, out chan<- scan.Finding) {
 	depNames := extractDependencyNames(repo)
 	for _, dep := range depNames {
 		for _, popular := range popularPackages {
 			if dep == popular {
 				continue
 			}
-			dist := EditDistance(dep, popular)
+			dist := scan.EditDistance(dep, popular)
 			// Flag if edit distance is 1 or 2 (close but not identical)
 			if dist > 0 && dist <= 2 {
-				out <- Finding{
+				out <- scan.Finding{
 					Type:     "finding",
-					Severity: SevHigh,
+					Severity: scan.SevHigh,
 					Check:    "supplychain",
 					Message:  "Possible typosquat: \"" + dep + "\" is close to popular package \"" + popular + "\"",
 					Package:  dep,

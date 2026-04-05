@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -108,7 +109,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 
 	// 3. Update verification: installed SHA
 	if installedSHA != "" {
-		archiveHash := computeRepoHash(repo)
+		archiveHash := engine.ComputeRepoHash(repo)
 		if archiveHash == installedSHA {
 			return map[string]any{
 				"type":      "result",
@@ -120,7 +121,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 
 	// 4. Run scanners
 	effectiveParanoia := string(paranoia)
-	if isTermux() {
+	if engine.IsTermux() {
 		if scan.SeverityRank(string(paranoia)) > scan.SeverityRank(string(scan.ParanoiaFamily)) {
 			effectiveParanoia = string(scan.ParanoiaFamily)
 		}
@@ -140,7 +141,8 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 		GitlabToken:       gitlabToken,
 	}
 
-	findings := scan.RunAll(ctx, repo, scanOpts)
+	scanners := engine.BuildScannerList(scanOpts)
+	findings := scan.RunAll(ctx, repo, scanOpts, scanners)
 	var allFindings []scan.Finding
 	for f := range findings {
 		allFindings = append(allFindings, f)
@@ -148,7 +150,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 
 	// 5. Tool hash verification
 	if installedToolHash != "" {
-		toolFindings := checkToolHash(repo, installedToolHash)
+		toolFindings := engine.CheckToolHash(repo, installedToolHash)
 		allFindings = append(allFindings, toolFindings...)
 	}
 
@@ -170,7 +172,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	}
 
 	// 7. Compute final verdict
-	verdict, reasoning, keyFinding := computeVerdict(allFindings, paranoia, llmVerdict)
+	verdict, reasoning, keyFinding := engine.ComputeVerdict(allFindings, paranoia, llmVerdict)
 
 	// 8. Count findings by severity
 	findingCounts := map[string]int{

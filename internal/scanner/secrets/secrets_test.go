@@ -1,4 +1,4 @@
-package scan
+package secrets
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 // fakeSecret builds a test secret at runtime to avoid GitHub push protection
@@ -120,15 +121,18 @@ func TestRunSecrets(t *testing.T) {
 				Files:    tt.files,
 			}
 
-			ch := make(chan Finding, 100)
+			ch := make(chan scan.Finding, 100)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			go RunSecrets(ctx, repo, Options{Paranoia: ParanoiaStrict}, ch)
+			go func() {
+				Run(ctx, repo, scan.Options{Paranoia: scan.ParanoiaStrict}, ch)
+				close(ch)
+			}()
 
-			var findings []Finding
+			var findings []scan.Finding
 			for f := range ch {
-				if f.Severity == SevError {
+				if f.Severity == scan.SevError {
 					t.Logf("scanner error: %s", f.Message)
 					continue
 				}
@@ -145,12 +149,12 @@ func TestRunSecrets(t *testing.T) {
 			if tt.wantMinSeverity != "" && len(findings) > 0 {
 				maxRank := 0
 				for _, f := range findings {
-					rank := SeverityRank(f.Severity)
+					rank := scan.SeverityRank(f.Severity)
 					if rank > maxRank {
 						maxRank = rank
 					}
 				}
-				wantRank := SeverityRank(tt.wantMinSeverity)
+				wantRank := scan.SeverityRank(tt.wantMinSeverity)
 				if maxRank < wantRank {
 					t.Errorf("highest severity rank %d (want at least %d for %s)", maxRank, wantRank, tt.wantMinSeverity)
 					for i, f := range findings {

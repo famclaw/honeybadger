@@ -1,4 +1,4 @@
-package scan
+package cve
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 const osvBatchURL = "https://api.osv.dev/v1/querybatch"
@@ -54,8 +55,8 @@ type osvBatchResponse struct {
 // osvEndpoint can be overridden in tests.
 var osvEndpoint = osvBatchURL
 
-// RunCVE queries osv.dev for known vulnerabilities in the repo's dependencies.
-func RunCVE(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+// Run queries osv.dev for known vulnerabilities in the repo's dependencies.
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 
 	deps := ParseDeps(repo)
 	if len(deps) == 0 || opts.Offline {
@@ -64,9 +65,9 @@ func RunCVE(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Find
 
 	vulns, err := queryOSV(ctx, deps)
 	if err != nil {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevError,
+			Severity: scan.SevError,
 			Check:    "cve",
 			Message:  fmt.Sprintf("osv.dev query failed: %v", err),
 		}
@@ -79,7 +80,7 @@ func RunCVE(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Find
 		}
 		dep := deps[i]
 		for _, vuln := range result.Vulns {
-			out <- Finding{
+			out <- scan.Finding{
 				Type:      "cve",
 				Severity:  mapOSVSeverity(vuln),
 				Check:     "cve",
@@ -140,18 +141,18 @@ func mapOSVSeverity(vuln osvVuln) string {
 			score := extractCVSSScore(sev.Score)
 			switch {
 			case score >= 9.0:
-				return SevCritical
+				return scan.SevCritical
 			case score >= 7.0:
-				return SevHigh
+				return scan.SevHigh
 			case score >= 4.0:
-				return SevMedium
+				return scan.SevMedium
 			case score > 0:
-				return SevLow
+				return scan.SevLow
 			}
 		}
 	}
 	// Default if no CVSS score found
-	return SevMedium
+	return scan.SevMedium
 }
 
 // extractCVSSScore extracts the numeric base score from a CVSS vector string.

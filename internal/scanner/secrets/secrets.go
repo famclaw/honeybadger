@@ -1,23 +1,24 @@
-package scan
+package secrets
 
 import (
 	"context"
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/report"
 	"github.com/zricethezav/gitleaks/v8/sources"
 )
 
-// RunSecrets scans repository files for hardcoded secrets using gitleaks.
-func RunSecrets(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+// Run scans repository files for hardcoded secrets using gitleaks.
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	// Create gitleaks detector with default config (800+ credential patterns).
 	detector, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevError,
+			Severity: scan.SevError,
 			Check:    "secrets",
 			Message:  "failed to load gitleaks config: " + err.Error(),
 		}
@@ -49,19 +50,19 @@ func RunSecrets(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- 
 
 // convertFinding converts a gitleaks report.Finding to a HoneyBadger Finding,
 // applying noise-reduction rules. Returns false if the finding should be skipped.
-func convertFinding(gf report.Finding, relPath string) (Finding, bool) {
+func convertFinding(gf report.Finding, relPath string) (scan.Finding, bool) {
 	line := gf.Line
 	secret := gf.Secret
 	match := gf.Match
 
 	// Skip env var references — these are correct usage, not leaks.
 	if isEnvVarRef(secret) || isEnvVarRef(match) || isEnvVarRef(line) {
-		return Finding{}, false
+		return scan.Finding{}, false
 	}
 
 	// Skip placeholder values.
-	if IsPlaceholder(line) || IsPlaceholder(secret) {
-		return Finding{}, false
+	if scan.IsPlaceholder(line) || scan.IsPlaceholder(secret) {
+		return scan.Finding{}, false
 	}
 
 	// Map severity.
@@ -72,14 +73,14 @@ func convertFinding(gf report.Finding, relPath string) (Finding, bool) {
 		sev = reduceSeverity(sev)
 	}
 
-	return Finding{
+	return scan.Finding{
 		Type:     "finding",
 		Severity: sev,
 		Check:    "secrets",
 		File:     relPath,
 		Line:     gf.StartLine,
 		Message:  gf.Description,
-		Snippet:  Redact(line, 100),
+		Snippet:  scan.Redact(line, 100),
 	}, true
 }
 
@@ -109,10 +110,10 @@ func mapSeverity(gf report.Finding) string {
 	// Critical patterns.
 	for _, kw := range []string{"private key", "aws", "stripe"} {
 		if strings.Contains(desc, kw) || strings.Contains(ruleID, kw) {
-			return SevCritical
+			return scan.SevCritical
 		}
 	}
-	return SevHigh
+	return scan.SevHigh
 }
 
 // isTestFile returns true if the file path indicates test code.
@@ -132,14 +133,14 @@ func isTestFile(path string) bool {
 // reduceSeverity lowers severity by one level.
 func reduceSeverity(sev string) string {
 	switch sev {
-	case SevCritical:
-		return SevHigh
-	case SevHigh:
-		return SevMedium
-	case SevMedium:
-		return SevLow
-	case SevLow:
-		return SevInfo
+	case scan.SevCritical:
+		return scan.SevHigh
+	case scan.SevHigh:
+		return scan.SevMedium
+	case scan.SevMedium:
+		return scan.SevLow
+	case scan.SevLow:
+		return scan.SevInfo
 	default:
 		return sev
 	}

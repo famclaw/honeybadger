@@ -1,4 +1,4 @@
-package main
+package engine
 
 import (
 	"crypto/sha256"
@@ -155,7 +155,7 @@ func TestComputeVerdict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			verdict, reasoning, keyFinding := computeVerdict(tt.findings, tt.paranoia, tt.llm)
+			verdict, reasoning, keyFinding := ComputeVerdict(tt.findings, tt.paranoia, tt.llm)
 			if verdict != tt.wantV {
 				t.Errorf("verdict = %q, want %q (reasoning: %s)", verdict, tt.wantV, reasoning)
 			}
@@ -173,16 +173,16 @@ func TestIsTermux(t *testing.T) {
 
 	// Set TERMUX_VERSION
 	os.Setenv("TERMUX_VERSION", "0.118")
-	if !isTermux() {
-		t.Error("expected isTermux()=true when TERMUX_VERSION is set")
+	if !IsTermux() {
+		t.Error("expected IsTermux()=true when TERMUX_VERSION is set")
 	}
 
 	// Unset
 	os.Unsetenv("TERMUX_VERSION")
-	// isTermux may still return true if /data/data/com.termux exists
+	// IsTermux may still return true if /data/data/com.termux exists
 	if _, err := os.Stat("/data/data/com.termux"); err != nil {
-		if isTermux() {
-			t.Error("expected isTermux()=false when TERMUX_VERSION unset and path doesn't exist")
+		if IsTermux() {
+			t.Error("expected IsTermux()=false when TERMUX_VERSION unset and path doesn't exist")
 		}
 	}
 }
@@ -201,9 +201,9 @@ func TestExitCodeForVerdict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.verdict, func(t *testing.T) {
-			got := exitCodeForVerdict(tt.verdict)
+			got := ExitCodeForVerdict(tt.verdict)
 			if got != tt.wantCode {
-				t.Errorf("exitCodeForVerdict(%q) = %d, want %d", tt.verdict, got, tt.wantCode)
+				t.Errorf("ExitCodeForVerdict(%q) = %d, want %d", tt.verdict, got, tt.wantCode)
 			}
 		})
 	}
@@ -222,9 +222,9 @@ func TestVerdictRank(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.verdict, func(t *testing.T) {
-			got := verdictRank(tt.verdict)
+			got := VerdictRank(tt.verdict)
 			if got != tt.want {
-				t.Errorf("verdictRank(%q) = %d, want %d", tt.verdict, got, tt.want)
+				t.Errorf("VerdictRank(%q) = %d, want %d", tt.verdict, got, tt.want)
 			}
 		})
 	}
@@ -237,7 +237,7 @@ func TestCheckToolHash(t *testing.T) {
 				"main.go": []byte("package main\nfunc main() {}"),
 			},
 		}
-		findings := checkToolHash(repo, "somehash")
+		findings := CheckToolHash(repo, "somehash")
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
@@ -257,7 +257,7 @@ func init() {
 }`),
 			},
 		}
-		findings := checkToolHash(repo, "wrong-hash")
+		findings := CheckToolHash(repo, "wrong-hash")
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
@@ -272,22 +272,44 @@ func init() {
 				"server.go": []byte(`mcp.NewTool("alpha")`),
 			},
 		}
-		// Compute expected hash using same algorithm as checkToolHash
+		// Compute expected hash using same algorithm as CheckToolHash
 		names := []string{"alpha"}
 		sort.Strings(names)
 		toolJSON, _ := json.Marshal(names)
 		h := sha256.Sum256(toolJSON)
 		correctHash := fmt.Sprintf("%x", h[:])
 
-		findings := checkToolHash(repo, correctHash)
+		findings := CheckToolHash(repo, correctHash)
 		if len(findings) != 0 {
 			t.Errorf("expected 0 findings for matching hash, got %d", len(findings))
 		}
 	})
 }
 
+func TestBuildScannerList_ParanoiaLevels(t *testing.T) {
+	tests := []struct {
+		paranoia scan.ParanoiaLevel
+		want     int
+	}{
+		{scan.ParanoiaOff, 0},
+		{scan.ParanoiaMinimal, 2},
+		{scan.ParanoiaFamily, 4},
+		{scan.ParanoiaStrict, 5},
+		{scan.ParanoiaParanoid, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.paranoia), func(t *testing.T) {
+			scanners := BuildScannerList(scan.Options{Paranoia: tt.paranoia})
+			if len(scanners) != tt.want {
+				t.Errorf("paranoia=%s: got %d scanners, want %d", tt.paranoia, len(scanners), tt.want)
+			}
+		})
+	}
+}
+
 func TestProgressEvent(t *testing.T) {
-	ev := progressEvent("fetch", "Fetching...")
+	ev := ProgressEvent("fetch", "Fetching...")
 	if ev["type"] != "progress" {
 		t.Errorf("type = %v, want progress", ev["type"])
 	}

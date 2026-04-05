@@ -1,4 +1,4 @@
-package scan
+package cve
 
 import (
 	"encoding/json"
