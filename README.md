@@ -149,4 +149,4 @@ Wave 7 complete. Restructured to follow Go best practices:
 
 ## License
 
-AGPL-3.0 — same as [FamClaw](https://github.com/famclaw/famclaw).
+AGPL-3.0-only
