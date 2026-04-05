@@ -152,7 +152,7 @@ curl -fsSL \
 # Verify cosign signature
 cosign verify-blob honeybadger \
   --bundle honeybadger.bundle \
-  --certificate-identity-regexp "github.com/famclaw/honeybadger" \
+  --certificate-identity-regexp ".*famclaw/honeybadger.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 # Verify SHA256
