@@ -5,7 +5,7 @@ description: >
   Security scanner for skills, tools, and MCP servers.
   HoneyBadger don't care. HoneyBadger checks anyway.
 author: famclaw
-license: MIT
+license: AGPL-3.0
 tags: [security, scanner, supply-chain, mcp]
 platforms: [linux, darwin, android]
 
