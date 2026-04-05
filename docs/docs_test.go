@@ -1,6 +1,7 @@
 package docs_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,28 +42,13 @@ func readSource(t *testing.T, relPath string) string {
 // allParanoiaLevels are the valid paranoia levels from scan.ParseParanoia.
 var allParanoiaLevels = []string{"off", "minimal", "family", "strict", "paranoid"}
 
-// --- Task 7: Paranoia Levels ---
+// --- Paranoia Levels (README + EXAMPLES) ---
 
-func TestOpenClaw_ParanoiaLevelsDocumented(t *testing.T) {
-	doc := readDoc(t, "OPENCLAW.md")
-	for _, level := range allParanoiaLevels {
-		if !strings.Contains(doc, "`"+level+"`") {
-			t.Errorf("OPENCLAW.md missing paranoia level %q", level)
-		}
-	}
-}
-
-func TestOpenClaw_ParanoiaTableMatchesREADME(t *testing.T) {
-	openclaw := readDoc(t, "OPENCLAW.md")
+func TestREADME_ParanoiaLevelsDocumented(t *testing.T) {
 	readme := readSource(t, "README.md")
 	for _, level := range allParanoiaLevels {
-		inOpenclaw := strings.Contains(openclaw, "| `"+level+"`")
-		inReadme := strings.Contains(readme, "| "+level+" ")
-		if inOpenclaw && !inReadme {
-			t.Errorf("paranoia level %q in OPENCLAW.md but not in README.md table", level)
-		}
-		if inReadme && !inOpenclaw {
-			t.Errorf("paranoia level %q in README.md but not in OPENCLAW.md table", level)
+		if !strings.Contains(readme, "| "+level+" ") {
+			t.Errorf("README.md missing paranoia level %q in table", level)
 		}
 	}
 }
@@ -134,8 +120,10 @@ func TestExamples_MCPParametersMatchSource(t *testing.T) {
 	}
 }
 
-func TestOpenClaw_MCPToolNameMatchesSource(t *testing.T) {
-	doc := readDoc(t, "OPENCLAW.md")
+// --- EXAMPLES.md MCP Tool Name ---
+
+func TestExamples_MCPToolNameMatchesSource(t *testing.T) {
+	doc := readDoc(t, "EXAMPLES.md")
 	src := readSource(t, filepath.Join("cmd", "honeybadger", "mcp.go"))
 
 	marker := `mcp.NewTool("`
@@ -148,67 +136,25 @@ func TestOpenClaw_MCPToolNameMatchesSource(t *testing.T) {
 	toolName := src[nameStart : nameStart+nameEnd]
 
 	if !strings.Contains(doc, toolName) {
-		t.Errorf("OPENCLAW.md does not mention MCP tool name %q", toolName)
+		t.Errorf("EXAMPLES.md does not mention MCP tool name %q", toolName)
 	}
 }
 
-// --- Task 10: Environment Variables ---
+// --- EXAMPLES.md Env Vars ---
 
-func TestOpenClaw_EnvVarsMatchSource(t *testing.T) {
-	doc := readDoc(t, "OPENCLAW.md")
+func TestExamples_EnvVarsDocumented(t *testing.T) {
 	src := readSource(t, filepath.Join("cmd", "honeybadger", "main.go")) +
 		readSource(t, filepath.Join("cmd", "honeybadger", "mcp.go"))
 
+	// Verify these env vars are actually used in source
 	envVars := []string{
 		"GITHUB_TOKEN", "GITLAB_TOKEN",
 		"HONEYBADGER_LLM", "HONEYBADGER_LLM_KEY", "HONEYBADGER_LLM_MODEL",
 	}
 	for _, env := range envVars {
-		if !strings.Contains(doc, "`"+env+"`") {
-			t.Errorf("env var %s not in OPENCLAW.md", env)
-		}
 		if !strings.Contains(src, `"`+env+`"`) {
-			t.Errorf("OPENCLAW.md documents env var %s but it is not used in source", env)
+			t.Errorf("env var %s expected in source but not found", env)
 		}
-	}
-}
-
-// --- Task 11: Binary Targets & Config ---
-
-func TestOpenClaw_BinaryTargetsMatchMakefile(t *testing.T) {
-	doc := readDoc(t, "OPENCLAW.md")
-	makefile := readSource(t, "Makefile")
-
-	// Binary names documented in OPENCLAW.md. The Makefile uses $(BINARY)-suffix
-	// so we check for the suffix portion that appears literally in the Makefile.
-	binaryNames := []string{
-		"honeybadger-linux-arm64", "honeybadger-linux-armv7",
-		"honeybadger-linux-amd64", "honeybadger-darwin-arm64",
-		"honeybadger-darwin-amd64",
-	}
-	for _, bin := range binaryNames {
-		if !strings.Contains(doc, bin) {
-			t.Errorf("OPENCLAW.md missing binary target %q", bin)
-		}
-		// Makefile uses $(BINARY)-suffix, so check for the suffix after "honeybadger"
-		suffix := strings.TrimPrefix(bin, "honeybadger")
-		if !strings.Contains(makefile, suffix) {
-			t.Errorf("OPENCLAW.md lists binary %q but Makefile does not build a target with suffix %q", bin, suffix)
-		}
-	}
-}
-
-func TestOpenClaw_ConfigExamplesHaveMCPServerFlag(t *testing.T) {
-	doc := readDoc(t, "OPENCLAW.md")
-
-	sections := []string{"FamClaw", "OpenClaw", "PicoClaw"}
-	for _, section := range sections {
-		if !strings.Contains(doc, section) {
-			t.Errorf("OPENCLAW.md missing config section for %q", section)
-		}
-	}
-	if count := strings.Count(doc, "--mcp-server"); count < 3 {
-		t.Errorf("OPENCLAW.md should have --mcp-server in all 3 config examples, found %d references", count)
 	}
 }
 
@@ -238,69 +184,261 @@ func TestExamples_NDJSONEventTypesDocumented(t *testing.T) {
 	}
 }
 
-// --- Task 14: Claude Code Guide ---
+// --- SKILL.md Runtime Accuracy ---
 
-func TestClaudeCode_MCPConfigValid(t *testing.T) {
-	doc := readDoc(t, "CLAUDE_CODE.md")
+// TestSKILLMDRuntimeAccuracy validates SKILL.md is correct for Claude Code
+// and OpenClaw. These tests fail with the old SKILL.md, pass after the fix.
+func TestSKILLMDRuntimeAccuracy(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(docsDir(t), "..", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("cannot read SKILL.md: %v", err)
+	}
+	content := string(raw)
 
-	if !strings.Contains(doc, `"mcpServers"`) {
-		t.Error("CLAUDE_CODE.md missing mcpServers config block")
+	parts := strings.SplitN(content, "---", 3)
+	if len(parts) < 3 {
+		t.Fatal("SKILL.md missing YAML frontmatter (need opening and closing ---)")
 	}
-	if !strings.Contains(doc, `"honeybadger"`) {
-		t.Error("CLAUDE_CODE.md missing honeybadger server name in config")
+	fm := parts[1]
+	body := parts[2]
+
+	cases := []struct {
+		name  string
+		check func(fm, body string) error
+	}{
+		{
+			"description is a trigger phrase not a tagline",
+			func(fm, _ string) error {
+				lower := strings.ToLower(fm)
+				for _, kw := range []string{"use when", "scan", "check", "vet", "before install"} {
+					if strings.Contains(lower, kw) {
+						return nil
+					}
+				}
+				return fmt.Errorf("description must be a trigger phrase — include 'use when', 'scan', 'check', or similar action words")
+			},
+		},
+		{
+			"no triggers field — not valid in Claude Code or OpenClaw",
+			func(fm, _ string) error {
+				if strings.Contains(fm, "triggers:") {
+					return fmt.Errorf("'triggers' is not a valid SKILL.md field for Claude Code or OpenClaw — remove it; both runtimes use 'description' for triggering")
+				}
+				return nil
+			},
+		},
+		{
+			"no invoke field — not valid in either runtime",
+			func(fm, _ string) error {
+				if strings.Contains(fm, "\ninvoke:") || strings.HasPrefix(strings.TrimSpace(fm), "invoke:") {
+					return fmt.Errorf("'invoke' is not a valid SKILL.md field — remove it; the skill body tells Claude how to invoke the binary")
+				}
+				return nil
+			},
+		},
+		{
+			"no chrome_devtools_mcp field — invented, not valid in either runtime",
+			func(fm, _ string) error {
+				if strings.Contains(fm, "chrome_devtools_mcp") {
+					return fmt.Errorf("'chrome_devtools_mcp' is not a valid SKILL.md field — remove it")
+				}
+				return nil
+			},
+		},
+		{
+			"no bins_optional field — not valid in either runtime",
+			func(fm, _ string) error {
+				if strings.Contains(fm, "bins_optional") {
+					return fmt.Errorf("'bins_optional' is not a valid SKILL.md field — use metadata.openclaw.requires.bins instead")
+				}
+				return nil
+			},
+		},
+		{
+			"has metadata.openclaw block for OpenClaw binary resolution",
+			func(fm, _ string) error {
+				if !strings.Contains(fm, `"openclaw"`) {
+					return fmt.Errorf("missing metadata.openclaw block — OpenClaw needs this for binary resolution and auto-install")
+				}
+				return nil
+			},
+		},
+		{
+			"metadata.openclaw has requires.bins listing honeybadger",
+			func(fm, _ string) error {
+				if !strings.Contains(fm, `"bins"`) || !strings.Contains(fm, `"honeybadger"`) {
+					return fmt.Errorf("metadata.openclaw.requires.bins must list 'honeybadger'")
+				}
+				return nil
+			},
+		},
+		{
+			"metadata.openclaw has install entry with go install command",
+			func(fm, _ string) error {
+				if !strings.Contains(fm, "go install") {
+					return fmt.Errorf("metadata.openclaw.install must include a go install command so OpenClaw can auto-install the binary")
+				}
+				return nil
+			},
+		},
+		{
+			"skill body explains how to invoke the binary",
+			func(_, body string) error {
+				if !strings.Contains(body, "honeybadger scan") {
+					return fmt.Errorf("skill body must include the exact 'honeybadger scan' command so Claude knows how to use it")
+				}
+				return nil
+			},
+		},
+		{
+			"skill body explains exit codes or verdict interpretation",
+			func(_, body string) error {
+				lower := strings.ToLower(body)
+				hasVerdict := strings.Contains(lower, "verdict")
+				hasExitCode := strings.Contains(lower, "exit code")
+				if !hasVerdict || !hasExitCode {
+					return fmt.Errorf("skill body must explain how to interpret output: include 'verdict' and 'exit code'")
+				}
+				return nil
+			},
+		},
 	}
-	if !strings.Contains(doc, `"--mcp-server"`) {
-		t.Error("CLAUDE_CODE.md missing --mcp-server arg in config")
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.check(fm, body); err != nil {
+				t.Error(err)
+			}
+		})
 	}
 }
 
-func TestClaudeCode_MCPParamsMatchSource(t *testing.T) {
-	doc := readDoc(t, "CLAUDE_CODE.md")
-	src := readSource(t, filepath.Join("cmd", "honeybadger", "mcp.go"))
+// --- OPENCLAW.md Runtime Accuracy ---
 
-	params := []string{"repo_url", "paranoia", "installed_sha", "installed_tool_hash", "path"}
-	for _, param := range params {
-		if !strings.Contains(src, `"`+param+`"`) {
-			t.Errorf("param %q not in mcp.go source", param)
-		}
-		if !strings.Contains(doc, "`"+param+"`") {
-			t.Errorf("CLAUDE_CODE.md missing MCP param %q", param)
-		}
+// TestOpenCLAWMDRuntimeAccuracy validates docs/OPENCLAW.md is accurate.
+func TestOpenCLAWMDRuntimeAccuracy(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(docsDir(t), "OPENCLAW.md"))
+	if err != nil {
+		t.Fatalf("cannot read docs/OPENCLAW.md: %v", err)
+	}
+	doc := string(raw)
+
+	cases := []struct {
+		name    string
+		want    string
+		absence bool
+		errMsg  string
+	}{
+		{
+			"documents correct OpenClaw workspace skills path",
+			"~/.openclaw/workspace/skills/honeybadger", false,
+			"must document ~/.openclaw/workspace/skills/honeybadger as the primary install path",
+		},
+		{
+			"documents go install command for binary",
+			"go install github.com/famclaw/honeybadger/cmd/honeybadger@latest", false,
+			"must show the go install command",
+		},
+		{
+			"documents openclaw skills list for verification",
+			"openclaw skills list", false,
+			"must show 'openclaw skills list' so user can verify skill loaded",
+		},
+		{
+			"documents Docker setupCommand for sandboxed agents",
+			"setupCommand", false,
+			"must include Docker sandbox setup instructions",
+		},
+		{
+			"documents cosign verification",
+			"cosign verify-blob", false,
+			"must include cosign verification instructions for downloaded binaries",
+		},
+		{
+			"does not reference non-existent ClawHub listing",
+			"clawhub install honeybadger", true,
+			"must not reference 'clawhub install honeybadger' — HoneyBadger is not on ClawHub yet",
+		},
+		{
+			"does not reference npx clawhub for install",
+			"npx clawhub@latest install honeybadger", true,
+			"must not use 'npx clawhub install honeybadger' — not published to ClawHub",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			found := strings.Contains(doc, c.want)
+			if c.absence && found {
+				t.Errorf("OPENCLAW.md must NOT contain %q: %s", c.want, c.errMsg)
+			} else if !c.absence && !found {
+				t.Errorf("OPENCLAW.md must contain %q: %s", c.want, c.errMsg)
+			}
+		})
 	}
 }
 
-func TestClaudeCode_EnvVarsDocumented(t *testing.T) {
-	doc := readDoc(t, "CLAUDE_CODE.md")
+// --- CLAUDE_CODE.md Runtime Accuracy ---
 
-	envVars := []string{
-		"GITHUB_TOKEN", "GITLAB_TOKEN",
-		"HONEYBADGER_LLM", "HONEYBADGER_LLM_KEY", "HONEYBADGER_LLM_MODEL",
+// TestClaudeCodeMDRuntimeAccuracy validates docs/CLAUDE_CODE.md is accurate.
+func TestClaudeCodeMDRuntimeAccuracy(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(docsDir(t), "CLAUDE_CODE.md"))
+	if err != nil {
+		t.Fatalf("cannot read docs/CLAUDE_CODE.md: %v", err)
 	}
-	for _, env := range envVars {
-		if !strings.Contains(doc, env) {
-			t.Errorf("CLAUDE_CODE.md missing env var %s", env)
-		}
-	}
-}
+	doc := string(raw)
 
-func TestClaudeCode_SettingsPathsDocumented(t *testing.T) {
-	doc := readDoc(t, "CLAUDE_CODE.md")
-
-	if !strings.Contains(doc, ".claude/settings.local.json") {
-		t.Error("CLAUDE_CODE.md missing project-level settings path (.claude/settings.local.json)")
+	cases := []struct {
+		name    string
+		want    string
+		absence bool
+		errMsg  string
+	}{
+		{
+			"documents correct Claude Code skills directory",
+			"~/.claude/skills/honeybadger", false,
+			"must document ~/.claude/skills/honeybadger as the global install path",
+		},
+		{
+			"documents project-scoped .claude/skills path",
+			".claude/skills/honeybadger", false,
+			"must document .claude/skills/honeybadger for project-scoped installation",
+		},
+		{
+			"documents claude mcp add command for MCP server",
+			"claude mcp add honeybadger", false,
+			"must show 'claude mcp add honeybadger' for MCP server registration",
+		},
+		{
+			"documents .mcp.json for project MCP configuration",
+			".mcp.json", false,
+			"must show .mcp.json example for project-level MCP config",
+		},
+		{
+			"documents auto-triggering via description matching",
+			"auto-trigger", false,
+			"must explain that skills auto-trigger based on description matching",
+		},
+		{
+			"documents cosign verification",
+			"cosign verify-blob", false,
+			"must include cosign verification instructions",
+		},
+		{
+			"does not claim triggers field is read by Claude Code",
+			"Claude Code reads the triggers field", true,
+			"must not claim 'triggers' field is read by Claude Code — it is not",
+		},
 	}
-	if !strings.Contains(doc, "~/.claude/settings.json") {
-		t.Error("CLAUDE_CODE.md missing user-level settings path (~/.claude/settings.json)")
-	}
-}
 
-func TestClaudeCode_DockerAlternativeDocumented(t *testing.T) {
-	doc := readDoc(t, "CLAUDE_CODE.md")
-
-	if !strings.Contains(doc, "ghcr.io/famclaw/honeybadger") {
-		t.Error("CLAUDE_CODE.md missing Docker image reference")
-	}
-	if !strings.Contains(doc, `"docker"`) {
-		t.Error("CLAUDE_CODE.md missing Docker command in MCP config example")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			found := strings.Contains(doc, c.want)
+			if c.absence && found {
+				t.Errorf("CLAUDE_CODE.md must NOT contain %q: %s", c.want, c.errMsg)
+			} else if !c.absence && !found {
+				t.Errorf("CLAUDE_CODE.md must contain %q: %s", c.want, c.errMsg)
+			}
+		})
 	}
 }

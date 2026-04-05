@@ -1,159 +1,175 @@
-# Using HoneyBadger with Claude Code
+# HoneyBadger — Claude Code Integration Guide
 
-HoneyBadger integrates with Claude Code as an MCP server, giving Claude
-the ability to security-scan repositories before you install skills,
-tools, or MCP servers.
+HoneyBadger scans GitHub and GitLab repositories for security issues.
+Integrate it with Claude Code as a skill, MCP server, or both.
 
 ## Prerequisites
 
-Install the honeybadger binary:
+```bash
+go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
+honeybadger --version
+```
 
-    go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
+## Option 1: Install as a Claude Code skill (recommended)
 
-Or download a prebuilt binary from
-https://github.com/famclaw/honeybadger/releases and add it to your PATH.
+Skills auto-trigger when Claude matches the task to the skill description.
+Install the skill and Claude will invoke HoneyBadger automatically when you
+ask it to check a repository.
 
-## Setup: Project-Level (Recommended)
+```bash
+mkdir -p ~/.claude/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o ~/.claude/skills/honeybadger/SKILL.md
+```
 
-Add honeybadger as an MCP server in your project's `.claude/settings.local.json`:
+Usage — ask naturally in Claude Code:
+
+```
+You: Is github.com/some-user/some-skill safe to install?
+Claude: [runs honeybadger scan, reports findings and verdict]
+
+You: Vet this before I add it as an MCP server
+Claude: [asks for URL if not provided, then scans]
+```
+
+Explicit invocation via slash command:
+```
+/honeybadger github.com/some-user/some-skill
+```
+
+## Option 2: Register as an MCP server
+
+Use this when you want HoneyBadger available as a programmatic tool across
+multiple projects:
+
+```bash
+claude mcp add honeybadger honeybadger --mcp-server
+```
+
+Verify registration:
+```bash
+claude mcp list
+# honeybadger should appear
+```
+
+The `honeybadger_scan` MCP tool accepts:
+- `repo_url` (required)
+- `paranoia` (optional: minimal/family/strict/paranoid, default: family)
+- `installed_sha` (optional: SHA256 of installed version, for update checks)
+- `installed_tool_hash` (optional: SHA256 of tool defs, for rug-pull detection)
+- `path` (optional: subdirectory for monorepos)
+
+## Option 3: Skill + MCP server
+
+Install both for natural language triggering plus programmatic tool access:
+
+```bash
+# Skill
+mkdir -p ~/.claude/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o ~/.claude/skills/honeybadger/SKILL.md
+
+# MCP server
+claude mcp add honeybadger honeybadger --mcp-server
+```
+
+## Option 4: Project-scoped skill
+
+Scope HoneyBadger to a specific project:
+
+```bash
+# In your project root
+mkdir -p .claude/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o .claude/skills/honeybadger/SKILL.md
+```
+
+Claude Code automatically loads `.claude/skills/` from directories added
+with `--add-dir`, without requiring additional environment variables.
+
+## Project-scoped MCP config
+
+Configure HoneyBadger per-project in `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "honeybadger": {
+      "type": "stdio",
       "command": "honeybadger",
       "args": ["--mcp-server"],
       "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+        "HONEYBADGER_LLM": "http://localhost:11434/v1"
       }
     }
   }
 }
 ```
 
-This scopes honeybadger to the project. Claude Code will discover it via
-the MCP `tools/list` handshake and can call `honeybadger_scan` during
-conversations.
+## Pre-install hook
 
-## Setup: User-Level (All Projects)
+Automatically scan repos before Claude installs them:
 
-To make honeybadger available in every project, add it to your global
-settings at `~/.claude/settings.json`:
+```bash
+# .claude/hooks/pre-install-scan.sh
+#!/bin/bash
+REPO_URL="$1"
+if [ -z "$REPO_URL" ]; then exit 0; fi
 
-```json
-{
-  "mcpServers": {
-    "honeybadger": {
-      "command": "honeybadger",
-      "args": ["--mcp-server"],
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-      }
-    }
-  }
-}
+result=$(honeybadger scan "$REPO_URL" --paranoia family --format ndjson 2>/dev/null | \
+  grep '"type":"result"' | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); print(d['verdict']+'|'+d.get('reasoning',''))")
+
+verdict=$(echo "$result" | cut -d'|' -f1)
+reasoning=$(echo "$result" | cut -d'|' -f2-)
+
+if [ "$verdict" = "FAIL" ]; then
+  echo "BLOCKED: HoneyBadger scan FAILED"
+  echo "Reason: $reasoning"
+  exit 1
+fi
 ```
 
-## Usage
-
-Once configured, Claude Code can call honeybadger during conversations.
-Ask naturally:
-
-- "Is github.com/someone/some-skill safe to install?"
-- "Security scan this repo before I add it"
-- "Vet github.com/someone/some-mcp at strict paranoia"
-- "Check if this MCP server has any CVEs"
-
-Claude will call the `honeybadger_scan` tool and interpret the results
-for you, explaining any findings and recommending whether to proceed.
-
-## MCP Tool: honeybadger_scan
-
-Claude Code calls this tool with these parameters:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `repo_url` | string | Yes | GitHub/GitLab URL or local path |
-| `paranoia` | string | No | `minimal`, `family`, `strict`, `paranoid` (default: `family`) |
-| `installed_sha` | string | No | SHA256 of installed version (for update detection) |
-| `installed_tool_hash` | string | No | SHA256 of MCP tool definitions (rug-pull detection) |
-| `path` | string | No | Subdirectory within repo to scan |
-
-The tool returns a JSON result with verdict (PASS/WARN/FAIL), reasoning,
-finding counts by severity, and scan metadata.
-
-## Pre-Install Hook (Advanced)
-
-You can configure a Claude Code hook that runs honeybadger before any
-MCP server or skill installation. Add to `.claude/settings.local.json`:
+Register in `.claude/settings.json`:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__.*install.*",
-        "command": "honeybadger scan \"$TOOL_INPUT\" --paranoia family --format text"
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/pre-install-scan.sh" }]
       }
     ]
   }
 }
 ```
 
-This runs a security scan whenever Claude attempts to use a tool matching
-the install pattern, blocking if the scan fails.
+## Environment variables
 
-## Environment Variables
+```bash
+# Higher GitHub API rate limit (60 → 5000 req/hour)
+export GITHUB_TOKEN=your_token_here
 
-Set these in your shell profile or `.env` file:
-
-| Variable | Purpose |
-|----------|---------|
-| `GITHUB_TOKEN` | Higher API rate limits (60 -> 5000/hr) |
-| `GITLAB_TOKEN` | GitLab private repo access |
-| `HONEYBADGER_LLM` | LLM endpoint for AI-assisted verdict |
-| `HONEYBADGER_LLM_KEY` | API key for LLM endpoint |
-| `HONEYBADGER_LLM_MODEL` | Model name (e.g. `claude-sonnet-4-6`) |
-
-These are passed to the honeybadger process via the `env` block in your
-MCP config. They never appear in Claude's context window.
-
-## Docker Alternative
-
-If you prefer not to install the binary, use the Docker image:
-
-```json
-{
-  "mcpServers": {
-    "honeybadger": {
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "-e", "GITHUB_TOKEN",
-        "ghcr.io/famclaw/honeybadger:latest",
-        "--mcp-server"
-      ],
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-      }
-    }
-  }
-}
+# LLM endpoint for security analysis
+export HONEYBADGER_LLM=http://localhost:11434/v1
+export HONEYBADGER_LLM_KEY=your_api_key   # omit for local Ollama
+export HONEYBADGER_LLM_MODEL=llama3.1:8b
 ```
 
-## Troubleshooting
+## Verify the release binary
 
-**"honeybadger: command not found"** -- Ensure the binary is in your PATH.
-Run `which honeybadger` to check. If using `go install`, verify that
-`$GOPATH/bin` (usually `~/go/bin`) is in your PATH.
+```bash
+cosign verify-blob honeybadger \
+  --bundle honeybadger.bundle \
+  --certificate-identity-regexp "github.com/famclaw/honeybadger" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-**MCP server not starting** -- Check Claude Code logs. The honeybadger
-process must be able to start and speak JSON-RPC over stdio. Test
-manually: `echo '{}' | honeybadger --mcp-server` should not crash.
-
-**Rate limiting** -- Set `GITHUB_TOKEN` in the env block. Without it,
-GitHub API is limited to 60 requests/hour.
-
-**Timeouts on large repos** -- Large monorepos may take longer to scan.
-The MCP server has no built-in timeout; Claude Code's default tool
-timeout applies.
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS | \
+  grep honeybadger-linux-amd64 | sha256sum --check
+```
