@@ -1,14 +1,15 @@
-package scan
+package meta
 
 import (
 	"context"
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
-func collectFindings(ch <-chan Finding) []Finding {
-	var findings []Finding
+func collectFindings(ch <-chan scan.Finding) []scan.Finding {
+	var findings []scan.Finding
 	for f := range ch {
 		findings = append(findings, f)
 	}
@@ -27,7 +28,7 @@ func TestRunMeta(t *testing.T) {
 	tests := []struct {
 		name          string
 		files         map[string][]byte
-		paranoia      ParanoiaLevel
+		paranoia      scan.ParanoiaLevel
 		wantCount     int            // expected number of findings (-1 to skip count check)
 		wantSeverity  string         // if set, at least one finding must have this severity
 		wantContains  string         // if set, at least one finding message must contain this
@@ -50,7 +51,7 @@ import "net/http"
 func main() { http.Get("http://example.com"); os.WriteFile("f", nil, 0644); exec.Command("curl") }
 `),
 			},
-			paranoia: ParanoiaFamily,
+			paranoia: scan.ParanoiaFamily,
 			wantZero: true,
 		},
 		{
@@ -65,9 +66,9 @@ requires:
 func main() { http.Get("http://example.com") }
 `),
 			},
-			paranoia:     ParanoiaFamily,
+			paranoia:     scan.ParanoiaFamily,
 			wantCount:    -1,
-			wantSeverity: SevMedium,
+			wantSeverity: scan.SevMedium,
 			wantContains: "Network access detected",
 		},
 		{
@@ -80,9 +81,9 @@ version: 1.0.0`),
 func main() { os.WriteFile("f", nil, 0644) }
 `),
 			},
-			paranoia:     ParanoiaFamily,
+			paranoia:     scan.ParanoiaFamily,
 			wantCount:    -1,
-			wantSeverity: SevMedium,
+			wantSeverity: scan.SevMedium,
 			wantContains: "Filesystem access detected",
 		},
 		{
@@ -96,25 +97,25 @@ import "os/exec"
 func main() { exec.Command("rm", "-rf", "/") }
 `),
 			},
-			paranoia:     ParanoiaFamily,
+			paranoia:     scan.ParanoiaFamily,
 			wantCount:    -1,
-			wantSeverity: SevHigh,
+			wantSeverity: scan.SevHigh,
 			wantContains: "Process execution detected",
 		},
 		{
 			name:         "missing SKILL.md at family paranoia",
 			files:        map[string][]byte{"main.go": []byte("package main")},
-			paranoia:     ParanoiaFamily,
+			paranoia:     scan.ParanoiaFamily,
 			wantCount:    1,
-			wantSeverity: SevLow,
+			wantSeverity: scan.SevLow,
 			wantContains: "No SKILL.md file found",
 		},
 		{
 			name:         "missing SKILL.md at paranoid paranoia",
 			files:        map[string][]byte{"main.go": []byte("package main")},
-			paranoia:     ParanoiaParanoid,
+			paranoia:     scan.ParanoiaParanoid,
 			wantCount:    1,
-			wantSeverity: SevHigh,
+			wantSeverity: scan.SevHigh,
 			wantContains: "No SKILL.md file found",
 		},
 		{
@@ -123,9 +124,9 @@ func main() { exec.Command("rm", "-rf", "/") }
 				"SKILL.md": makeSkillMD(`description: A test skill
 version: 1.0.0`),
 			},
-			paranoia:     ParanoiaFamily,
+			paranoia:     scan.ParanoiaFamily,
 			wantCount:    -1,
-			wantSeverity: SevLow,
+			wantSeverity: scan.SevLow,
 			wantContains: "missing required field: name",
 		},
 		{
@@ -138,7 +139,7 @@ version: 1.0.0`),
 func main() { println("hello") }
 `),
 			},
-			paranoia: ParanoiaFamily,
+			paranoia: scan.ParanoiaFamily,
 			wantZero: true,
 		},
 	}
@@ -151,10 +152,13 @@ func main() { println("hello") }
 				Name:     "test-repo",
 				Files:    tt.files,
 			}
-			opts := Options{Paranoia: tt.paranoia}
-			ch := make(chan Finding, 100)
+			opts := scan.Options{Paranoia: tt.paranoia}
+			ch := make(chan scan.Finding, 100)
 
-			go RunMeta(context.Background(), repo, opts, ch)
+			go func() {
+				Run(context.Background(), repo, opts, ch)
+				close(ch)
+			}()
 			findings := collectFindings(ch)
 
 			if tt.wantZero {

@@ -35,7 +35,6 @@ func TestParseParanoia(t *testing.T) {
 }
 
 func TestSeverityRankOrdering(t *testing.T) {
-	// CRITICAL > HIGH > MEDIUM > LOW > INFO
 	tests := []struct {
 		higher string
 		lower  string
@@ -88,7 +87,6 @@ func TestFindingJSONRoundTrip(t *testing.T) {
 }
 
 func TestBlockThresholds(t *testing.T) {
-	// All paranoia levels except "off" should have an entry
 	levels := []ParanoiaLevel{ParanoiaMinimal, ParanoiaFamily, ParanoiaStrict, ParanoiaParanoid}
 	for _, level := range levels {
 		t.Run(string(level), func(t *testing.T) {
@@ -103,7 +101,6 @@ func TestBlockThresholds(t *testing.T) {
 		})
 	}
 
-	// "off" should NOT have an entry
 	if _, ok := BlockThresholds[ParanoiaOff]; ok {
 		t.Error("BlockThresholds should not have an entry for ParanoiaOff")
 	}

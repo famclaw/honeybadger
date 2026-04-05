@@ -1,4 +1,4 @@
-package scan
+package meta
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 	"gopkg.in/yaml.v3"
 )
 
@@ -158,10 +159,8 @@ func detectBehavior(files map[string][]byte) (network, filesystem, exec bool) {
 	return
 }
 
-// RunMeta scans a repository's SKILL.md for metadata issues and permission mismatches.
-func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
-
+// Run scans a repository's SKILL.md for metadata issues and permission mismatches.
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	// Find SKILL.md in repo files
 	var skillContent []byte
 	var found bool
@@ -174,14 +173,14 @@ func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Fin
 	}
 
 	if !found {
-		sev := SevLow
+		sev := scan.SevLow
 		switch opts.Paranoia {
-		case ParanoiaStrict:
-			sev = SevMedium
-		case ParanoiaParanoid:
-			sev = SevHigh
+		case scan.ParanoiaStrict:
+			sev = scan.SevMedium
+		case scan.ParanoiaParanoid:
+			sev = scan.SevHigh
 		}
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
 			Severity: sev,
 			Check:    "meta",
@@ -192,9 +191,9 @@ func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Fin
 
 	meta, err := parseFrontmatter(skillContent)
 	if err != nil {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevMedium,
+			Severity: scan.SevMedium,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  fmt.Sprintf("Failed to parse SKILL.md frontmatter: %v", err),
@@ -204,27 +203,27 @@ func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Fin
 
 	// Validate required fields
 	if meta.Name == "" {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevLow,
+			Severity: scan.SevLow,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "SKILL.md missing required field: name",
 		}
 	}
 	if meta.Description == "" {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevLow,
+			Severity: scan.SevLow,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "SKILL.md missing required field: description",
 		}
 	}
 	if meta.Version == "" {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevLow,
+			Severity: scan.SevLow,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "SKILL.md missing required field: version",
@@ -236,9 +235,9 @@ func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Fin
 
 	// Cross-reference: network
 	if hasNetwork && (meta.Requires.Network == nil || !*meta.Requires.Network) {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevMedium,
+			Severity: scan.SevMedium,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "Network access detected in source code but not declared in SKILL.md requires.network",
@@ -247,9 +246,9 @@ func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Fin
 
 	// Cross-reference: filesystem
 	if hasFilesystem && (meta.Requires.Filesystem == nil || !*meta.Requires.Filesystem) {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevMedium,
+			Severity: scan.SevMedium,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "Filesystem access detected in source code but not declared in SKILL.md requires.filesystem",
@@ -258,9 +257,9 @@ func RunMeta(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Fin
 
 	// Cross-reference: exec
 	if hasExec && len(meta.Requires.Bins) == 0 {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevHigh,
+			Severity: scan.SevHigh,
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "Process execution detected in source code but no bins declared in SKILL.md requires.bins",

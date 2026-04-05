@@ -1,4 +1,4 @@
-package scan
+package attestation
 
 import (
 	"context"
@@ -8,13 +8,35 @@ import (
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
+
+func collectFindings(ch <-chan scan.Finding) []scan.Finding {
+	var findings []scan.Finding
+	for f := range ch {
+		findings = append(findings, f)
+	}
+	return findings
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+func searchString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
 
 func TestRunAttestation(t *testing.T) {
 	tests := []struct {
 		name         string
 		repo         *fetch.Repo
-		opts         Options
+		opts         scan.Options
 		wantCount    int    // -1 to skip count check
 		wantZero     bool
 		wantSeverity string
@@ -30,7 +52,7 @@ func TestRunAttestation(t *testing.T) {
 				SHA:      "abc123",
 				Files:    map[string][]byte{},
 			},
-			opts:     Options{Paranoia: ParanoiaFamily},
+			opts:     scan.Options{Paranoia: scan.ParanoiaFamily},
 			wantZero: true,
 		},
 		{
@@ -52,9 +74,9 @@ jobs:
 `),
 				},
 			},
-			opts: Options{Paranoia: ParanoiaStrict, Offline: true},
+			opts: scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
 			wantCount:    -1,
-			wantSeverity: SevInfo,
+			wantSeverity: scan.SevInfo,
 			wantContains: "Build attestation workflow configured",
 		},
 		{
@@ -76,9 +98,9 @@ jobs:
 `),
 				},
 			},
-			opts:         Options{Paranoia: ParanoiaStrict, Offline: true},
+			opts:         scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
 			wantCount:    -1,
-			wantSeverity: SevMedium,
+			wantSeverity: scan.SevMedium,
 			wantContains: "No build attestation workflow configured",
 		},
 		{
@@ -90,9 +112,9 @@ jobs:
 				SHA:      "abc123",
 				Files:    map[string][]byte{},
 			},
-			opts:         Options{Paranoia: ParanoiaParanoid, Offline: true},
+			opts:         scan.Options{Paranoia: scan.ParanoiaParanoid, Offline: true},
 			wantCount:    -1,
-			wantSeverity: SevHigh,
+			wantSeverity: scan.SevHigh,
 			wantContains: "No build attestation workflow configured",
 		},
 		{
@@ -103,9 +125,9 @@ jobs:
 				Name:     "repo",
 				Files:    map[string][]byte{},
 			},
-			opts:         Options{Paranoia: ParanoiaParanoid, Offline: true},
+			opts:         scan.Options{Paranoia: scan.ParanoiaParanoid, Offline: true},
 			wantCount:    -1,
-			wantSeverity: SevHigh,
+			wantSeverity: scan.SevHigh,
 			wantContains: "No SHA256SUMS file for release verification",
 		},
 		{
@@ -121,15 +143,18 @@ jobs:
 					".github/workflows/release.yml": []byte("uses: actions/attest-build-provenance@v1"),
 				},
 			},
-			opts:  Options{Paranoia: ParanoiaStrict, Offline: true},
+			opts:  scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
 			wantCount: 3, // workflow INFO + SHA256SUMS INFO + cosign INFO
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ch := make(chan Finding, 100)
-			go RunAttestation(context.Background(), tt.repo, tt.opts, ch)
+			ch := make(chan scan.Finding, 100)
+			go func() {
+				Run(context.Background(), tt.repo, tt.opts, ch)
+				close(ch)
+			}()
 			findings := collectFindings(ch)
 
 			if tt.wantZero {
@@ -202,9 +227,12 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 				"release.sig":                   []byte("sig"),
 			},
 		}
-		opts := Options{Paranoia: ParanoiaStrict}
-		ch := make(chan Finding, 100)
-		go RunAttestation(context.Background(), repo, opts, ch)
+		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
+		ch := make(chan scan.Finding, 100)
+		go func() {
+			Run(context.Background(), repo, opts, ch)
+			close(ch)
+		}()
 		findings := collectFindings(ch)
 
 		// Should have INFO findings: API verified, workflow found, SHA256SUMS, cosign
@@ -236,14 +264,17 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 			SHA:      "abc123",
 			Files:    map[string][]byte{},
 		}
-		opts := Options{Paranoia: ParanoiaStrict}
-		ch := make(chan Finding, 100)
-		go RunAttestation(context.Background(), repo, opts, ch)
+		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
+		ch := make(chan scan.Finding, 100)
+		go func() {
+			Run(context.Background(), repo, opts, ch)
+			close(ch)
+		}()
 		findings := collectFindings(ch)
 
 		foundNoAttestation := false
 		for _, f := range findings {
-			if contains(f.Message, "No GitHub attestation found") && f.Severity == SevMedium {
+			if contains(f.Message, "No GitHub attestation found") && f.Severity == scan.SevMedium {
 				foundNoAttestation = true
 			}
 		}

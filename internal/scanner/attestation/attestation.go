@@ -1,4 +1,4 @@
-package scan
+package attestation
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 // attestationHTTPClient is a shared HTTP client for attestation API calls.
@@ -18,12 +19,10 @@ var attestationHTTPClient = &http.Client{Timeout: 30 * time.Second}
 // AttestationAPIBase can be overridden for testing.
 var AttestationAPIBase = "https://api.github.com"
 
-// RunAttestation checks build provenance and attestation for a repository.
-func RunAttestation(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
-	defer close(out)
-
+// Run checks build provenance and attestation for a repository.
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	// Only run at strict or paranoid paranoia levels.
-	if opts.Paranoia != ParanoiaStrict && opts.Paranoia != ParanoiaParanoid {
+	if opts.Paranoia != scan.ParanoiaStrict && opts.Paranoia != scan.ParanoiaParanoid {
 		return
 	}
 
@@ -44,11 +43,11 @@ func RunAttestation(ctx context.Context, repo *fetch.Repo, opts Options, out cha
 	checkCosignArtifacts(repo, opts, out)
 }
 
-func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	if repo.SHA == "" {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevInfo,
+			Severity: scan.SevInfo,
 			Check:    "attestation",
 			Message:  "No SHA available for attestation verification",
 		}
@@ -60,9 +59,9 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts Options,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevInfo,
+			Severity: scan.SevInfo,
 			Check:    "attestation",
 			Message:  fmt.Sprintf("Failed to create attestation API request: %v", err),
 		}
@@ -75,9 +74,9 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts Options,
 
 	resp, err := attestationHTTPClient.Do(req)
 	if err != nil {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevInfo,
+			Severity: scan.SevInfo,
 			Check:    "attestation",
 			Message:  fmt.Sprintf("Attestation API call failed: %v", err),
 		}
@@ -92,9 +91,9 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts Options,
 			Attestations []json.RawMessage `json:"attestations"`
 		}
 		if err := json.Unmarshal(body, &result); err == nil && len(result.Attestations) > 0 {
-			out <- Finding{
+			out <- scan.Finding{
 				Type:     "finding",
-				Severity: SevInfo,
+				Severity: scan.SevInfo,
 				Check:    "attestation",
 				Message:  fmt.Sprintf("GitHub attestation verified for SHA %s", repo.SHA),
 			}
@@ -103,11 +102,11 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts Options,
 	}
 
 	// No attestation found
-	sev := SevMedium
-	if opts.Paranoia == ParanoiaParanoid {
-		sev = SevHigh
+	sev := scan.SevMedium
+	if opts.Paranoia == scan.ParanoiaParanoid {
+		sev = scan.SevHigh
 	}
-	out <- Finding{
+	out <- scan.Finding{
 		Type:     "finding",
 		Severity: sev,
 		Check:    "attestation",
@@ -115,7 +114,7 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts Options,
 	}
 }
 
-func checkAttestationWorkflow(repo *fetch.Repo, opts Options, out chan<- Finding) {
+func checkAttestationWorkflow(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	found := false
 	for path, content := range repo.Files {
 		if strings.HasPrefix(path, ".github/workflows/") && (strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")) {
@@ -127,18 +126,18 @@ func checkAttestationWorkflow(repo *fetch.Repo, opts Options, out chan<- Finding
 	}
 
 	if found {
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevInfo,
+			Severity: scan.SevInfo,
 			Check:    "attestation",
 			Message:  "Build attestation workflow configured (actions/attest-build-provenance)",
 		}
 	} else {
-		sev := SevMedium
-		if opts.Paranoia == ParanoiaParanoid {
-			sev = SevHigh
+		sev := scan.SevMedium
+		if opts.Paranoia == scan.ParanoiaParanoid {
+			sev = scan.SevHigh
 		}
-		out <- Finding{
+		out <- scan.Finding{
 			Type:     "finding",
 			Severity: sev,
 			Check:    "attestation",
@@ -147,16 +146,16 @@ func checkAttestationWorkflow(repo *fetch.Repo, opts Options, out chan<- Finding
 	}
 }
 
-func checkSHA256SUMS(repo *fetch.Repo, opts Options, out chan<- Finding) {
+func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path := range repo.Files {
 		base := strings.ToLower(path)
 		// Check just the filename, not full path
 		parts := strings.Split(base, "/")
 		filename := parts[len(parts)-1]
 		if filename == "sha256sums" || filename == "checksums.txt" {
-			out <- Finding{
+			out <- scan.Finding{
 				Type:     "finding",
-				Severity: SevInfo,
+				Severity: scan.SevInfo,
 				Check:    "attestation",
 				File:     path,
 				Message:  "SHA256SUMS/checksums file present for release verification",
@@ -165,22 +164,22 @@ func checkSHA256SUMS(repo *fetch.Repo, opts Options, out chan<- Finding) {
 		}
 	}
 
-	if opts.Paranoia == ParanoiaParanoid {
-		out <- Finding{
+	if opts.Paranoia == scan.ParanoiaParanoid {
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevHigh,
+			Severity: scan.SevHigh,
 			Check:    "attestation",
 			Message:  "No SHA256SUMS file for release verification",
 		}
 	}
 }
 
-func checkCosignArtifacts(repo *fetch.Repo, opts Options, out chan<- Finding) {
+func checkCosignArtifacts(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path := range repo.Files {
 		if strings.HasSuffix(path, ".sig") || strings.HasSuffix(path, ".bundle") || strings.HasSuffix(path, ".sigstore") {
-			out <- Finding{
+			out <- scan.Finding{
 				Type:     "finding",
-				Severity: SevInfo,
+				Severity: scan.SevInfo,
 				Check:    "attestation",
 				File:     path,
 				Message:  "Cosign signature artifact found",
@@ -189,10 +188,10 @@ func checkCosignArtifacts(repo *fetch.Repo, opts Options, out chan<- Finding) {
 		}
 	}
 
-	if opts.Paranoia == ParanoiaParanoid {
-		out <- Finding{
+	if opts.Paranoia == scan.ParanoiaParanoid {
+		out <- scan.Finding{
 			Type:     "finding",
-			Severity: SevMedium,
+			Severity: scan.SevMedium,
 			Check:    "attestation",
 			Message:  "No cosign signature artifacts found",
 		}
