@@ -133,6 +133,9 @@ func TestExamples_MCPToolNameMatchesSource(t *testing.T) {
 	}
 	nameStart := idx + len(marker)
 	nameEnd := strings.Index(src[nameStart:], `"`)
+	if nameEnd < 0 {
+		t.Fatal("could not parse MCP tool name in mcp.go")
+	}
 	toolName := src[nameStart : nameStart+nameEnd]
 
 	if !strings.Contains(doc, toolName) {
@@ -142,18 +145,24 @@ func TestExamples_MCPToolNameMatchesSource(t *testing.T) {
 
 // --- EXAMPLES.md Env Vars ---
 
-func TestExamples_EnvVarsDocumented(t *testing.T) {
+func TestEnvVarsDocumentedInGuides(t *testing.T) {
+	claudeDoc := readDoc(t, "CLAUDE_CODE.md")
+	openclawDoc := readDoc(t, "OPENCLAW.md")
 	src := readSource(t, filepath.Join("cmd", "honeybadger", "main.go")) +
 		readSource(t, filepath.Join("cmd", "honeybadger", "mcp.go"))
 
-	// Verify these env vars are actually used in source
 	envVars := []string{
-		"GITHUB_TOKEN", "GITLAB_TOKEN",
-		"HONEYBADGER_LLM", "HONEYBADGER_LLM_KEY", "HONEYBADGER_LLM_MODEL",
+		"GITHUB_TOKEN", "HONEYBADGER_LLM",
 	}
 	for _, env := range envVars {
 		if !strings.Contains(src, `"`+env+`"`) {
 			t.Errorf("env var %s expected in source but not found", env)
+		}
+		if !strings.Contains(claudeDoc, env) {
+			t.Errorf("CLAUDE_CODE.md missing env var %s", env)
+		}
+		if !strings.Contains(openclawDoc, env) {
+			t.Errorf("OPENCLAW.md missing env var %s", env)
 		}
 	}
 }

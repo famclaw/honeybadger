@@ -104,7 +104,7 @@ FROM golang:1.26-alpine AS builder
 RUN go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
 FROM ubuntu:24.04
-COPY --from=builder /root/go/bin/honeybadger /usr/local/bin/
+COPY --from=builder /go/bin/honeybadger /usr/local/bin/
 ```
 
 ## Configuration
