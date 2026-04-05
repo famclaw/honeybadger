@@ -64,7 +64,9 @@ honeybadger/
 ├── cmd/honeybadger/
 │   ├── main.go              # CLI entry point — full pipeline wiring
 │   ├── mcp.go               # MCP server mode — JSON-RPC over stdio
-│   └── mcp_test.go          # MCP server tests via in-process client
+│   ├── mcp_test.go          # MCP server tests via in-process client
+│   ├── integration_test.go  # CLI + MCP integration tests (build tag: integration)
+│   └── e2e_test.go          # E2E stdio MCP server subprocess tests
 ├── internal/
 │   ├── engine/
 │   │   ├── engine.go        # Verdict computation, tier/sandbox detection, scanner list builder

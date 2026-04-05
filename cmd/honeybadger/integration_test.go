@@ -171,6 +171,10 @@ func TestCLI_TextFormat(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMCP_ScanVerdicts(t *testing.T) {
+	for _, key := range []string{"HONEYBADGER_LLM", "HONEYBADGER_LLM_KEY", "HONEYBADGER_LLM_MODEL"} {
+		t.Setenv(key, "")
+	}
+
 	tests := []struct {
 		name        string
 		repo        *fetch.Repo

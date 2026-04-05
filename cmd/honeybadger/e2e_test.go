@@ -6,9 +6,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/famclaw/honeybadger/internal/testfixture"
 )
@@ -69,6 +72,7 @@ func TestE2E_StdioMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StdoutPipe: %v", err)
 	}
+	cmd.Env = filterEnv(os.Environ(), "HONEYBADGER_LLM", "HONEYBADGER_LLM_KEY", "HONEYBADGER_LLM_MODEL")
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -80,7 +84,7 @@ func TestE2E_StdioMCPServer(t *testing.T) {
 
 	// 1. Send initialize
 	initMsg := jsonrpcRequest(1, "initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": mcp.LATEST_PROTOCOL_VERSION,
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "e2e-test", "version": "1.0"},
 	})
@@ -223,4 +227,21 @@ func extractToolResult(t *testing.T, resp map[string]any) map[string]any {
 		t.Fatalf("failed to parse tool result text: %v\nraw: %s", err, text)
 	}
 	return parsed
+}
+
+func filterEnv(env []string, exclude ...string) []string {
+	var filtered []string
+	for _, e := range env {
+		skip := false
+		for _, ex := range exclude {
+			if strings.HasPrefix(e, ex+"=") {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }

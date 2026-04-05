@@ -111,7 +111,7 @@ Set globally in your runtime config or per-scan via the MCP tool parameter.
 
 ## Troubleshooting
 
-**"routing: unsupported URL"** -- URL format not recognized. Use `github.com/owner/repo` or a local path.
+**"routing: unsupported URL"** -- URL format not recognized. Use `github.com/owner/repo`, `gitlab.com/group/project`, or a local filesystem path.
 
 **Rate limiting (GitHub)** -- Set `GITHUB_TOKEN` for 5000 req/hr instead of 60.
 

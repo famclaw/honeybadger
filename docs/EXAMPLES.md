@@ -54,7 +54,7 @@
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `repo_url` | string | Yes | GitHub or GitLab repository URL |
+| `repo_url` | string | Yes | GitHub or GitLab repository URL, or local filesystem path |
 | `paranoia` | string | No | `minimal`, `family`, `strict`, or `paranoid` (default: `family`) |
 | `installed_sha` | string | No | SHA256 of currently installed version archive |
 | `installed_tool_hash` | string | No | SHA256 of installed MCP tool definitions |
@@ -100,7 +100,7 @@ Each line is a self-contained JSON object:
 | 0 | PASS -- safe to install |
 | 1 | WARN -- review recommended |
 | 2 | FAIL -- do not install |
-| 3 | Error -- scan could not complete |
+| 3 | Error or unknown verdict |
 
 The MCP server returns errors inline in the tool result rather than using exit codes.
 
