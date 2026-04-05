@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mascot.png" alt="HoneyBadger — kicking snakes, protecting your claw runtimes" width="600">
+</p>
+
 # HoneyBadger
 
 Security scanner for skills, tools, and MCP servers used by AI assistant runtimes.
