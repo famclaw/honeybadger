@@ -128,8 +128,11 @@ honeybadger/
 │       └── release.yml
 ├── docs/
 │   ├── OPENCLAW.md           # Installation guide for FamClaw, OpenClaw, PicoClaw
-│   └── EXAMPLES.md           # CLI and MCP usage examples
+│   ├── CLAUDE_CODE.md        # Claude Code integration guide (MCP config, hooks)
+│   ├── EXAMPLES.md           # CLI and MCP usage examples
+│   └── docs_test.go          # Doc validation tests (16 tests, sync docs with source)
 ├── .gitignore
+├── Dockerfile                # Multi-stage distroless image for honeybadger
 ├── go.mod
 ├── go.sum
 ├── Makefile
@@ -140,24 +143,24 @@ honeybadger/
 
 ## Status
 
-Wave 9 complete. Added installation and usage documentation:
-- `docs/OPENCLAW.md` -- installation guide for FamClaw, OpenClaw, and PicoClaw runtimes
-- `docs/EXAMPLES.md` -- CLI and MCP usage examples, NDJSON event format, exit codes, CI/CD
-
-Wave 8 complete. Added test fixture package:
-- `internal/testfixture/` with 7 builder functions returning `*fetch.Repo` for integration/E2E tests
-- Fixtures: CleanRepo, SecretsRepo, SupplyChainRepo, CVERepo, MetaMismatchRepo, AttestationRepo, FullyCleanSkillRepo
-- `WriteToDir` helper writes repo files to a temp directory for CLI subprocess tests
-- Mock OSV server for testing CVE scanner without network
-- All secrets built at runtime to avoid GitHub push protection
+Wave 10 complete. Supply chain hardening, integration docs, and doc validation tests:
+- Reproducible builds (`-trimpath -buildvcs=false`)
+- Cosign signature verification step in release pipeline
+- SBOM switched to SPDX format, attested alongside binaries
+- Multi-arch OCI images built and pushed to GHCR, signed with cosign
+- SECURITY.md corrected to match actual practices (SLSA L2, not L3)
+- CI security checks use `continue-on-error` instead of `|| true` (visible warnings)
+- `go mod tidy` drift check in CI
+- `docs/OPENCLAW.md` rewritten with real FamClaw config.yaml, Docker usage, verification commands
+- `docs/CLAUDE_CODE.md` -- dedicated Claude Code integration guide (MCP config, hooks, Docker)
+- `docs/docs_test.go` validates all docs stay in sync with source (16 tests):
+  paranoia levels, CLI flags, MCP params, env vars, binary targets, response schema, Claude Code config
 
 Previous waves:
+- Installation and usage documentation (`docs/OPENCLAW.md`, `docs/EXAMPLES.md`)
+- Test fixture package with 7 builders, mock OSV server
 - Each scanner in its own package under `internal/scanner/`
-- Core types (Finding, Options, ParanoiaLevel) in `internal/scan/`
-- Shared helpers (WalkCode, Redact, EditDistance) in `internal/scan/helpers.go`
-- Concurrent runner in `internal/scan/scan.go`
-- Scanner list builder in `internal/engine/` (avoids import cycles)
-- All existing functionality preserved — pure refactor, zero behavior change
+- Core types, shared helpers, concurrent runner, scanner list builder
 - Fetch layer (GitHub, GitLab, tarball, local)
 - NDJSON and text reporters + LLM verdict
 - Full CLI pipeline with tier/sandbox detection

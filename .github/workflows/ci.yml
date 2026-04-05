@@ -32,13 +32,19 @@ jobs:
         with:
           go-version-file: go.mod
       - name: govulncheck
+        continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./... || true  # warn mode until gitleaks transitive deps are patched
+          govulncheck ./...
       - name: gosec
+        continue-on-error: true
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -severity medium ./... || true  # warn mode, don't block
+          gosec -severity medium ./...
+      - name: go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
 
   CI-Pass:
     name: CI Pass
