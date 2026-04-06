@@ -128,7 +128,7 @@ changelog:
       regexp: '^.*?docs?(\(.+\))??!?:.+$'
       order: 3
     - title: "Dependencies"
-      regexp: '^.*?build\(deps\)(\(.+\))??!?:.+$'
+      regexp: '^.*?build\(deps\).*$'
       order: 4
     - title: "Other"
       order: 999
@@ -169,13 +169,13 @@ release:
     ### Verify
 
     ```bash
-    # Cosign
-    cosign verify-blob honeybadger-linux-amd64 \
+    # Verify checksum signature (cosign signs SHA256SUMS, not individual binaries)
+    cosign verify-blob SHA256SUMS \
       --bundle SHA256SUMS.bundle \
       --certificate-identity-regexp ".*famclaw/honeybadger.*" \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-    # SHA256
+    # Verify binary integrity via checksums
     sha256sum --check SHA256SUMS
 
     # Docker image

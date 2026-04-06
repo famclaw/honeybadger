@@ -40,9 +40,9 @@ jobs:
         run: |
           ./honeybadger-selfcheck scan github.com/famclaw/honeybadger \
             --paranoia strict --format ndjson | tee self-report.json
-          verdict=$(grep '"type":"result"' self-report.json | jq -r .verdict || echo "UNKNOWN")
-          if [ "$verdict" = "FAIL" ]; then
-            echo "::error::Self-check FAILED — aborting release"
+          verdict=$(grep '"type":"result"' self-report.json | jq -r .verdict)
+          if [ "$verdict" != "PASS" ]; then
+            echo "::error::Self-check verdict=$verdict — aborting release"
             exit 1
           fi
           rm honeybadger-selfcheck
@@ -64,22 +64,25 @@ jobs:
             DIFF_STAT=$(git diff --stat $(git rev-list --max-parents=0 HEAD)..HEAD | tail -1)
           fi
 
-          # Call Claude API for release summary
-          RELEASE_SUMMARY=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -d "$(cat <<PROMPT
-          {
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 512,
-            "messages": [{
-              "role": "user",
-              "content": "Write a concise release summary (3-5 bullet points) for HoneyBadger, a security scanner for AI assistant skills/tools/MCP servers. Focus on what users care about: new capabilities, security improvements, breaking changes. No markdown headers, just bullet points starting with emoji.\n\nVersion: ${{ github.ref_name }}\nStats: ${DIFF_STAT}\n\nCommits since last release:\n${COMMITS}"
-            }]
-          }
-          PROMPT
-          )" | python3 -c "import sys,json; print(json.load(sys.stdin)['content'][0]['text'])" 2>/dev/null || echo "")
+          # Call Claude API for release summary (use jq for safe JSON construction)
+          PROMPT_TEXT="Write a concise release summary (3-5 bullet points) for HoneyBadger, a security scanner for AI assistant skills/tools/MCP servers. Focus on what users care about: new capabilities, security improvements, breaking changes. No markdown headers, just bullet points starting with emoji.
+
+          Version: ${{ github.ref_name }}
+          Stats: ${DIFF_STAT}
+
+          Commits since last release:
+          ${COMMITS}"
+
+          RELEASE_SUMMARY=$(jq -n \
+            --arg model "claude-haiku-4-5-20251001" \
+            --arg content "$PROMPT_TEXT" \
+            '{model: $model, max_tokens: 512, messages: [{role: "user", content: $content}]}' | \
+            curl -s https://api.anthropic.com/v1/messages \
+              -H "Content-Type: application/json" \
+              -H "x-api-key: $ANTHROPIC_API_KEY" \
+              -H "anthropic-version: 2023-06-01" \
+              -d @- | \
+            python3 -c "import sys,json; print(json.load(sys.stdin)['content'][0]['text'])" 2>/dev/null || echo "")
 
           if [ -n "$RELEASE_SUMMARY" ]; then
             # Write to file for GoReleaser to pick up
@@ -92,18 +95,6 @@ jobs:
             echo "has_notes=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_notes=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Inject AI notes into release header if available
-      - name: Prepare release header
-        if: steps.ai_notes.outputs.has_notes == 'true'
-        run: |
-          # Prepend AI summary to GoReleaser's changelog
-          if [ -f ai-release-notes.md ]; then
-            AI_NOTES=$(cat ai-release-notes.md)
-            # GoReleaser will use the header from .goreleaser.yml
-            # We append AI notes as an extra file
-            cp ai-release-notes.md self-report.json .
           fi
 
       # GoReleaser: build, sign, Docker, SBOM, release
@@ -125,8 +116,9 @@ jobs:
               *.json|*.bundle|*.sig|*.pem) continue ;;
             esac
             echo "Attesting: $f"
-            gh attestation create "$f" \
-              --repo "${{ github.repository }}" 2>/dev/null || true
+            if ! gh attestation create "$f" --repo "${{ github.repository }}"; then
+              echo "::warning::Attestation failed for $f"
+            fi
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,8 +129,9 @@ jobs:
           for f in dist/*.spdx.json; do
             [ -f "$f" ] || continue
             echo "Attesting SBOM: $f"
-            gh attestation create "$f" \
-              --repo "${{ github.repository }}" 2>/dev/null || true
+            if ! gh attestation create "$f" --repo "${{ github.repository }}"; then
+              echo "::warning::SBOM attestation failed for $f"
+            fi
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
