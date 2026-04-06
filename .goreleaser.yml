@@ -57,11 +57,13 @@ signs:
   - cmd: cosign
     artifacts: checksum
     output: true
+    signature: "${artifact}.bundle"
+    certificate: ""
     args:
       - sign-blob
       - --yes
       - --bundle
-      - "${artifact}.bundle"
+      - "${signature}"
       - "${artifact}"
 
 docker_signs:
