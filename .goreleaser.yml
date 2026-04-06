@@ -51,7 +51,7 @@ sboms:
       - --output
       - spdx-json=$document
     documents:
-      - "sbom-{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}.spdx.json"
+      - "sbom-{{ .ProjectName }}-{{ .Os }}-{{ if eq .Arch \"arm\" }}armv7{{ else }}{{ .Arch }}{{ end }}.spdx.json"
 
 signs:
   - cmd: cosign

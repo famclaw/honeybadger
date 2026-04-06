@@ -1,6 +1,9 @@
 package scan
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Severity levels
 const (
@@ -102,4 +105,5 @@ type Options struct {
 	RepoPath          string // subdirectory within repo
 	GithubToken       string
 	GitlabToken       string
+	LLMTimeout        time.Duration
 }

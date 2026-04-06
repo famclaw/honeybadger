@@ -158,13 +158,16 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
 	if paranoia >= scan.ParanoiaFamily && llmEndpoint != "" {
+		llmCtx, llmCancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer llmCancel()
+
 		llmOpts := report.LLMOptions{
 			Paranoia: string(paranoia),
 			Platform: runtime.GOOS,
 			Tier:     "online",
 		}
 		prompt := report.AssembleLLMPrompt(repo, allFindings, llmOpts)
-		v, err := report.CallLLM(ctx, prompt, llmEndpoint, llmKey, llmModel)
+		v, err := report.CallLLM(llmCtx, prompt, llmEndpoint, llmKey, llmModel)
 		if err == nil && v != nil {
 			llmVerdict = v
 			llmUsed = true

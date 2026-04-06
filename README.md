@@ -12,6 +12,22 @@ Security scanner for skills, tools, and MCP servers used by AI assistant runtime
 
 Before anything gets installed on a family home server running AI assistants, HoneyBadger checks it.
 
+## Install
+
+    # Go install (requires Go 1.22+)
+    go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
+
+    # Binary download (Linux amd64)
+    curl -fsSL https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
+      -o honeybadger && chmod +x honeybadger
+
+    # Docker
+    docker pull ghcr.io/famclaw/honeybadger:latest
+
+All platforms: [Releases](https://github.com/famclaw/honeybadger/releases/latest) —
+Linux (amd64, arm64, armv7), macOS (arm64, amd64).
+Verify downloads: see [SECURITY.md](SECURITY.md).
+
 ## Usage
 
 ### CLI
@@ -39,11 +55,18 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 
 | Check | Scanner | Description |
 |-------|---------|-------------|
-| Secrets | gitleaks v8 | 800+ credential patterns, noise reduction |
-| Supply chain | regex + typosquat | curl\|bash, eval, reverse shell, crypto mining, etc. |
-| CVEs | osv.dev | Batch API across Go, npm, PyPI, Rust, Ruby, Maven |
-| SKILL.md | meta checker | Declared vs actual permissions |
-| Attestation | GitHub API | Build provenance, cosign, SHA256SUMS (strict/paranoid) |
+| Secrets | gitleaks v8 | 800+ credential patterns, noise reduction for test files |
+| CVEs | osv.dev | Batch API across Go, npm, PyPI, Rust, Ruby, Maven (8 lockfile formats) |
+| curl\|bash | supplychain | Downloads and executes remote scripts |
+| eval remote | supplychain | Evaluates remotely fetched code |
+| Reverse shell | supplychain | nc/netcat/bash reverse shell patterns |
+| Crypto mining | supplychain | Coinhive, xmrig, stratum+tcp patterns |
+| Data exfil | supplychain | Webhook/requestbin exfiltration endpoints |
+| Typosquat | supplychain | Edit-distance check against popular package names |
+| SKILL.md fields | meta | Required fields and format validation |
+| Permission mismatch | meta | Declared vs actual network/filesystem/exec usage |
+| Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
+| Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
 
 ## Paranoia levels
 
@@ -174,11 +197,20 @@ Previous waves:
 
 ## Building
 
-    make build          # current platform
-    make cross          # all 5 targets (linux arm64/armv7/amd64, darwin arm64/amd64)
-    make test           # run all tests
-    make self-check     # scan ourselves at strict paranoia
-    make release-dry    # test GoReleaser locally (snapshot, no publish)
+    make build              # current platform
+    make cross              # all 5 targets (linux arm64/armv7/amd64, darwin arm64/amd64)
+    make test               # run all tests
+    make self-check         # scan ourselves at strict paranoia (requires prior release)
+    make self-check-bootstrap  # scan at minimal paranoia (for initial releases only)
+    make release-dry        # test GoReleaser locally (snapshot, no publish)
+
+## Release Checklist
+
+1. `make self-check` passes at strict paranoia (or `self-check-bootstrap` for first release)
+2. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+3. GoReleaser builds, signs, and publishes via `.github/workflows/release.yml`
+4. Verify release: see [SECURITY.md](SECURITY.md#verifying-release-artifacts)
+5. Set GitHub topics: `security`, `mcp`, `supply-chain`, `scanner`, `agentskills`, `golang`
 
 ## License
 
