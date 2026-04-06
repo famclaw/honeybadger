@@ -39,6 +39,7 @@ func main() {
 	force := flag.Bool("force", false, "force scan even if already audited")
 	offline := flag.Bool("offline", false, "offline mode -- skip network checks")
 	path := flag.String("path", "", "subdirectory within repo")
+	llmTimeout := flag.Duration("llm-timeout", 5*time.Minute, "LLM call timeout (default 5m)")
 	// --mcp-server and --version are handled before flag.Parse (see below)
 
 	// Extract subcommand before parsing flags.
@@ -90,7 +91,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	exitCode, err := run(repoURL, *paranoia, *format, *llm, *db, *installedSHA, *installedToolHash, *force, *offline, *path, llmKey, llmModel, githubToken, gitlabToken)
+	exitCode, err := run(repoURL, *paranoia, *format, *llm, *db, *installedSHA, *installedToolHash, *force, *offline, *path, llmKey, llmModel, githubToken, gitlabToken, *llmTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -98,7 +99,7 @@ func main() {
 	os.Exit(exitCode)
 }
 
-func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, installedToolHash string, force, offline bool, subPath, llmKey, llmModel, githubToken, gitlabToken string) (int, error) {
+func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, installedToolHash string, force, offline bool, subPath, llmKey, llmModel, githubToken, gitlabToken string, llmTimeout time.Duration) (int, error) {
 	start := time.Now()
 	ctx := context.Background()
 
@@ -245,16 +246,22 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	if paranoia >= scan.ParanoiaFamily && llmEndpoint != "" {
 		emitter.Emit(engine.ProgressEvent("llm", "Asking LLM for verdict...")) //nolint:errcheck
 
+		llmCtx, llmCancel := context.WithTimeout(ctx, llmTimeout)
+		defer llmCancel()
+
 		llmOpts := report.LLMOptions{
 			Paranoia: string(paranoia),
 			Platform: runtime.GOOS,
 			Tier:     tier,
 		}
 		prompt := report.AssembleLLMPrompt(repo, allFindings, llmOpts)
-		v, err := report.CallLLM(ctx, prompt, llmEndpoint, llmKey, llmModel)
+		v, err := report.CallLLM(llmCtx, prompt, llmEndpoint, llmKey, llmModel)
 		if err != nil {
-			// LLM failure is non-fatal; emit a warning and continue
-			emitter.Emit(engine.ProgressEvent("llm", fmt.Sprintf("LLM call failed: %v", err))) //nolint:errcheck
+			msg := fmt.Sprintf("LLM call failed: %v", err)
+			if llmCtx.Err() == context.DeadlineExceeded {
+				msg = fmt.Sprintf("LLM timed out after %v — using static findings only", llmTimeout)
+			}
+			emitter.Emit(engine.ProgressEvent("llm", msg)) //nolint:errcheck
 		} else if v != nil {
 			llmVerdict = v
 			llmUsed = true

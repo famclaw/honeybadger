@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -239,7 +238,7 @@ func CallLLM(ctx context.Context, prompt string, endpoint, apiKey, model string)
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	llmClient := &http.Client{Timeout: 120 * time.Second}
+	llmClient := &http.Client{}
 	resp, err := llmClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("llm request send: %w", err)

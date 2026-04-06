@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -168,5 +169,21 @@ func TestCallLLMWithAuth(t *testing.T) {
 	}
 	if gotAuth != "Bearer sk-test-key" {
 		t.Errorf("expected Authorization header 'Bearer sk-test-key', got '%s'", gotAuth)
+	}
+}
+
+func TestCallLLMTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := CallLLM(ctx, "test prompt", server.URL, "", "test-model")
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
 	}
 }

@@ -5,7 +5,7 @@ LDFLAGS   := -ldflags "-s -w -X main.Version=$(VERSION)"
 GOFLAGS   := CGO_ENABLED=0
 REPRO     := -trimpath -buildvcs=false
 
-.PHONY: build cross test self-check clean docker release-dry
+.PHONY: build cross test self-check self-check-bootstrap clean docker release-dry
 
 build:
 	@mkdir -p $(BUILD_DIR)
@@ -29,6 +29,10 @@ test:
 self-check: build
 	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia strict
 	@echo "Self-check passed"
+
+self-check-bootstrap: build
+	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia minimal
+	@echo "Self-check (bootstrap) passed"
 
 docker:
 	docker buildx build --build-arg VERSION=$(VERSION) -t honeybadger:$(VERSION) .
