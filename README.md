@@ -73,15 +73,15 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 | | HoneyBadger | Cisco MCP Scanner | Snyk agent-scan | Proximity |
 |---|:-:|:-:|:-:|:-:|
 | **Single binary** | Go | Python | Python | Python |
-| **Offline mode** | yes | no | no | local only |
-| **MCP server mode** | yes | no | no | no |
+| **Offline mode** | yes | partial (static) | no | partial (local Ollama) |
+| **MCP server mode** | yes (JSON-RPC) | scans MCP servers | scans MCP servers | scans MCP servers |
 | **Paranoia levels** | 5 tiers | no | no | no |
-| **SKILL.md scanning** | yes | no | yes | no |
+| **SKILL.md scanning** | yes | no | yes | yes |
 | **CVE scanning** | 8 lockfile formats | no | no | no |
-| **Secrets detection** | gitleaks 800+ | Yara | no | no |
+| **Secrets detection** | gitleaks 800+ | Yara | yes (skills mode) | yes (skill scanning) |
 | **Supply chain** | yes | no | no | no |
 | **Attestation** | yes | no | no | no |
-| **No cloud dependency** | yes | partial | no (needs Snyk API) | yes |
+| **No cloud dependency** | yes | partial | no (needs Snyk API) | partial (Ollama ok) |
 | **Runs on ARM/RPi** | yes | no | no | no |
 | **Audit trail** | JSONL | no | no | no |
 
