@@ -33,25 +33,23 @@ jobs:
       - uses: anchore/sbom-action/download-syft@v0
 
       # Self-check: HoneyBadger scans itself before release
-      - name: Build for self-check
-        run: CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w" -o honeybadger-selfcheck ./cmd/honeybadger
-
       # Self-check at minimal paranoia (secrets + CVE only). Higher levels
       # false-positive on our own scanner: supplychain.go contains reverse shell
       # and crypto mining regexes as detection patterns, which the supply chain
       # scanner flags as threats. This is inherent to any security scanner.
+      # Build, run, and clean up in a single step to keep git state clean for GoReleaser.
       - name: HoneyBadger self-check
         run: |
-          ./honeybadger-selfcheck scan . \
-            --paranoia minimal --offline --format ndjson | tee self-report.json
-          verdict=$(grep '"type":"result"' self-report.json | jq -r .verdict)
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w" -o /tmp/honeybadger-selfcheck ./cmd/honeybadger
+          /tmp/honeybadger-selfcheck scan . \
+            --paranoia minimal --offline --format ndjson | tee /tmp/self-report.json
+          verdict=$(grep '"type":"result"' /tmp/self-report.json | jq -r .verdict)
           if [ "$verdict" = "FAIL" ]; then
             echo "::error::Self-check verdict=FAIL — aborting release"
-            cat self-report.json
+            cat /tmp/self-report.json
             exit 1
           fi
           echo "Self-check verdict=$verdict"
-          rm honeybadger-selfcheck
 
       # AI-powered release notes
       - name: Generate AI release notes
@@ -97,7 +95,7 @@ jobs:
               echo ""
               echo "$RELEASE_SUMMARY"
               echo ""
-            } > ai-release-notes.md
+            } > /tmp/ai-release-notes.md
             echo "has_notes=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_notes=false" >> "$GITHUB_OUTPUT"
@@ -142,15 +140,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Upload self-check report to release
-      - name: Upload self-report
+      # Upload self-check report and AI notes to release
+      - name: Upload extra artifacts
         if: always()
         run: |
-          if [ -f self-report.json ]; then
-            gh release upload "${{ github.ref_name }}" self-report.json --clobber
+          if [ -f /tmp/self-report.json ]; then
+            gh release upload "${{ github.ref_name }}" /tmp/self-report.json --clobber
           fi
-          if [ -f ai-release-notes.md ]; then
-            gh release upload "${{ github.ref_name }}" ai-release-notes.md --clobber
+          if [ -f /tmp/ai-release-notes.md ]; then
+            gh release upload "${{ github.ref_name }}" /tmp/ai-release-notes.md --clobber
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
