@@ -1,189 +1,162 @@
-# Installing HoneyBadger in Claw Runtimes
+# HoneyBadger — OpenClaw Integration Guide
 
-## Quick Start
+HoneyBadger scans GitHub and GitLab repositories for security issues before
+you install them as OpenClaw skills or MCP servers.
 
-    go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
-    honeybadger scan github.com/someone/some-skill
+## Prerequisites
 
-## Binary Installation
+```bash
+# Install HoneyBadger binary (requires Go 1.22+)
+go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
-### From source (all platforms)
-    go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
-
-### From GitHub Releases
-Download the prebuilt binary for your platform from
-https://github.com/famclaw/honeybadger/releases
-
-Available targets:
-- `honeybadger-linux-arm64` -- Raspberry Pi 4/5
-- `honeybadger-linux-armv7` -- Raspberry Pi 3
-- `honeybadger-linux-amd64` -- Linux x86_64
-- `honeybadger-darwin-arm64` -- macOS Apple Silicon
-- `honeybadger-darwin-amd64` -- macOS Intel
-
-### Docker
-    docker pull ghcr.io/famclaw/honeybadger:latest
-    docker run --rm ghcr.io/famclaw/honeybadger scan github.com/someone/some-skill
-
-Multi-arch image available for `linux/amd64` and `linux/arm64`.
-
-### Android / Termux
-    pkg install golang
-    go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
-
-Note: Sandbox unavailable on Termux. Effective paranoia capped at `family`.
-
-## Verifying Downloads
-
-All release binaries are signed with Sigstore cosign (keyless). Verify before use:
-
-    cosign verify-blob honeybadger-linux-arm64 \
-      --bundle honeybadger-linux-arm64.bundle \
-      --certificate-identity-regexp=".*famclaw/honeybadger.*" \
-      --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
-
-    gh attestation verify honeybadger-linux-arm64 --repo famclaw/honeybadger
-
-## MCP Server Mode
-
-HoneyBadger runs as an MCP server over stdio, exposing the `honeybadger_scan` tool.
-Any MCP-compatible runtime can call it.
-
-    honeybadger --mcp-server
-
-## Integration: FamClaw
-
-FamClaw discovers MCP tools automatically via the `tools/list` handshake.
-Add honeybadger to your `config.yaml`:
-
-```yaml
-skills:
-  auto_seccheck: true
-  block_on_fail: true
-
-  mcp_servers:
-    honeybadger:
-      transport: stdio
-      command: honeybadger
-      args: ["--mcp-server"]
-
-  credentials:
-    honeybadger:
-      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+# Verify
+honeybadger --version
 ```
 
-Credentials are injected as environment variables when the MCP server process
-is spawned. They never appear in LLM context.
+## Install as an OpenClaw skill
 
-**How it works in FamClaw:**
-1. A family member asks to install a skill or vet a repo
-2. FamClaw's policy engine evaluates the request (parent approval may be required)
-3. If allowed, the agent calls `honeybadger_scan` via MCP
-4. HoneyBadger fetches the repo, runs all scanners, returns PASS/WARN/FAIL
-5. FamClaw blocks installation if verdict is FAIL
+### Option 1: Workspace skills directory (recommended)
 
-**Remote mode** (for constrained devices like Android):
-```yaml
-skills:
-  mcp_servers:
-    honeybadger:
-      transport: http
-      url: "http://192.168.1.10:8090/mcp"
-      headers:
-        Authorization: "Bearer ${MCP_TOKEN}"
+```bash
+mkdir -p ~/.openclaw/workspace/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o ~/.openclaw/workspace/skills/honeybadger/SKILL.md
 ```
 
-Run honeybadger on a LAN server and point constrained devices to it.
+### Option 2: Personal skills directory (applies across workspaces)
 
-## Integration: OpenClaw
-
-In your OpenClaw MCP config:
-```yaml
-mcp_servers:
-  honeybadger:
-    command: honeybadger
-    args: ["--mcp-server"]
-    env:
-      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+```bash
+mkdir -p ~/.agents/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o ~/.agents/skills/honeybadger/SKILL.md
 ```
 
-## Integration: PicoClaw
+### Verify skill is loaded
 
-In PicoClaw's tool configuration:
-```yaml
-tools:
-  - name: honeybadger
-    type: mcp
-    command: honeybadger --mcp-server
+```bash
+# List eligible skills — honeybadger should appear
+openclaw skills list --eligible
+
+# Get skill details
+openclaw skills info honeybadger
 ```
 
-## Integration: Claude Code
+If `honeybadger` does not appear:
+1. Check binary is in PATH: `which honeybadger`
+2. Check SKILL.md is in the correct directory
+3. Restart the OpenClaw gateway
 
-See [CLAUDE_CODE.md](CLAUDE_CODE.md) for full Claude Code setup instructions.
+## Usage
 
-Quick setup -- add to your project's `.claude/settings.local.json`:
+In any OpenClaw chat (Telegram, WhatsApp, Discord, Web UI, FamClaw):
+
+```text
+You: Is github.com/some-user/some-skill safe to install?
+Agent: [runs honeybadger scan, reports verdict and findings]
+
+You: Vet this before I install it: github.com/some-user/some-mcp
+Agent: [runs honeybadger scan with family paranoia, reports results]
+
+You: Check for updates to my installed skills
+Agent: [runs honeybadger with --installed-sha for each installed skill]
+```
+
+## Usage with FamClaw
+
+FamClaw calls HoneyBadger automatically before installing skills:
+
+```bash
+famclaw skill install github.com/some-user/some-skill
+```
+
+Manual scan from any FamClaw gateway:
+
+```text
+"Honeybadger github.com/some-user/some-skill"
+```
+
+## Usage with Docker sandbox
+
+If your OpenClaw agent runs in a Docker sandbox, install HoneyBadger inside
+the container via `agents.defaults.sandbox.docker.setupCommand`:
+
 ```json
 {
-  "mcpServers": {
-    "honeybadger": {
-      "command": "honeybadger",
-      "args": ["--mcp-server"],
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "non-main",
+        "docker": {
+          "setupCommand": "apt-get update && apt-get install -y golang-go && GOBIN=/usr/local/bin go install github.com/famclaw/honeybadger/cmd/honeybadger@latest"
+        }
       }
     }
   }
 }
 ```
 
-## SKILL.md Registration
+Or use a custom image with HoneyBadger pre-installed:
 
-HoneyBadger ships with a SKILL.md at the repo root. When installed via skillbridge,
-the runtime auto-discovers it. Triggers include:
-- "honeybadger"
-- "scan this repo"
-- "is this safe to install"
-- "check this skill"
-- "vet this"
-- "security scan"
-- "verify this update"
-- "check for updates"
+```dockerfile
+FROM golang:1.26-alpine AS builder
+RUN go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
-## Paranoia Levels
+FROM ubuntu:24.04
+COPY --from=builder /go/bin/honeybadger /usr/local/bin/
+```
 
-| Level | Scanners | LLM | Blocks on |
-|-------|----------|-----|-----------|
-| `off` | None | No | Nothing |
-| `minimal` | secrets, cve | No | CRITICAL |
-| `family` | secrets, cve, supplychain, meta | Yes | HIGH+ |
-| `strict` | all + attestation | Yes | MEDIUM+ (WARN=FAIL) |
-| `paranoid` | all + allowlist | Yes | LOW+ |
+## Configuration
 
-The CLI accepts all five levels. The MCP tool accepts `minimal`, `family`,
-`strict`, and `paranoid` (defaults to `family`).
+Set these environment variables to improve scan quality:
 
-Set globally in your runtime config or per-scan via the MCP tool parameter.
+```bash
+# Higher GitHub API rate limit (60 → 5000 req/hour)
+export GITHUB_TOKEN=your_token_here
 
-## Environment Variables
+# Use a specific LLM endpoint for security analysis
+export HONEYBADGER_LLM=http://localhost:11434/v1
+```
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `GITHUB_TOKEN` | Higher GitHub API rate limits (60 -> 5000/hr) | No |
-| `GITLAB_TOKEN` | GitLab private repo access | No |
-| `HONEYBADGER_LLM` | LLM endpoint for verdict analysis | No |
-| `HONEYBADGER_LLM_KEY` | API key for LLM endpoint | No |
-| `HONEYBADGER_LLM_MODEL` | Model name for LLM | No |
+To inject environment variables for the skill in OpenClaw config:
 
-## Troubleshooting
+```json
+{
+  "skills": {
+    "entries": {
+      "honeybadger": {
+        "env": {
+          "GITHUB_TOKEN": "your_token_here"
+        }
+      }
+    }
+  }
+}
+```
 
-**"routing: unsupported URL"** -- URL format not recognized. Use `github.com/owner/repo`, `gitlab.com/group/project`, or a local filesystem path.
+## Verify the release binary
 
-**Rate limiting (GitHub)** -- Set `GITHUB_TOKEN` for 5000 req/hr instead of 60.
+Release binaries are signed with cosign (keyless, Sigstore). Verify before
+using any downloaded binary:
 
-**Offline mode** -- Use `--offline` flag on the CLI for air-gapped environments. The MCP tool does not expose an offline parameter.
+```bash
+# Download binary and signature bundle
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
+  -o honeybadger-linux-amd64
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64.bundle \
+  -o honeybadger-linux-amd64.bundle
 
-**Binary not found** -- Ensure honeybadger is in your PATH, or use the absolute path in your runtime config.
+# Verify cosign signature
+cosign verify-blob honeybadger-linux-amd64 \
+  --bundle honeybadger-linux-amd64.bundle \
+  --certificate-identity-regexp ".*famclaw/honeybadger.*" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-**Termux sandbox warning** -- Expected. Sandbox is unavailable on Android. Paranoia is capped at `family`.
-
-**Docker permission denied** -- Run `docker run --rm ghcr.io/famclaw/honeybadger ...` without volume mounts. HoneyBadger fetches repos over the network inside the container.
+# Verify SHA256
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS | \
+  grep honeybadger-linux-amd64 | sha256sum --check
+```

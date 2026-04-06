@@ -130,7 +130,7 @@ honeybadger/
 │   ├── OPENCLAW.md           # Installation guide for FamClaw, OpenClaw, PicoClaw
 │   ├── CLAUDE_CODE.md        # Claude Code integration guide (MCP config, hooks)
 │   ├── EXAMPLES.md           # CLI and MCP usage examples
-│   └── docs_test.go          # Doc validation tests (16 tests, sync docs with source)
+│   └── docs_test.go          # Doc validation tests (11 functions, 35 checks)
 ├── .gitignore
 ├── Dockerfile                # Multi-stage distroless image for honeybadger
 ├── go.mod
@@ -153,7 +153,7 @@ Wave 10 complete. Supply chain hardening, integration docs, and doc validation t
 - `go mod tidy` drift check in CI
 - `docs/OPENCLAW.md` rewritten with real FamClaw config.yaml, Docker usage, verification commands
 - `docs/CLAUDE_CODE.md` -- dedicated Claude Code integration guide (MCP config, hooks, Docker)
-- `docs/docs_test.go` validates all docs stay in sync with source (16 tests):
+- `docs/docs_test.go` validates all docs stay in sync with source (35 checks):
   paranoia levels, CLI flags, MCP params, env vars, binary targets, response schema, Claude Code config
 
 Previous waves:
