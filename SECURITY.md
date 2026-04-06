@@ -30,7 +30,7 @@ We will acknowledge receipt within 48 hours and aim to provide a fix within 7 da
 - CodeQL static analysis runs on push, PR, and weekly schedule
 - HoneyBadger self-checks before every release (strict paranoia after v0.1.0;
   v0.1.0 used minimal due to attestation bootstrap — no prior release to verify against)
-- All GitHub Actions SHA-pinned to immutable commit hashes
+- GitHub Actions pinned to version tags; Dependabot keeps them updated
 - Container images signed with cosign and pushed to GHCR
 
 ## Verifying Release Artifacts
