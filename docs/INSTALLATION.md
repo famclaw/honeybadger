@@ -1,7 +1,7 @@
-# HoneyBadger — OpenClaw Integration Guide
+# HoneyBadger Installation Guide
 
-HoneyBadger scans GitHub and GitLab repositories for security issues before
-you install them as OpenClaw skills or MCP servers.
+Install HoneyBadger standalone, or as a skill for FamClaw, OpenClaw,
+PicoClaw, or NanoBot.
 
 ## Prerequisites
 
@@ -159,4 +159,67 @@ cosign verify-blob honeybadger-linux-amd64 \
 curl -fsSL \
   https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS | \
   grep honeybadger-linux-amd64 | sha256sum --check
+```
+
+## With PicoClaw
+
+PicoClaw uses the same SKILL.md format. Install HoneyBadger as a skill:
+
+```bash
+mkdir -p ~/.picoclaw/workspace/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o ~/.picoclaw/workspace/skills/honeybadger/SKILL.md
+```
+
+Or use the PicoClaw CLI:
+```bash
+picoclaw skills install honeybadger
+```
+
+## With NanoBot
+
+NanoBot loads skills from the workspace directory:
+
+```bash
+mkdir -p ~/.nanobot/workspace/skills/honeybadger
+curl -fsSL \
+  https://raw.githubusercontent.com/famclaw/honeybadger/main/SKILL.md \
+  -o ~/.nanobot/workspace/skills/honeybadger/SKILL.md
+```
+
+## Standalone CLI
+
+No runtime needed -- just download and run:
+
+```bash
+# Install via Go
+go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
+
+# Or download a binary from the releases page
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
+  -o honeybadger && chmod +x honeybadger
+
+# Scan a repo
+./honeybadger scan github.com/someone/some-skill
+```
+
+## CI/CD
+
+Run HoneyBadger in your pipeline to gate skill and MCP server installations:
+
+```bash
+# GitHub Actions / GitLab CI / any CI
+honeybadger scan . --paranoia strict --format ndjson
+# Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error
+```
+
+```yaml
+# Example GitHub Actions step
+- name: Security scan
+  run: |
+    curl -fsSL https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 -o honeybadger
+    chmod +x honeybadger
+    ./honeybadger scan . --paranoia strict
 ```

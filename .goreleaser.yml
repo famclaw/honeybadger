@@ -87,7 +87,7 @@ dockers:
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.source=https://github.com/famclaw/honeybadger"
-      - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
+      - "--label=org.opencontainers.image.licenses=MIT"
 
   - id: arm64
     goos: linux
@@ -100,7 +100,7 @@ dockers:
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.source=https://github.com/famclaw/honeybadger"
-      - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
+      - "--label=org.opencontainers.image.licenses=MIT"
 
 docker_manifests:
   - name_template: "ghcr.io/famclaw/honeybadger:{{ .Version }}"
