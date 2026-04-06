@@ -158,7 +158,8 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
 	if paranoia >= scan.ParanoiaFamily && llmEndpoint != "" {
-		llmCtx, llmCancel := context.WithTimeout(ctx, 5*time.Minute)
+		llmTimeout := parseLLMTimeout(os.Getenv("HONEYBADGER_LLM_TIMEOUT"))
+		llmCtx, llmCancel := context.WithTimeout(ctx, llmTimeout)
 		defer llmCancel()
 
 		llmOpts := report.LLMOptions{
@@ -227,4 +228,16 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	}
 
 	return result, nil
+}
+
+// parseLLMTimeout parses a duration string, defaulting to 5 minutes.
+func parseLLMTimeout(s string) time.Duration {
+	if s == "" {
+		return 5 * time.Minute
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 5 * time.Minute
+	}
+	return d
 }

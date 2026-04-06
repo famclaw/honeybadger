@@ -204,6 +204,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		RepoPath:          subPath,
 		GithubToken:       githubToken,
 		GitlabToken:       gitlabToken,
+		LLMTimeout:        llmTimeout,
 	}
 
 	emitter.Emit(engine.ProgressEvent("scan", "Running security scanners...")) //nolint:errcheck
