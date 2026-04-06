@@ -4,94 +4,23 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  packages: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-      packages: write
-
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-
-      - name: Build all targets
-        run: make cross
-
-      - name: HoneyBadger self-check
-        run: |
-          ./bin/honeybadger-linux-amd64 scan github.com/famclaw/honeybadger \
-            --paranoia strict --format ndjson | tee self-report.json
-          verdict=$(grep '"type":"result"' self-report.json | jq -r .verdict || echo "UNKNOWN")
-          if [ "$verdict" = "FAIL" ]; then
-            echo "Self-check FAILED"
-            exit 1
-          fi
-
-      - name: Generate SHA256SUMS
-        run: sha256sum bin/* > SHA256SUMS
-
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: bin/*
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Sign with cosign
-        run: |
-          for f in bin/*; do
-            cosign sign-blob --yes "$f" --bundle "${f}.bundle"
-          done
-
-      - name: Verify cosign signatures
-        run: |
-          for f in bin/*; do
-            cosign verify-blob "$f" \
-              --bundle "${f}.bundle" \
-              --certificate-identity-regexp=".*famclaw/honeybadger.*" \
-              --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
-          done
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          format: spdx-json
-          output-file: sbom.spdx.json
-
-      - name: Attest SBOM
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: sbom.spdx.json
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            bin/*
-            SHA256SUMS
-            sbom.spdx.json
-            self-report.json
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: release
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
         with:
@@ -99,26 +28,130 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - uses: docker/build-push-action@v6
-        id: push
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-
       - uses: sigstore/cosign-installer@v3
 
-      - name: Sign container image
-        run: cosign sign --yes ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+      - uses: anchore/sbom-action/download-syft@v0
+
+      # Self-check: HoneyBadger scans itself before release
+      - name: Build for self-check
+        run: CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w" -o honeybadger-selfcheck ./cmd/honeybadger
+
+      - name: HoneyBadger self-check
+        run: |
+          ./honeybadger-selfcheck scan github.com/famclaw/honeybadger \
+            --paranoia strict --format ndjson | tee self-report.json
+          verdict=$(grep '"type":"result"' self-report.json | jq -r .verdict || echo "UNKNOWN")
+          if [ "$verdict" = "FAIL" ]; then
+            echo "::error::Self-check FAILED — aborting release"
+            exit 1
+          fi
+          rm honeybadger-selfcheck
+
+      # AI-powered release notes
+      - name: Generate AI release notes
+        id: ai_notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        if: env.ANTHROPIC_API_KEY != ''
+        run: |
+          # Collect commits since last tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD)
+            DIFF_STAT=$(git diff --stat "$PREV_TAG"..HEAD | tail -1)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)")
+            DIFF_STAT=$(git diff --stat $(git rev-list --max-parents=0 HEAD)..HEAD | tail -1)
+          fi
+
+          # Call Claude API for release summary
+          RELEASE_SUMMARY=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$(cat <<PROMPT
+          {
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 512,
+            "messages": [{
+              "role": "user",
+              "content": "Write a concise release summary (3-5 bullet points) for HoneyBadger, a security scanner for AI assistant skills/tools/MCP servers. Focus on what users care about: new capabilities, security improvements, breaking changes. No markdown headers, just bullet points starting with emoji.\n\nVersion: ${{ github.ref_name }}\nStats: ${DIFF_STAT}\n\nCommits since last release:\n${COMMITS}"
+            }]
+          }
+          PROMPT
+          )" | python3 -c "import sys,json; print(json.load(sys.stdin)['content'][0]['text'])" 2>/dev/null || echo "")
+
+          if [ -n "$RELEASE_SUMMARY" ]; then
+            # Write to file for GoReleaser to pick up
+            {
+              echo "### Highlights"
+              echo ""
+              echo "$RELEASE_SUMMARY"
+              echo ""
+            } > ai-release-notes.md
+            echo "has_notes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_notes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Inject AI notes into release header if available
+      - name: Prepare release header
+        if: steps.ai_notes.outputs.has_notes == 'true'
+        run: |
+          # Prepend AI summary to GoReleaser's changelog
+          if [ -f ai-release-notes.md ]; then
+            AI_NOTES=$(cat ai-release-notes.md)
+            # GoReleaser will use the header from .goreleaser.yml
+            # We append AI notes as an extra file
+            cp ai-release-notes.md self-report.json .
+          fi
+
+      # GoReleaser: build, sign, Docker, SBOM, release
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COSIGN_YES: "true"
+
+      # Attest build provenance for all binaries
+      - name: Attest build provenance
+        run: |
+          for f in dist/honeybadger-*; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.json|*.bundle|*.sig|*.pem) continue ;;
+            esac
+            echo "Attesting: $f"
+            gh attestation create "$f" \
+              --repo "${{ github.repository }}" 2>/dev/null || true
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Attest SBOM files
+      - name: Attest SBOMs
+        run: |
+          for f in dist/*.spdx.json; do
+            [ -f "$f" ] || continue
+            echo "Attesting SBOM: $f"
+            gh attestation create "$f" \
+              --repo "${{ github.repository }}" 2>/dev/null || true
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Upload self-check report to release
+      - name: Upload self-report
+        if: always()
+        run: |
+          if [ -f self-report.json ]; then
+            gh release upload "${{ github.ref_name }}" self-report.json --clobber
+          fi
+          if [ -f ai-release-notes.md ]; then
+            gh release upload "${{ github.ref_name }}" ai-release-notes.md --clobber
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

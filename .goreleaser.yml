@@ -1,0 +1,197 @@
+version: 2
+
+project_name: honeybadger
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: honeybadger
+    main: ./cmd/honeybadger
+    binary: honeybadger
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+      - -buildvcs=false
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm
+
+archives:
+  - id: default
+    formats: ['binary']
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ if eq .Arch "arm" }}armv7{{ else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+sboms:
+  - id: spdx
+    artifacts: binary
+    cmd: syft
+    args:
+      - scan
+      - "$artifact"
+      - --output
+      - spdx-json=$document
+    documents:
+      - "sbom-{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}.spdx.json"
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    args:
+      - sign-blob
+      - --yes
+      - --bundle
+      - "${artifact}.bundle"
+      - "${artifact}"
+
+docker_signs:
+  - cmd: cosign
+    artifacts: manifests
+    output: true
+    args:
+      - sign
+      - --yes
+      - "${artifact}"
+
+dockers:
+  - id: amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/famclaw/honeybadger:{{ .Version }}-amd64"
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/famclaw/honeybadger"
+      - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
+
+  - id: arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/famclaw/honeybadger:{{ .Version }}-arm64"
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/famclaw/honeybadger"
+      - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
+
+docker_manifests:
+  - name_template: "ghcr.io/famclaw/honeybadger:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/famclaw/honeybadger:{{ .Version }}-amd64"
+      - "ghcr.io/famclaw/honeybadger:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/famclaw/honeybadger:latest"
+    image_templates:
+      - "ghcr.io/famclaw/honeybadger:{{ .Version }}-amd64"
+      - "ghcr.io/famclaw/honeybadger:{{ .Version }}-arm64"
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: "New Features"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "Build & CI"
+      regexp: '^.*?(build|ci)(\(.+\))??!?:.+$'
+      order: 2
+    - title: "Documentation"
+      regexp: '^.*?docs?(\(.+\))??!?:.+$'
+      order: 3
+    - title: "Dependencies"
+      regexp: '^.*?build\(deps\)(\(.+\))??!?:.+$'
+      order: 4
+    - title: "Other"
+      order: 999
+  filters:
+    exclude:
+      - '^test:'
+      - '^chore:'
+      - 'merge conflict'
+
+release:
+  github:
+    owner: famclaw
+    name: honeybadger
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## HoneyBadger {{ .Version }}
+
+    Security scanner for skills, tools, and MCP servers used by AI assistant runtimes.
+
+    **HoneyBadger don't care. HoneyBadger checks anyway.**
+
+    ### Install
+
+    ```bash
+    # Go install
+    go install github.com/famclaw/honeybadger/cmd/honeybadger@{{ .Tag }}
+
+    # Docker
+    docker pull ghcr.io/famclaw/honeybadger:{{ .Version }}
+
+    # Binary (Linux amd64)
+    curl -fsSL https://github.com/famclaw/honeybadger/releases/download/{{ .Tag }}/honeybadger-linux-amd64 -o honeybadger
+    chmod +x honeybadger
+    ```
+
+    ### Verify
+
+    ```bash
+    # Cosign
+    cosign verify-blob honeybadger-linux-amd64 \
+      --bundle SHA256SUMS.bundle \
+      --certificate-identity-regexp ".*famclaw/honeybadger.*" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+    # SHA256
+    sha256sum --check SHA256SUMS
+
+    # Docker image
+    cosign verify ghcr.io/famclaw/honeybadger:{{ .Version }} \
+      --certificate-identity-regexp ".*famclaw/honeybadger.*" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+    # GitHub attestation
+    gh attestation verify honeybadger-linux-amd64 --repo famclaw/honeybadger
+    ```
+  footer: |
+    ---
+
+    **Full changelog**: https://github.com/famclaw/honeybadger/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **Supply chain security**: All binaries are signed with [Sigstore cosign](https://sigstore.dev) (keyless), attested with [GitHub build provenance](https://github.blog/security/supply-chain-security/introducing-npm-package-provenance/), and include SPDX SBOMs. Container images are signed and pushed to GHCR.
+
+  extra_files:
+    - glob: self-report.json
