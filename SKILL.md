@@ -7,7 +7,7 @@ description: >
   scan, or review a repository for safety before installation. Detects
   hardcoded secrets, known CVEs, supply chain risks, and build provenance.
 author: famclaw
-license: AGPL-3.0-only
+license: MIT
 tags:
   - security
   - scanner

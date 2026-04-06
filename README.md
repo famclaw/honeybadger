@@ -68,6 +68,23 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 | Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
 
+## Why HoneyBadger
+
+| | HoneyBadger | Cisco MCP Scanner | Snyk agent-scan | Proximity |
+|---|:-:|:-:|:-:|:-:|
+| **Single binary** | Go | Python | Python | Python |
+| **Offline mode** | yes | no | no | local only |
+| **MCP server mode** | yes | no | no | no |
+| **Paranoia levels** | 5 tiers | no | no | no |
+| **SKILL.md scanning** | yes | no | yes | no |
+| **CVE scanning** | 8 lockfile formats | no | no | no |
+| **Secrets detection** | gitleaks 800+ | Yara | no | no |
+| **Supply chain** | yes | no | no | no |
+| **Attestation** | yes | no | no | no |
+| **No cloud dependency** | yes | partial | no (needs Snyk API) | yes |
+| **Runs on ARM/RPi** | yes | no | no | no |
+| **Audit trail** | JSONL | no | no | no |
+
 ## Paranoia levels
 
 | Level | Scanners | LLM | Blocks on |
@@ -150,7 +167,7 @@ honeybadger/
 │       ├── codeql.yml
 │       └── release.yml
 ├── docs/
-│   ├── OPENCLAW.md           # Installation guide for FamClaw, OpenClaw, PicoClaw
+│   ├── INSTALLATION.md       # Installation guide for all runtimes
 │   ├── CLAUDE_CODE.md        # Claude Code integration guide (MCP config, hooks)
 │   ├── EXAMPLES.md           # CLI and MCP usage examples
 │   └── docs_test.go          # Doc validation tests (11 functions, 35 checks)
@@ -168,32 +185,12 @@ honeybadger/
 
 ## Status
 
-Wave 11 complete. GoReleaser migration + AI release notes:
-- Release pipeline migrated to GoReleaser v2 (`.goreleaser.yml`)
-- Cosign keyless signing of checksums and Docker manifests
-- SPDX SBOM per binary via Syft
-- Multi-arch Docker images (amd64 + arm64) pushed to GHCR, signed
-- AI-powered release notes via Claude API (Haiku) — summarizes commits into user-facing highlights
-- GitHub build provenance attestation for all binaries and SBOMs
-- Self-check gate: HoneyBadger scans itself at strict paranoia before release
-- `make release-dry` for local GoReleaser testing
+**v0.1.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.1.0)
 
-Wave 10: Supply chain hardening, integration docs, doc validation tests
-- SKILL.md rewritten for AgentSkills open standard (Claude Code + OpenClaw)
-- `docs/OPENCLAW.md` -- OpenClaw integration guide
-- `docs/CLAUDE_CODE.md` -- Claude Code integration guide
-- `docs/docs_test.go` validates all docs stay in sync with source (35 checks)
+All core scanners implemented and tested. Binaries signed with Sigstore cosign,
+SPDX SBOMs attached to every release.
 
-Previous waves:
-- Installation and usage documentation (`docs/OPENCLAW.md`, `docs/EXAMPLES.md`)
-- Test fixture package with 7 builders, mock OSV server
-- Each scanner in its own package under `internal/scanner/`
-- Core types, shared helpers, concurrent runner, scanner list builder
-- Fetch layer (GitHub, GitLab, tarball, local)
-- NDJSON and text reporters + LLM verdict
-- Full CLI pipeline with tier/sandbox detection
-- MCP server mode
-- CI/CD: govulncheck, CodeQL, dependabot, release pipeline
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Building
 
@@ -214,4 +211,4 @@ Previous waves:
 
 ## License
 
-AGPL-3.0-only
+[MIT](./LICENSE)

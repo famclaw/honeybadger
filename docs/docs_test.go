@@ -147,7 +147,7 @@ func TestExamples_MCPToolNameMatchesSource(t *testing.T) {
 
 func TestEnvVarsDocumentedInGuides(t *testing.T) {
 	claudeDoc := readDoc(t, "CLAUDE_CODE.md")
-	openclawDoc := readDoc(t, "OPENCLAW.md")
+	openclawDoc := readDoc(t, "INSTALLATION.md")
 	src := readSource(t, filepath.Join("cmd", "honeybadger", "main.go")) +
 		readSource(t, filepath.Join("cmd", "honeybadger", "mcp.go"))
 
@@ -162,7 +162,7 @@ func TestEnvVarsDocumentedInGuides(t *testing.T) {
 			t.Errorf("CLAUDE_CODE.md missing env var %s", env)
 		}
 		if !strings.Contains(openclawDoc, env) {
-			t.Errorf("OPENCLAW.md missing env var %s", env)
+			t.Errorf("INSTALLATION.md missing env var %s", env)
 		}
 	}
 }
@@ -322,13 +322,13 @@ func TestSKILLMDRuntimeAccuracy(t *testing.T) {
 	}
 }
 
-// --- OPENCLAW.md Runtime Accuracy ---
+// --- INSTALLATION.md Runtime Accuracy ---
 
-// TestOpenCLAWMDRuntimeAccuracy validates docs/OPENCLAW.md is accurate.
+// TestOpenCLAWMDRuntimeAccuracy validates docs/INSTALLATION.md is accurate.
 func TestOpenCLAWMDRuntimeAccuracy(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(docsDir(t), "OPENCLAW.md"))
+	raw, err := os.ReadFile(filepath.Join(docsDir(t), "INSTALLATION.md"))
 	if err != nil {
-		t.Fatalf("cannot read docs/OPENCLAW.md: %v", err)
+		t.Fatalf("cannot read docs/INSTALLATION.md: %v", err)
 	}
 	doc := string(raw)
 
@@ -379,9 +379,9 @@ func TestOpenCLAWMDRuntimeAccuracy(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			found := strings.Contains(doc, c.want)
 			if c.absence && found {
-				t.Errorf("OPENCLAW.md must NOT contain %q: %s", c.want, c.errMsg)
+				t.Errorf("INSTALLATION.md must NOT contain %q: %s", c.want, c.errMsg)
 			} else if !c.absence && !found {
-				t.Errorf("OPENCLAW.md must contain %q: %s", c.want, c.errMsg)
+				t.Errorf("INSTALLATION.md must contain %q: %s", c.want, c.errMsg)
 			}
 		})
 	}
