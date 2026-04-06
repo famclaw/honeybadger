@@ -25,7 +25,7 @@ curl -fsSL \
 
 Usage — ask naturally in Claude Code:
 
-```
+```text
 You: Is github.com/some-user/some-skill safe to install?
 Claude: [runs honeybadger scan, reports findings and verdict]
 
@@ -34,7 +34,7 @@ Claude: [asks for URL if not provided, then scans]
 ```
 
 Explicit invocation via slash command:
-```
+```text
 /honeybadger github.com/some-user/some-skill
 ```
 

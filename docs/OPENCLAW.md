@@ -52,7 +52,7 @@ If `honeybadger` does not appear:
 
 In any OpenClaw chat (Telegram, WhatsApp, Discord, Web UI, FamClaw):
 
-```
+```text
 You: Is github.com/some-user/some-skill safe to install?
 Agent: [runs honeybadger scan, reports verdict and findings]
 
@@ -73,7 +73,7 @@ famclaw skill install github.com/some-user/some-skill
 
 Manual scan from any FamClaw gateway:
 
-```
+```text
 "Honeybadger github.com/some-user/some-skill"
 ```
 
@@ -89,7 +89,7 @@ the container via `agents.defaults.sandbox.docker.setupCommand`:
       "sandbox": {
         "mode": "non-main",
         "docker": {
-          "setupCommand": "apt-get install -y golang-go && go install github.com/famclaw/honeybadger/cmd/honeybadger@latest"
+          "setupCommand": "apt-get update && apt-get install -y golang-go && GOBIN=/usr/local/bin go install github.com/famclaw/honeybadger/cmd/honeybadger@latest"
         }
       }
     }
@@ -144,14 +144,14 @@ using any downloaded binary:
 # Download binary and signature bundle
 curl -fsSL \
   https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
-  -o honeybadger
+  -o honeybadger-linux-amd64
 curl -fsSL \
   https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64.bundle \
-  -o honeybadger.bundle
+  -o honeybadger-linux-amd64.bundle
 
 # Verify cosign signature
-cosign verify-blob honeybadger \
-  --bundle honeybadger.bundle \
+cosign verify-blob honeybadger-linux-amd64 \
+  --bundle honeybadger-linux-amd64.bundle \
   --certificate-identity-regexp ".*famclaw/honeybadger.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
