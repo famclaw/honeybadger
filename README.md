@@ -132,7 +132,9 @@ honeybadger/
 │   ├── EXAMPLES.md           # CLI and MCP usage examples
 │   └── docs_test.go          # Doc validation tests (11 functions, 35 checks)
 ├── .gitignore
-├── Dockerfile                # Multi-stage distroless image for honeybadger
+├── .goreleaser.yml           # GoReleaser config: builds, signing, Docker, SBOM, changelog
+├── Dockerfile                # Multi-stage distroless image (local dev)
+├── Dockerfile.goreleaser     # GoReleaser Docker image (pre-built binary)
 ├── go.mod
 ├── go.sum
 ├── Makefile
@@ -143,18 +145,21 @@ honeybadger/
 
 ## Status
 
-Wave 10 complete. Supply chain hardening, integration docs, and doc validation tests:
-- Reproducible builds (`-trimpath -buildvcs=false`)
-- Cosign signature verification step in release pipeline
-- SBOM switched to SPDX format, attested alongside binaries
-- Multi-arch OCI images built and pushed to GHCR, signed with cosign
-- SECURITY.md corrected to match actual practices (SLSA L2, not L3)
-- CI security checks use `continue-on-error` instead of `|| true` (visible warnings)
-- `go mod tidy` drift check in CI
-- `docs/OPENCLAW.md` rewritten with real FamClaw config.yaml, Docker usage, verification commands
-- `docs/CLAUDE_CODE.md` -- dedicated Claude Code integration guide (MCP config, hooks, Docker)
-- `docs/docs_test.go` validates all docs stay in sync with source (35 checks):
-  paranoia levels, CLI flags, MCP params, env vars, binary targets, response schema, Claude Code config
+Wave 11 complete. GoReleaser migration + AI release notes:
+- Release pipeline migrated to GoReleaser v2 (`.goreleaser.yml`)
+- Cosign keyless signing of checksums and Docker manifests
+- SPDX SBOM per binary via Syft
+- Multi-arch Docker images (amd64 + arm64) pushed to GHCR, signed
+- AI-powered release notes via Claude API (Haiku) — summarizes commits into user-facing highlights
+- GitHub build provenance attestation for all binaries and SBOMs
+- Self-check gate: HoneyBadger scans itself at strict paranoia before release
+- `make release-dry` for local GoReleaser testing
+
+Wave 10: Supply chain hardening, integration docs, doc validation tests
+- SKILL.md rewritten for AgentSkills open standard (Claude Code + OpenClaw)
+- `docs/OPENCLAW.md` -- OpenClaw integration guide
+- `docs/CLAUDE_CODE.md` -- Claude Code integration guide
+- `docs/docs_test.go` validates all docs stay in sync with source (35 checks)
 
 Previous waves:
 - Installation and usage documentation (`docs/OPENCLAW.md`, `docs/EXAMPLES.md`)
@@ -173,6 +178,7 @@ Previous waves:
     make cross          # all 5 targets (linux arm64/armv7/amd64, darwin arm64/amd64)
     make test           # run all tests
     make self-check     # scan ourselves at strict paranoia
+    make release-dry    # test GoReleaser locally (snapshot, no publish)
 
 ## License
 

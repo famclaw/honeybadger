@@ -5,7 +5,7 @@ LDFLAGS   := -ldflags "-s -w -X main.Version=$(VERSION)"
 GOFLAGS   := CGO_ENABLED=0
 REPRO     := -trimpath -buildvcs=false
 
-.PHONY: build cross test self-check clean docker
+.PHONY: build cross test self-check clean docker release-dry
 
 build:
 	@mkdir -p $(BUILD_DIR)
@@ -33,5 +33,8 @@ self-check: build
 docker:
 	docker buildx build --build-arg VERSION=$(VERSION) -t honeybadger:$(VERSION) .
 
+release-dry:
+	goreleaser release --snapshot --clean
+
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) dist
