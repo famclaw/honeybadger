@@ -193,5 +193,4 @@ release:
 
     **Supply chain security**: All binaries are signed with [Sigstore cosign](https://sigstore.dev) (keyless), attested with [GitHub build provenance](https://github.blog/security/supply-chain-security/introducing-npm-package-provenance/), and include SPDX SBOMs. Container images are signed and pushed to GHCR.
 
-  extra_files:
-    - glob: self-report.json
+  extra_files: []
