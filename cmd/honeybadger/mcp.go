@@ -89,8 +89,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	rulesDir := os.Getenv("HONEYBADGER_RULES_DIR")
 	rs, err := rules.Load(rulesDir)
 	if err != nil {
-		// Non-fatal: log and continue without external rules.
-		fmt.Fprintf(os.Stderr, "warning: loading rules: %v\n", err)
+		return nil, fmt.Errorf("loading rules: %w", err)
 	}
 
 	// 1. Parse paranoia level

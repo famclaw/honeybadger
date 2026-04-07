@@ -112,7 +112,9 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 	rs, err := rules.Load(dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: loading rules: %v\n", err)
+		// Embedded rule errors are bugs; user rule errors are config mistakes.
+		// Both are fatal — an incomplete rule set could silently miss threats.
+		return 1, fmt.Errorf("loading rules: %w", err)
 	}
 
 	// 1. Parse paranoia level
