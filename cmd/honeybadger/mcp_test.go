@@ -12,7 +12,7 @@ import (
 )
 
 func TestMCPServerToolRegistered(t *testing.T) {
-	s := newMCPServer()
+	s := newMCPServer("")
 
 	// Use in-process client to verify tool registration
 	c, err := mcpclient.NewInProcessClient(s)
@@ -68,7 +68,7 @@ func TestMCPServerToolRegistered(t *testing.T) {
 }
 
 func TestMCPServerHandlerLocalRepo(t *testing.T) {
-	s := newMCPServer()
+	s := newMCPServer("")
 
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
@@ -143,7 +143,7 @@ func TestMCPServerHandlerLocalRepo(t *testing.T) {
 }
 
 func TestMCPServerHandlerMissingRepoURL(t *testing.T) {
-	s := newMCPServer()
+	s := newMCPServer("")
 
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestMCPServerHandlerMissingRepoURL(t *testing.T) {
 }
 
 func TestMCPServerHandlerInvalidParanoia(t *testing.T) {
-	s := newMCPServer()
+	s := newMCPServer("")
 
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {

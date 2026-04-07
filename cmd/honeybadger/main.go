@@ -57,7 +57,14 @@ func main() {
 			os.Exit(0)
 		}
 		if arg == "--mcp-server" || arg == "-mcp-server" {
-			if err := serveMCP(); err != nil {
+			// Extract --rules-dir if present in args.
+			var mcpRulesDir string
+			for j, a := range args {
+				if (a == "--rules-dir" || a == "-rules-dir") && j+1 < len(args) {
+					mcpRulesDir = args[j+1]
+				}
+			}
+			if err := serveMCP(mcpRulesDir); err != nil {
 				fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
 				os.Exit(1)
 			}
@@ -350,8 +357,8 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	return engine.ExitCodeForVerdict(verdict), nil
 }
 
-func serveMCP() error {
-	s := newMCPServer()
+func serveMCP(rulesDir string) error {
+	s := newMCPServer(rulesDir)
 	return server.ServeStdio(s)
 }
 

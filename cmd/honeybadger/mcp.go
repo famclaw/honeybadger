@@ -19,7 +19,7 @@ import (
 )
 
 // newMCPServer creates and configures the HoneyBadger MCP server with its tools.
-func newMCPServer() *server.MCPServer {
+func newMCPServer(rulesDir string) *server.MCPServer {
 	s := server.NewMCPServer("honeybadger", Version,
 		server.WithToolCapabilities(true),
 	)
@@ -45,13 +45,15 @@ func newMCPServer() *server.MCPServer {
 		),
 	)
 
-	s.AddTool(tool, handleScan)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handleScan(ctx, req, rulesDir)
+	})
 	return s
 }
 
 // handleScan implements the honeybadger_scan MCP tool handler.
 // It runs the same fetch -> scan -> report pipeline as the CLI.
-func handleScan(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func handleScan(ctx context.Context, req mcp.CallToolRequest, rulesDir string) (*mcp.CallToolResult, error) {
 	repoURL := req.GetString("repo_url", "")
 	if repoURL == "" {
 		return mcp.NewToolResultError("repo_url is required"), nil
@@ -68,7 +70,7 @@ func handleScan(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	llmKey := os.Getenv("HONEYBADGER_LLM_KEY")
 	llmModel := os.Getenv("HONEYBADGER_LLM_MODEL")
 
-	result, err := runScan(ctx, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel)
+	result, err := runScan(ctx, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel, rulesDir)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("scan failed: %v", err)), nil
 	}
@@ -82,12 +84,15 @@ func handleScan(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 }
 
 // runScan executes the full scan pipeline and returns the result map.
-func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel string) (map[string]any, error) {
+func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel, rulesDir string) (map[string]any, error) {
 	start := time.Now()
 
-	// Load rules
-	rulesDir := os.Getenv("HONEYBADGER_RULES_DIR")
-	rs, err := rules.Load(rulesDir)
+	// Load rules: flag > env var > default
+	dir := rulesDir
+	if dir == "" {
+		dir = os.Getenv("HONEYBADGER_RULES_DIR")
+	}
+	rs, err := rules.Load(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading rules: %w", err)
 	}
