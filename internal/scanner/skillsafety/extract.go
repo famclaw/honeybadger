@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/rules"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 // overridePatterns detects prompt-injection override phrases.
@@ -88,7 +90,46 @@ var (
 
 // Extract reads a skill's body text and all repo files, producing
 // structured signals for evaluation.
-func Extract(repo *fetch.Repo) Signals {
+func Extract(repo *fetch.Repo, opts scan.Options) Signals {
+	// Resolve effective patterns and dictionaries: use rules if loaded, else globals.
+	activeOverridePatterns := overridePatterns
+	activeSensitivePaths := sensitivePathPatterns
+	activeWebhookDomains := webhookDomains
+
+	if rs, ok := opts.Rules.(*rules.RuleSet); ok && rs != nil {
+		ssRules := rs.ByScanner("skillsafety")
+		if len(ssRules) > 0 {
+			var ruleOverrides []*regexp.Regexp
+			var ruleSensitivePaths []string
+			var ruleWebhookDomains []string
+
+			for _, r := range ssRules {
+				switch {
+				case r.Kind == "pattern" && r.Signal == "override_phrase":
+					for _, cp := range r.CompiledPatterns() {
+						ruleOverrides = append(ruleOverrides, cp.Re)
+					}
+				case r.Kind == "dictionary" && r.Category == "exfil_intent":
+					if r.ID == "ss-sensitive-paths" {
+						ruleSensitivePaths = append(ruleSensitivePaths, r.Packages...)
+					} else if r.ID == "ss-webhook-domains" {
+						ruleWebhookDomains = append(ruleWebhookDomains, r.Packages...)
+					}
+				}
+			}
+
+			if len(ruleOverrides) > 0 {
+				activeOverridePatterns = ruleOverrides
+			}
+			if len(ruleSensitivePaths) > 0 {
+				activeSensitivePaths = ruleSensitivePaths
+			}
+			if len(ruleWebhookDomains) > 0 {
+				activeWebhookDomains = ruleWebhookDomains
+			}
+		}
+	}
+
 	var sig Signals
 	sig.FileCount = len(repo.Files)
 
@@ -122,7 +163,7 @@ func Extract(repo *fetch.Repo) Signals {
 	// Scan body for override phrases.
 	lines := strings.Split(body, "\n")
 	for i, line := range lines {
-		for _, pat := range overridePatterns {
+		for _, pat := range activeOverridePatterns {
 			if loc := pat.FindString(line); loc != "" {
 				sig.OverridePhrases = append(sig.OverridePhrases, Match{
 					Pattern: pat.String(),
@@ -139,7 +180,7 @@ func Extract(repo *fetch.Repo) Signals {
 		s := string(content)
 		fileLines := strings.Split(s, "\n")
 
-		for _, sp := range sensitivePathPatterns {
+		for _, sp := range activeSensitivePaths {
 			if strings.Contains(s, sp) {
 				sig.SensitivePaths = append(sig.SensitivePaths, sp)
 			}
@@ -148,7 +189,7 @@ func Extract(repo *fetch.Repo) Signals {
 		// External URLs.
 		for _, u := range urlRe.FindAllString(s, -1) {
 			sig.ExternalURLs = append(sig.ExternalURLs, u)
-			for _, wd := range webhookDomains {
+			for _, wd := range activeWebhookDomains {
 				if strings.Contains(u, wd) {
 					sig.WebhookURLs = append(sig.WebhookURLs, u)
 				}

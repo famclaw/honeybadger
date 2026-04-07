@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 func TestExtract(t *testing.T) {
@@ -125,7 +126,7 @@ func TestExtract(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fetch.Repo{Files: tt.files}
-			sig := Extract(repo)
+			sig := Extract(repo, scan.Options{})
 
 			if got := len(sig.OverridePhrases); got < tt.wantOverrides {
 				t.Errorf("OverridePhrases = %d, want >= %d", got, tt.wantOverrides)

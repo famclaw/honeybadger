@@ -1,0 +1,9 @@
+id: sc-path-traversal
+kind: pattern
+scanner: supplychain
+category: filesystem
+severity: MEDIUM
+message: Path traversal pattern detected
+patterns:
+  - regex: '\.\./\.\./\.\./'
+    description: deep path traversal

@@ -1,0 +1,9 @@
+id: sc-ssh-dir-access
+kind: pattern
+scanner: supplychain
+category: filesystem
+severity: HIGH
+message: Accesses SSH directory
+patterns:
+  - regex: '~/\.ssh\/|\/\.ssh\/'
+    description: access to .ssh directory

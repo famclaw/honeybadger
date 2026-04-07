@@ -1,0 +1,84 @@
+id: ss-override-multilang
+kind: pattern
+scanner: skillsafety
+category: prompt_injection
+severity: HIGH
+signal: override_phrase
+message: Prompt injection override phrase detected (multilingual)
+patterns:
+  # Chinese (Simplified)
+  - regex: '忽略(之前的|所有先前的|前面的|上面的)指[令示]'
+    description: ignore previous instructions (Chinese)
+  - regex: '无视(系统|之前的)(提示|指令)'
+    description: disregard system prompt (Chinese)
+  - regex: '忘[记掉](上面|之前)的(所有)?(内容|指令)'
+    description: forget above content (Chinese)
+  - regex: '你(现在|从现在开始)(是|扮演)'
+    description: you are now (Chinese)
+  # Russian
+  - regex: '(?i)игнорируй\s+(все\s+)?предыдущие\s+инструкции'
+    description: ignore previous instructions (Russian)
+  - regex: '(?i)забудь\s+(все\s+)?(предыдущие|прошлые)\s+(инструкции|указания)'
+    description: forget previous instructions (Russian)
+  - regex: '(?i)не\s+следуй\s+(своим\s+)?(оригинальным|предыдущим)\s+инструкциям'
+    description: do not follow original instructions (Russian)
+  - regex: '(?i)ты\s+теперь'
+    description: you are now (Russian)
+  # Spanish
+  - regex: '(?i)ignora\s+(todas\s+)?las\s+instrucciones\s+(anteriores|previas)'
+    description: ignore previous instructions (Spanish)
+  - regex: '(?i)olvida\s+(todo\s+lo\s+anterior|las\s+instrucciones\s+previas)'
+    description: forget previous instructions (Spanish)
+  - regex: '(?i)ahora\s+eres\s+un'
+    description: you are now (Spanish)
+  - regex: '(?i)tus\s+nuevas\s+instrucciones\s+son'
+    description: your new instructions are (Spanish)
+  # French
+  - regex: '(?i)ignore[rz]?\s+(toutes\s+)?les\s+instructions\s+pr[eé]c[eé]dentes'
+    description: ignore previous instructions (French)
+  - regex: '(?i)oublie[rz]?\s+(tout\s+ce\s+qui\s+pr[eé]c[eè]de|les\s+instructions\s+pr[eé]c[eé]dentes)'
+    description: forget previous instructions (French)
+  - regex: '(?i)tu\s+es\s+maintenant'
+    description: you are now (French)
+  # German
+  - regex: '(?i)ignoriere?\s+(alle\s+)?vorherigen?\s+Anweisungen'
+    description: ignore previous instructions (German)
+  - regex: '(?i)vergiss\s+(alles\s+)?(vorherige|bisherige)'
+    description: forget previous (German)
+  - regex: '(?i)du\s+bist\s+(jetzt|nun)'
+    description: you are now (German)
+  # Japanese
+  - regex: '(以前の|これまでの|前の)指示を無視'
+    description: ignore previous instructions (Japanese)
+  - regex: '(システム)?プロンプトを無視'
+    description: ignore system prompt (Japanese)
+  - regex: 'あなたは(今|これから)'
+    description: you are now (Japanese)
+  # Korean
+  - regex: '이전\s*지시[를사항]?\s*무시'
+    description: ignore previous instructions (Korean)
+  - regex: '(시스템\s*)?프롬프트[를을]\s*무시'
+    description: ignore system prompt (Korean)
+  - regex: '당신은\s*이제'
+    description: you are now (Korean)
+  # Arabic
+  - regex: 'تجاهل\s+(جميع\s+)?التعليمات\s+السابقة'
+    description: ignore previous instructions (Arabic)
+  - regex: 'انسى?\s+(كل\s+)?(التعليمات|الإرشادات)\s+السابقة'
+    description: forget previous instructions (Arabic)
+  - regex: 'أنت\s+الآن'
+    description: you are now (Arabic)
+  # Portuguese
+  - regex: '(?i)ignore\s+(todas\s+)?as\s+instru[çc][õo]es\s+(anteriores|pr[eé]vias)'
+    description: ignore previous instructions (Portuguese)
+  - regex: '(?i)esque[çc]a\s+(tudo\s+)?o\s+que\s+(foi\s+dito|veio\s+antes)'
+    description: forget what was said before (Portuguese)
+  - regex: '(?i)voc[êe]\s+(agora|agora\s+é)\s+um'
+    description: you are now (Portuguese)
+  # Italian
+  - regex: '(?i)ignora\s+(tutte\s+)?le\s+istruzioni\s+precedenti'
+    description: ignore previous instructions (Italian)
+  - regex: '(?i)dimentica\s+(tutto\s+quello\s+che|le\s+istruzioni\s+precedenti)'
+    description: forget previous instructions (Italian)
+  - regex: '(?i)tu\s+sei\s+(ora|adesso)'
+    description: you are now (Italian)

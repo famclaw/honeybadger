@@ -1,0 +1,9 @@
+id: sc-remote-exec
+kind: pattern
+scanner: supplychain
+category: remote_exec
+severity: HIGH
+message: Executes code from remote URL
+patterns:
+  - regex: 'exec\s*\(\s*["'']https?://'
+    description: exec from remote URL

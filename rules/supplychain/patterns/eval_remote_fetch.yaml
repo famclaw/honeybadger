@@ -1,0 +1,9 @@
+id: sc-eval-remote-fetch
+kind: pattern
+scanner: supplychain
+category: remote_exec
+severity: HIGH
+message: Evaluates remotely fetched code
+patterns:
+  - regex: 'eval\s*\(\s*(fetch|require|import)\s*\('
+    description: eval of remote fetch/require/import

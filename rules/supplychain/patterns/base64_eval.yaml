@@ -1,0 +1,9 @@
+id: sc-base64-eval
+kind: pattern
+scanner: supplychain
+category: obfuscation
+severity: HIGH
+message: Evaluates base64-decoded content
+patterns:
+  - regex: 'eval\s*\(\s*(atob|Buffer\.from|base64)'
+    description: eval of base64 decoded content

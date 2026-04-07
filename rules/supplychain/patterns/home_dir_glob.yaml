@@ -1,0 +1,9 @@
+id: sc-home-dir-glob
+kind: pattern
+scanner: supplychain
+category: filesystem
+severity: MEDIUM
+message: Globs home directory
+patterns:
+  - regex: 'glob\s*\(\s*["'']~\/\*'
+    description: glob of home directory

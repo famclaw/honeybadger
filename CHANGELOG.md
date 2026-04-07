@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Detection rules migrated from Go to YAML. All skillsafety and supplychain patterns are now defined in `rules/*.yaml` files embedded at build time. Zero behavior change for existing users.
+
+### Added
+- Runtime rule extension -- drop YAML files into `~/.honeybadger/rules/` (or set `HONEYBADGER_RULES_DIR`) to add custom detection rules without rebuilding the binary.
+- `--rules-dir <path>` CLI flag to override the user rules directory.
+- `rules/README.md` -- format spec and contribution guide for YAML detection rules.
+
+### Notes
+- Correlation rules (rules that combine multiple signals) remain in Go code. Pattern and dictionary rules live in YAML. See `rules/README.md` for details.
+
 ## v0.2.1 -- 2026-04-07
 
 ### Added
