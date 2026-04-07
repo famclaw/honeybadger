@@ -1,6 +1,11 @@
 package skillsafety
 
-import "regexp"
+import (
+	"regexp"
+	"sort"
+	"strings"
+	"unicode"
+)
 
 // suspiciousCodepoints maps zero-width and invisible Unicode characters
 // to descriptive names for reporting.
@@ -59,4 +64,62 @@ func ExtractHTMLComments(s string) []string {
 		return nil
 	}
 	return matches
+}
+
+// homoglyphScripts are the script tables checked for mixed-script words.
+var homoglyphScripts = []*unicode.RangeTable{
+	unicode.Latin,
+	unicode.Cyrillic,
+	unicode.Greek,
+	unicode.Armenian,
+}
+
+var homoglyphScriptNames = []string{
+	"Latin", "Cyrillic", "Greek", "Armenian",
+}
+
+// DetectHomoglyphs scans text for words that mix characters from multiple
+// Unicode scripts, suggesting visual deception. A word containing both
+// Latin and Cyrillic characters is almost always a homoglyph attack.
+// Returns a deduplicated, sorted list of suspicious words.
+func DetectHomoglyphs(text string) []string {
+	words := strings.FieldsFunc(text, func(r rune) bool {
+		return !unicode.IsLetter(r)
+	})
+
+	seen := make(map[string]bool)
+	for _, word := range words {
+		runes := []rune(word)
+		if len(runes) < 3 {
+			continue
+		}
+
+		// Count which scripts appear in this word.
+		scripts := make(map[int]bool)
+		for _, r := range runes {
+			for i, table := range homoglyphScripts {
+				if unicode.Is(table, r) {
+					scripts[i] = true
+					break
+				}
+			}
+		}
+
+		// Only flag if Latin is one of the mixed scripts — the attack
+		// is substituting Latin-lookalike chars from other scripts.
+		if len(scripts) >= 2 && scripts[0] {
+			seen[word] = true
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(seen))
+	for w := range seen {
+		result = append(result, w)
+	}
+	sort.Strings(result)
+	return result
 }
