@@ -38,15 +38,32 @@ func (e *TextEmitter) Emit(v any) error {
 
 	case "finding", "cve":
 		sev, _ := m["severity"].(string)
+		ruleID, _ := m["rule_id"].(string)
 		file, _ := m["file"].(string)
 		line, _ := m["line"].(float64)
 		msg, _ := m["message"].(string)
-		if file != "" && int(line) > 0 {
-			return e.writef("[%s] %s:%d — %s\n", sev, file, int(line), msg)
-		} else if file != "" {
-			return e.writef("[%s] %s — %s\n", sev, file, msg)
+		moreInfo, _ := m["more_info_url"].(string)
+
+		sevTag := sev
+		if ruleID != "" {
+			sevTag = sev + " " + ruleID
 		}
-		return e.writef("[%s] %s\n", sev, msg)
+
+		var err error
+		if file != "" && int(line) > 0 {
+			err = e.writef("[%s] %s:%d — %s\n", sevTag, file, int(line), msg)
+		} else if file != "" {
+			err = e.writef("[%s] %s — %s\n", sevTag, file, msg)
+		} else {
+			err = e.writef("[%s] %s\n", sevTag, msg)
+		}
+		if err != nil {
+			return err
+		}
+		if moreInfo != "" {
+			return e.writef("      → %s\n", moreInfo)
+		}
+		return nil
 
 	case "result":
 		return e.writeVerdict(m)

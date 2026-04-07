@@ -119,6 +119,9 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 
 Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, health, attestation, sandbox, result.
 
+Findings include rule metadata when available: `rule_id`, `more_info_url`, and `references` from the source YAML rule.
+In text mode, the severity tag shows `[SEVERITY rule_id]` and a `→ url` line links to further documentation.
+
 Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error.
 
 ## Project structure

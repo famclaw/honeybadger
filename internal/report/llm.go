@@ -47,6 +47,7 @@ Rules:
 - A WARN for an undeclared network call is appropriate. A FAIL requires something worse.
 - Consider the context: a family home server, children present, local network.
 - If paranoia=strict or paranoid and no attestation found, that alone is WARN.
+- When findings include a rule_id, reference the rule by ID in your reasoning.
 
 Paranoia level: %s
 Platform: %s

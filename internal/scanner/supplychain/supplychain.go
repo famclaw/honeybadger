@@ -27,17 +27,23 @@ func isBinaryContent(data []byte) bool {
 
 // compiledPattern holds a compiled regex pattern from a YAML rule.
 type compiledPattern struct {
-	name     string
-	re       *regexp.Regexp
-	severity string
-	message  string
+	name        string
+	re          *regexp.Regexp
+	severity    string
+	message     string
+	ruleID      string
+	moreInfoURL string
+	references  []string
 }
 
 // dictRule holds a dictionary rule's metadata for typosquat matching.
 type dictRule struct {
-	Severity string
-	Message  string
-	Packages []string
+	Severity    string
+	Message     string
+	Packages    []string
+	RuleID      string
+	MoreInfoURL string
+	References  []string
 }
 
 // Run scans repository files for supply chain risk patterns.
@@ -52,17 +58,23 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		case "pattern":
 			for _, cp := range r.CompiledPatterns() {
 				activePatterns = append(activePatterns, compiledPattern{
-					name:     r.ID,
-					re:       cp.Re,
-					severity: r.Severity,
-					message:  r.Message,
+					name:        r.ID,
+					re:          cp.Re,
+					severity:    r.Severity,
+					message:     r.Message,
+					ruleID:      r.ID,
+					moreInfoURL: r.MoreInfoURL,
+					references:  r.References,
 				})
 			}
 		case "dictionary":
 			dictRules = append(dictRules, dictRule{
-				Severity: r.Severity,
-				Message:  r.Message,
-				Packages: r.Packages,
+				Severity:    r.Severity,
+				Message:     r.Message,
+				Packages:    r.Packages,
+				RuleID:      r.ID,
+				MoreInfoURL: r.MoreInfoURL,
+				References:  r.References,
 			})
 		}
 	}
@@ -88,13 +100,16 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 			for _, p := range activePatterns {
 				if p.re.MatchString(line) {
 					out <- scan.Finding{
-						Type:     "finding",
-						Severity: p.severity,
-						Check:    "supplychain",
-						File:     path,
-						Line:     lineNum + 1,
-						Message:  p.message,
-						Snippet:  scan.Redact(strings.TrimSpace(line), 120),
+						Type:        "finding",
+						Severity:    p.severity,
+						Check:       "supplychain",
+						RuleID:      p.ruleID,
+						MoreInfoURL: p.moreInfoURL,
+						References:  p.references,
+						File:        path,
+						Line:        lineNum + 1,
+						Message:     p.message,
+						Snippet:     scan.Redact(strings.TrimSpace(line), 120),
 					}
 				}
 			}
@@ -120,11 +135,14 @@ func checkTyposquatsWithDictRules(repo *fetch.Repo, out chan<- scan.Finding, dic
 				// Flag if edit distance is 1 or 2 (close but not identical)
 				if dist > 0 && dist <= 2 {
 					out <- scan.Finding{
-						Type:     "finding",
-						Severity: dr.Severity,
-						Check:    "supplychain",
-						Message:  fmt.Sprintf("%s: %q resembles %q (edit distance %d)", dr.Message, dep, pkg, dist),
-						Package:  dep,
+						Type:        "finding",
+						Severity:    dr.Severity,
+						Check:       "supplychain",
+						RuleID:      dr.RuleID,
+						MoreInfoURL: dr.MoreInfoURL,
+						References:  dr.References,
+						Message:     fmt.Sprintf("%s: %q resembles %q (edit distance %d)", dr.Message, dep, pkg, dist),
+						Package:     dep,
 					}
 				}
 			}
