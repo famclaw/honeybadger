@@ -42,6 +42,42 @@ func TestNDJSONEmitFinding(t *testing.T) {
 	}
 }
 
+func TestNDJSONEmitFindingWithRuleMetadata(t *testing.T) {
+	var buf bytes.Buffer
+	e := NewNDJSONEmitter(&buf)
+
+	f := scan.Finding{
+		Type:        "finding",
+		Severity:    scan.SevHigh,
+		Check:       "supplychain",
+		RuleID:      "sc-curl-bash",
+		MoreInfoURL: "https://example.com/sc-curl-bash",
+		References:  []string{"https://ref.example.com/1", "https://ref.example.com/2"},
+		File:        "install.sh",
+		Line:        5,
+		Message:     "Downloads and executes remote script",
+	}
+	if err := e.Emit(f); err != nil {
+		t.Fatalf("Emit error: %v", err)
+	}
+
+	line := strings.TrimSpace(buf.String())
+	var got map[string]any
+	if err := json.Unmarshal([]byte(line), &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nline: %s", err, line)
+	}
+	if got["rule_id"] != "sc-curl-bash" {
+		t.Errorf("expected rule_id=sc-curl-bash, got %v", got["rule_id"])
+	}
+	if got["more_info_url"] != "https://example.com/sc-curl-bash" {
+		t.Errorf("expected more_info_url, got %v", got["more_info_url"])
+	}
+	refs, ok := got["references"].([]any)
+	if !ok || len(refs) != 2 {
+		t.Errorf("expected references array with 2 entries, got %v", got["references"])
+	}
+}
+
 func TestNDJSONEmitMultipleLines(t *testing.T) {
 	var buf bytes.Buffer
 	e := NewNDJSONEmitter(&buf)

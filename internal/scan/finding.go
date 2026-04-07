@@ -19,8 +19,11 @@ const (
 type Finding struct {
 	Type      string `json:"type"`                // "finding" or "cve"
 	Severity  string `json:"severity"`
-	Check     string `json:"check"`               // scanner name: secrets, cve, supplychain, meta, attestation, network
-	File      string `json:"file,omitempty"`
+	Check       string   `json:"check"`               // scanner name: secrets, cve, supplychain, meta, attestation, network
+	RuleID      string   `json:"rule_id,omitempty"`
+	MoreInfoURL string   `json:"more_info_url,omitempty"`
+	References  []string `json:"references,omitempty"`
+	File        string   `json:"file,omitempty"`
 	Line      int    `json:"line,omitempty"`
 	Message   string `json:"message"`
 	Snippet   string `json:"snippet,omitempty"`

@@ -2,6 +2,7 @@ package scan
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -81,7 +82,7 @@ func TestFindingJSONRoundTrip(t *testing.T) {
 		t.Fatalf("Unmarshal error: %v", err)
 	}
 
-	if decoded != original {
+	if !reflect.DeepEqual(decoded, original) {
 		t.Errorf("Round-trip mismatch:\n  got:  %+v\n  want: %+v", decoded, original)
 	}
 }

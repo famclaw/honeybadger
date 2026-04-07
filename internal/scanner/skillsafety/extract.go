@@ -14,26 +14,57 @@ var (
 	execRe = regexp.MustCompile(`curl\s+-.*\|\s*(ba)?sh|wget\s+.*\|\s*(ba)?sh`)
 )
 
+// overridePattern pairs a compiled regex with its source rule metadata.
+type overridePattern struct {
+	re          *regexp.Regexp
+	ruleID      string
+	moreInfoURL string
+	references  []string
+}
+
+// dictSource pairs dictionary entries with their source rule metadata.
+type dictSource struct {
+	entries     []string
+	ruleID      string
+	moreInfoURL string
+	references  []string
+}
+
 // Extract reads a skill's body text and all repo files, producing
 // structured signals for evaluation.
 func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 	// Load patterns and dictionaries from rules (YAML-only, no hardcoded fallbacks).
-	var activeOverridePatterns []*regexp.Regexp
-	var activeSensitivePaths []string
-	var activeWebhookDomains []string
+	var activeOverridePatterns []overridePattern
+	var activeSensitivePaths []dictSource
+	var activeWebhookDomains []dictSource
 
 	rs, _ := opts.Rules.(*rules.RuleSet)
 	for _, r := range rs.ByScanner("skillsafety") {
 		switch {
 		case r.Kind == "pattern" && r.Signal == "override_phrase":
 			for _, cp := range r.CompiledPatterns() {
-				activeOverridePatterns = append(activeOverridePatterns, cp.Re)
+				activeOverridePatterns = append(activeOverridePatterns, overridePattern{
+					re:          cp.Re,
+					ruleID:      r.ID,
+					moreInfoURL: r.MoreInfoURL,
+					references:  r.References,
+				})
 			}
 		case r.Kind == "dictionary" && r.Category == "exfil_intent":
 			if r.ID == "ss-sensitive-paths" {
-				activeSensitivePaths = append(activeSensitivePaths, r.Packages...)
+				activeSensitivePaths = append(activeSensitivePaths, dictSource{
+					entries:     r.Packages,
+					ruleID:      r.ID,
+					moreInfoURL: r.MoreInfoURL,
+					references:  r.References,
+				})
 			} else if r.ID == "ss-webhook-domains" {
-				activeWebhookDomains = append(activeWebhookDomains, r.Packages...)
+				activeWebhookDomains = append(activeWebhookDomains, dictSource{
+					entries:     r.Packages,
+					ruleID:      r.ID,
+					moreInfoURL: r.MoreInfoURL,
+					references:  r.References,
+				})
 			}
 		}
 	}
@@ -72,12 +103,15 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 	lines := strings.Split(body, "\n")
 	for i, line := range lines {
 		for _, pat := range activeOverridePatterns {
-			if loc := pat.FindString(line); loc != "" {
+			if loc := pat.re.FindString(line); loc != "" {
 				sig.OverridePhrases = append(sig.OverridePhrases, Match{
-					Pattern: pat.String(),
-					Text:    loc,
-					File:    skillPath,
-					Line:    i + 1,
+					Pattern:     pat.re.String(),
+					Text:        loc,
+					File:        skillPath,
+					Line:        i + 1,
+					RuleID:      pat.ruleID,
+					MoreInfoURL: pat.moreInfoURL,
+					References:  pat.references,
 				})
 			}
 		}
@@ -88,18 +122,33 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		s := string(content)
 		fileLines := strings.Split(s, "\n")
 
-		for _, sp := range activeSensitivePaths {
-			if strings.Contains(s, sp) {
-				sig.SensitivePaths = append(sig.SensitivePaths, sp)
+		for _, ds := range activeSensitivePaths {
+			for _, sp := range ds.entries {
+				if strings.Contains(s, sp) {
+					sig.SensitivePaths = append(sig.SensitivePaths, sp)
+					// Capture rule metadata from the first matching dictionary source.
+					if sig.SensitivePathRuleID == "" {
+						sig.SensitivePathRuleID = ds.ruleID
+						sig.SensitivePathInfoURL = ds.moreInfoURL
+						sig.SensitivePathRefs = ds.references
+					}
+				}
 			}
 		}
 
 		// External URLs.
 		for _, u := range urlRe.FindAllString(s, -1) {
 			sig.ExternalURLs = append(sig.ExternalURLs, u)
-			for _, wd := range activeWebhookDomains {
-				if strings.Contains(u, wd) {
-					sig.WebhookURLs = append(sig.WebhookURLs, u)
+			for _, ds := range activeWebhookDomains {
+				for _, wd := range ds.entries {
+					if strings.Contains(u, wd) {
+						sig.WebhookURLs = append(sig.WebhookURLs, u)
+						if sig.WebhookRuleID == "" {
+							sig.WebhookRuleID = ds.ruleID
+							sig.WebhookInfoURL = ds.moreInfoURL
+							sig.WebhookRefs = ds.references
+						}
+					}
 				}
 			}
 		}

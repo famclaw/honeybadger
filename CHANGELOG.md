@@ -9,6 +9,7 @@
 - Runtime rule extension -- drop YAML files into `~/.honeybadger/rules/` (or set `HONEYBADGER_RULES_DIR`) to add custom detection rules without rebuilding the binary.
 - `--rules-dir <path>` CLI flag to override the user rules directory.
 - `rules/README.md` -- format spec and contribution guide for YAML detection rules.
+- Rule metadata propagation: findings now carry `rule_id`, `more_info_url`, and `references` from their source YAML rule. Text output shows `[SEVERITY rule_id]` and a `→ url` line when metadata is present. LLM prompt references rule IDs in reasoning.
 
 ### Fixed
 - Rule loading is now the sole code path -- hardcoded Go fallbacks deleted

@@ -33,6 +33,58 @@ func TestTextEmitFinding(t *testing.T) {
 	}
 }
 
+func TestTextEmitFindingWithRuleID(t *testing.T) {
+	var buf bytes.Buffer
+	e := NewTextEmitter(&buf)
+
+	err := e.Emit(map[string]any{
+		"type":          "finding",
+		"severity":      "HIGH",
+		"rule_id":       "sc-curl-bash",
+		"more_info_url": "https://example.com/sc-curl-bash",
+		"file":          "install.sh",
+		"line":          5,
+		"message":       "Downloads and executes remote script",
+	})
+	if err != nil {
+		t.Fatalf("Emit error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[HIGH sc-curl-bash]") {
+		t.Errorf("expected [HIGH sc-curl-bash] in output, got: %s", out)
+	}
+	if !strings.Contains(out, "install.sh:5") {
+		t.Errorf("expected file:line, got: %s", out)
+	}
+	if !strings.Contains(out, "→ https://example.com/sc-curl-bash") {
+		t.Errorf("expected more_info_url line, got: %s", out)
+	}
+}
+
+func TestTextEmitFindingWithoutRuleID(t *testing.T) {
+	var buf bytes.Buffer
+	e := NewTextEmitter(&buf)
+
+	err := e.Emit(map[string]any{
+		"type":     "finding",
+		"severity": "MEDIUM",
+		"message":  "some generic finding",
+	})
+	if err != nil {
+		t.Fatalf("Emit error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[MEDIUM]") {
+		t.Errorf("expected [MEDIUM] without rule_id, got: %s", out)
+	}
+	// Should NOT contain the arrow since no more_info_url
+	if strings.Contains(out, "→") {
+		t.Errorf("expected no more_info_url line, got: %s", out)
+	}
+}
+
 func TestTextEmitResult(t *testing.T) {
 	var buf bytes.Buffer
 	e := NewTextEmitter(&buf)

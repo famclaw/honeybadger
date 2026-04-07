@@ -24,13 +24,16 @@ func checkOverridePhrases(s *Signals) []scan.Finding {
 	var out []scan.Finding
 	for _, m := range s.OverridePhrases {
 		out = append(out, scan.Finding{
-			Type:     "finding",
-			Severity: scan.SevHigh,
-			Check:    "skillsafety",
-			File:     m.File,
-			Line:     m.Line,
-			Message:  fmt.Sprintf("Prompt injection phrase detected: %q", m.Text),
-			Snippet:  m.Text,
+			Type:        "finding",
+			Severity:    scan.SevHigh,
+			Check:       "skillsafety",
+			RuleID:      m.RuleID,
+			MoreInfoURL: m.MoreInfoURL,
+			References:  m.References,
+			File:        m.File,
+			Line:        m.Line,
+			Message:     fmt.Sprintf("Prompt injection phrase detected: %q", m.Text),
+			Snippet:     m.Text,
 		})
 	}
 	return out
@@ -77,30 +80,44 @@ func checkSensitivePaths(s *Signals) []scan.Finding {
 		return nil
 	}
 
+	// Use sensitive path rule metadata; fall back to webhook rule metadata for combined findings.
+	ruleID := s.SensitivePathRuleID
+	infoURL := s.SensitivePathInfoURL
+	refs := s.SensitivePathRefs
+
 	// Sensitive paths + external/webhook URLs = CRITICAL.
 	if len(s.WebhookURLs) > 0 {
 		return []scan.Finding{{
-			Type:     "finding",
-			Severity: scan.SevCritical,
-			Check:    "skillsafety",
-			Message:  fmt.Sprintf("Sensitive path references (%v) combined with webhook URLs (%v) suggest data exfiltration", s.SensitivePaths, s.WebhookURLs),
+			Type:        "finding",
+			Severity:    scan.SevCritical,
+			Check:       "skillsafety",
+			RuleID:      ruleID,
+			MoreInfoURL: infoURL,
+			References:  refs,
+			Message:     fmt.Sprintf("Sensitive path references (%v) combined with webhook URLs (%v) suggest data exfiltration", s.SensitivePaths, s.WebhookURLs),
 		}}
 	}
 	if len(s.ExternalURLs) > 0 {
 		return []scan.Finding{{
-			Type:     "finding",
-			Severity: scan.SevCritical,
-			Check:    "skillsafety",
-			Message:  fmt.Sprintf("Sensitive path references (%v) combined with external URLs suggest data exfiltration", s.SensitivePaths),
+			Type:        "finding",
+			Severity:    scan.SevCritical,
+			Check:       "skillsafety",
+			RuleID:      ruleID,
+			MoreInfoURL: infoURL,
+			References:  refs,
+			Message:     fmt.Sprintf("Sensitive path references (%v) combined with external URLs suggest data exfiltration", s.SensitivePaths),
 		}}
 	}
 
 	// Sensitive paths alone.
 	return []scan.Finding{{
-		Type:     "finding",
-		Severity: scan.SevHigh,
-		Check:    "skillsafety",
-		Message:  fmt.Sprintf("References to sensitive paths: %v", s.SensitivePaths),
+		Type:        "finding",
+		Severity:    scan.SevHigh,
+		Check:       "skillsafety",
+		RuleID:      ruleID,
+		MoreInfoURL: infoURL,
+		References:  refs,
+		Message:     fmt.Sprintf("References to sensitive paths: %v", s.SensitivePaths),
 	}}
 }
 
@@ -108,13 +125,16 @@ func checkExecInstructions(s *Signals) []scan.Finding {
 	var out []scan.Finding
 	for _, m := range s.ExecInstructions {
 		out = append(out, scan.Finding{
-			Type:     "finding",
-			Severity: scan.SevHigh,
-			Check:    "skillsafety",
-			File:     m.File,
-			Line:     m.Line,
-			Message:  fmt.Sprintf("Remote code execution pattern: %q", m.Text),
-			Snippet:  m.Text,
+			Type:        "finding",
+			Severity:    scan.SevHigh,
+			Check:       "skillsafety",
+			RuleID:      m.RuleID,
+			MoreInfoURL: m.MoreInfoURL,
+			References:  m.References,
+			File:        m.File,
+			Line:        m.Line,
+			Message:     fmt.Sprintf("Remote code execution pattern: %q", m.Text),
+			Snippet:     m.Text,
 		})
 	}
 	return out
