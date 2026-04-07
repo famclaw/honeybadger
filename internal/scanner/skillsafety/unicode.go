@@ -105,7 +105,9 @@ func DetectHomoglyphs(text string) []string {
 			}
 		}
 
-		if len(scripts) >= 2 {
+		// Only flag if Latin is one of the mixed scripts — the attack
+		// is substituting Latin-lookalike chars from other scripts.
+		if len(scripts) >= 2 && scripts[0] {
 			seen[word] = true
 		}
 	}
