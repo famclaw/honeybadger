@@ -64,10 +64,20 @@ func init() {
 }
 
 var popularPackages = []string{
+	// npm
 	"react", "express", "lodash", "axios", "webpack", "typescript", "eslint",
 	"jest", "chalk", "commander", "yargs", "dotenv", "moment", "uuid",
+	"next", "vue", "angular", "svelte", "vite", "prettier", "babel",
+	"cors", "debug", "socket.io", "mongoose", "sequelize",
+	// AI / MCP
 	"@anthropic-ai/sdk", "@modelcontextprotocol/sdk", "openai", "mcp",
+	// Python
 	"requests", "flask", "django", "numpy", "pandas", "pydantic", "fastapi",
+	"boto3", "tensorflow", "torch", "scikit-learn", "celery", "sqlalchemy",
+	"httpx", "aiohttp", "beautifulsoup4", "selenium", "playwright",
+	// Go
+	"github.com/gorilla/mux", "github.com/gin-gonic/gin",
+	"github.com/stretchr/testify", "github.com/spf13/cobra",
 }
 
 // isBinaryContent checks for null bytes in the first 512 bytes.
