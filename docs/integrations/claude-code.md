@@ -31,7 +31,7 @@ Or create `.claude/hooks/scan-skill.sh` manually:
 
 ```bash
 #!/bin/bash
-set -e
+set -eo pipefail
 
 input=$(cat)
 file_path=$(echo "$input" | jq -r '.file_path // empty')
@@ -48,7 +48,7 @@ if ! command -v honeybadger &> /dev/null; then
 fi
 
 result=$(honeybadger scan "$skill_dir" --paranoia family --format ndjson --offline 2>/dev/null | tail -1)
-verdict=$(echo "$result" | jq -r '.verdict // "PASS"')
+verdict=$(echo "$result" | jq -r '.verdict // "FAIL"')
 
 case "$verdict" in
     FAIL)

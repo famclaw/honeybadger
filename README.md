@@ -68,7 +68,7 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 | Permission mismatch | meta | Declared vs actual network/filesystem/exec usage |
 | Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
-| Prompt injection | skillsafety | Override phrases in 10 languages (family+) |
+| Prompt injection | skillsafety | Override phrases detection (family+) |
 | Zero-width chars | skillsafety | Hidden Unicode characters in skill content (family+) |
 | RTL override | skillsafety | Right-to-left text direction manipulation (family+) |
 | Data exfil intent | skillsafety | Sensitive paths + external/webhook URLs correlation (family+) |
