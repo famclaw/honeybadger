@@ -11,6 +11,7 @@ Security scanner for skills, tools, and MCP servers used by AI assistant runtime
 ## What it does
 
 Before anything gets installed on a family home server running AI assistants, HoneyBadger checks it.
+HoneyBadger performs static analysis only -- it reads source code and metadata but never executes the scanned code.
 
 ## Install
 
@@ -67,6 +68,11 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 | Permission mismatch | meta | Declared vs actual network/filesystem/exec usage |
 | Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
+| Prompt injection | skillsafety | Override phrases in 10 languages (family+) |
+| Zero-width chars | skillsafety | Hidden Unicode characters in skill content (family+) |
+| RTL override | skillsafety | Right-to-left text direction manipulation (family+) |
+| Data exfil intent | skillsafety | Sensitive paths + external/webhook URLs correlation (family+) |
+| Multi-language hiding | skillsafety | Unexpected script blocks in primary-language skills (family+) |
 
 ## Why HoneyBadger
 
@@ -84,6 +90,19 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 | **No cloud dependency** | yes | partial | no (needs Snyk API) | partial (Ollama ok) |
 | **Runs on ARM/RPi** | yes | no | no | no |
 | **Audit trail** | JSONL | no | no | no |
+
+## Integrations
+
+| Platform | Type | Guide |
+|----------|------|-------|
+| Claude Code | Skill + MCP + Hook | [docs/CLAUDE_CODE.md](docs/CLAUDE_CODE.md) |
+| OpenAI Codex CLI | Hook | [docs/integrations/codex-cli.md](docs/integrations/codex-cli.md) |
+| FamClaw | Built-in pipeline | [docs/INSTALLATION.md](docs/INSTALLATION.md) |
+| OpenClaw | Skill | [docs/INSTALLATION.md](docs/INSTALLATION.md) |
+| PicoClaw | Skill | [docs/INSTALLATION.md](docs/INSTALLATION.md) |
+| NanoBot | Skill | [docs/INSTALLATION.md](docs/INSTALLATION.md) |
+| CI/CD | CLI | [docs/EXAMPLES.md](docs/EXAMPLES.md) |
+| MCP | JSON-RPC stdio | [docs/EXAMPLES.md](docs/EXAMPLES.md) |
 
 ## Paranoia levels
 

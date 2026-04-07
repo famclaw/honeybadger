@@ -22,6 +22,7 @@ import (
 	"github.com/famclaw/honeybadger/internal/scanner/cve"
 	"github.com/famclaw/honeybadger/internal/scanner/meta"
 	"github.com/famclaw/honeybadger/internal/scanner/secrets"
+	"github.com/famclaw/honeybadger/internal/scanner/skillsafety"
 	"github.com/famclaw/honeybadger/internal/scanner/supplychain"
 )
 
@@ -248,13 +249,13 @@ func BuildScannerList(opts scan.Options) []scan.ScanFunc {
 	case scan.ParanoiaMinimal:
 		return []scan.ScanFunc{secrets.Run, cve.Run}
 	case scan.ParanoiaFamily:
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run}
+		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run}
 	case scan.ParanoiaStrict:
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, attestation.Run}
+		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run, attestation.Run}
 	case scan.ParanoiaParanoid:
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, attestation.Run}
+		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run, attestation.Run}
 	default:
 		// Default to family
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run}
+		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run}
 	}
 }

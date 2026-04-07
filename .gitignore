@@ -1,5 +1,7 @@
 bin/
+dist/
 vendor/
+.claude/
 *.exe
 *.dll
 *.so
