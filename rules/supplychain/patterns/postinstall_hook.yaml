@@ -1,0 +1,9 @@
+id: sc-postinstall-hook
+kind: pattern
+scanner: supplychain
+category: lifecycle_hook
+severity: MEDIUM
+message: package.json postinstall hook present
+patterns:
+  - regex: '"postinstall"\s*:\s*"[^"]+"'
+    description: postinstall script in package.json

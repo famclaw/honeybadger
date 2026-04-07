@@ -1,0 +1,24 @@
+id: ss-override-english
+kind: pattern
+scanner: skillsafety
+category: prompt_injection
+severity: HIGH
+signal: override_phrase
+message: Prompt injection override phrase detected (English)
+patterns:
+  - regex: '(?i)ignore\s+(all\s+)?(previous|prior)\s+instructions'
+    description: ignore previous instructions
+  - regex: '(?i)disregard\s+(your\s+)?system\s+prompt'
+    description: disregard system prompt
+  - regex: '(?i)forget\s+everything\s+above'
+    description: forget everything above
+  - regex: '(?i)you\s+are\s+now\s+a'
+    description: you are now a
+  - regex: '(?i)your\s+new\s+(role|instructions)\s+(is|are)'
+    description: your new role/instructions
+  - regex: '(?i)override\s+safety'
+    description: override safety
+  - regex: '(?i)bypass\s+(all\s+)?restrictions'
+    description: bypass restrictions
+  - regex: '(?i)do\s+not\s+follow\s+(your\s+)?(original|previous)'
+    description: do not follow original/previous

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -96,6 +97,66 @@ func isBinaryContent(data []byte) bool {
 
 // Run scans repository files for supply chain risk patterns.
 func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+	// Resolve effective patterns and packages: use rules if loaded, else globals.
+	activePatterns := compiledPatterns
+	activePackages := popularPackages
+
+	if rs, ok := opts.Rules.(*rules.RuleSet); ok && rs != nil {
+		scRules := rs.ByScanner("supplychain")
+		if len(scRules) > 0 {
+			type rulePattern struct {
+				name     string
+				re       *regexp.Regexp
+				severity string
+				message  string
+			}
+			var rulePatterns []rulePattern
+			var rulePackages []string
+
+			for _, r := range scRules {
+				switch r.Kind {
+				case "pattern":
+					for _, cp := range r.CompiledPatterns() {
+						rulePatterns = append(rulePatterns, rulePattern{
+							name:     r.ID,
+							re:       cp.Re,
+							severity: r.Severity,
+							message:  r.Message,
+						})
+					}
+				case "dictionary":
+					rulePackages = append(rulePackages, r.Packages...)
+				}
+			}
+
+			if len(rulePatterns) > 0 {
+				// Convert to the same type as compiledPatterns.
+				converted := make([]struct {
+					name     string
+					re       *regexp.Regexp
+					severity string
+					message  string
+				}, len(rulePatterns))
+				for i, rp := range rulePatterns {
+					converted[i] = struct {
+						name     string
+						re       *regexp.Regexp
+						severity string
+						message  string
+					}{
+						name:     rp.name,
+						re:       rp.re,
+						severity: rp.severity,
+						message:  rp.message,
+					}
+				}
+				activePatterns = converted
+			}
+			if len(rulePackages) > 0 {
+				activePackages = rulePackages
+			}
+		}
+	}
 
 	for path, content := range repo.Files {
 		select {
@@ -115,7 +176,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 
 		lines := strings.Split(string(content), "\n")
 		for lineNum, line := range lines {
-			for _, p := range compiledPatterns {
+			for _, p := range activePatterns {
 				if p.re.MatchString(line) {
 					out <- scan.Finding{
 						Type:     "finding",
@@ -132,15 +193,15 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 	}
 
 	// Typosquat detection
-	checkTyposquats(repo, out)
+	checkTyposquatsWithPackages(repo, out, activePackages)
 }
 
-// checkTyposquats parses dependency names from package.json and requirements.txt
-// and compares them against popular packages using edit distance.
-func checkTyposquats(repo *fetch.Repo, out chan<- scan.Finding) {
+// checkTyposquatsWithPackages parses dependency names from package.json and requirements.txt
+// and compares them against the given popular packages using edit distance.
+func checkTyposquatsWithPackages(repo *fetch.Repo, out chan<- scan.Finding, packages []string) {
 	depNames := extractDependencyNames(repo)
 	for _, dep := range depNames {
-		for _, popular := range popularPackages {
+		for _, popular := range packages {
 			if dep == popular {
 				continue
 			}

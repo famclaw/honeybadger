@@ -1,0 +1,13 @@
+id: ss-sensitive-paths
+kind: dictionary
+scanner: skillsafety
+category: exfil_intent
+severity: HIGH
+message: References to sensitive filesystem paths detected
+packages:
+  - "~/.ssh/"
+  - ".env"
+  - ".aws/credentials"
+  - "wallet.dat"
+  - "id_rsa"
+  - "service-account.json"

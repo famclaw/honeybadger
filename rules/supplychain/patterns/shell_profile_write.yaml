@@ -1,0 +1,9 @@
+id: sc-shell-profile-write
+kind: pattern
+scanner: supplychain
+category: persistence
+severity: HIGH
+message: Modifies shell startup files
+patterns:
+  - regex: '(>>|>)\s*~?\/?\.?(bashrc|zshrc|profile|bash_profile)'
+    description: write to shell profile

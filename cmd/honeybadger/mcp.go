@@ -14,6 +14,7 @@ import (
 	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/report"
+	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -84,6 +85,13 @@ func handleScan(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel string) (map[string]any, error) {
 	start := time.Now()
 
+	// Load rules
+	rulesDir := os.Getenv("HONEYBADGER_RULES_DIR")
+	rs, err := rules.Load(rulesDir)
+	if err != nil {
+		return nil, fmt.Errorf("loading rules: %w", err)
+	}
+
 	// 1. Parse paranoia level
 	paranoia, err := scan.ParseParanoia(paranoiaStr)
 	if err != nil {
@@ -139,6 +147,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 		RepoPath:          subPath,
 		GithubToken:       githubToken,
 		GitlabToken:       gitlabToken,
+		Rules:             rs,
 	}
 
 	scanners := engine.BuildScannerList(scanOpts)

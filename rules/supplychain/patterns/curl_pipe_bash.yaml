@@ -1,0 +1,9 @@
+id: sc-curl-pipe-bash
+kind: pattern
+scanner: supplychain
+category: remote_exec
+severity: HIGH
+message: Downloads and executes remote script via curl
+patterns:
+  - regex: 'curl[^|]+\|\s*(ba)?sh'
+    description: curl piped to bash/sh

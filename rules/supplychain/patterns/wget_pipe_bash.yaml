@@ -1,0 +1,9 @@
+id: sc-wget-pipe-bash
+kind: pattern
+scanner: supplychain
+category: remote_exec
+severity: HIGH
+message: Downloads and executes remote script via wget
+patterns:
+  - regex: 'wget[^-][^|]+\|\s*(ba)?sh'
+    description: wget piped to bash/sh

@@ -1,0 +1,9 @@
+id: sc-etc-access
+kind: pattern
+scanner: supplychain
+category: filesystem
+severity: HIGH
+message: Reads sensitive system files
+patterns:
+  - regex: '\/etc\/(passwd|shadow|sudoers|hosts)'
+    description: access to /etc sensitive files

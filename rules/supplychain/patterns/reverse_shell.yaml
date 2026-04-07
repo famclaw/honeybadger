@@ -1,0 +1,9 @@
+id: sc-reverse-shell
+kind: pattern
+scanner: supplychain
+category: network
+severity: CRITICAL
+message: Reverse shell pattern detected
+patterns:
+  - regex: '(?i)(?:nc|ncat|netcat)\s+-[el]|bash\s+-i\s+>&|/dev/tcp/'
+    description: reverse shell via netcat or bash redirect

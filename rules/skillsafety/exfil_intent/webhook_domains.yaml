@@ -1,0 +1,11 @@
+id: ss-webhook-domains
+kind: dictionary
+scanner: skillsafety
+category: exfil_intent
+severity: CRITICAL
+message: Known webhook/exfiltration service domain detected
+packages:
+  - "webhook.site"
+  - "requestbin"
+  - "pipedream"
+  - "hookbin"

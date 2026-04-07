@@ -1,0 +1,9 @@
+id: sc-dynamic-require
+kind: pattern
+scanner: supplychain
+category: code_injection
+severity: LOW
+message: Dynamic require/import (variable path)
+patterns:
+  - regex: 'require\s*\(\s*[^"'']'
+    description: dynamic require with variable path

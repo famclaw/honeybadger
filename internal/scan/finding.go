@@ -106,4 +106,5 @@ type Options struct {
 	GithubToken       string
 	GitlabToken       string
 	LLMTimeout        time.Duration
+	Rules             interface{} // *rules.RuleSet, typed as interface{} to avoid import cycle
 }

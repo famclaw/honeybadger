@@ -221,6 +221,29 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
     make self-check-bootstrap  # scan at minimal paranoia (for initial releases only)
     make release-dry        # test GoReleaser locally (snapshot, no publish)
 
+## Extending with custom rules
+
+Detection rules are YAML files embedded in the binary. Add custom rules at
+runtime by dropping `.yaml` files into `~/.honeybadger/rules/` (or set
+`HONEYBADGER_RULES_DIR`):
+
+    mkdir -p ~/.honeybadger/rules/custom
+    cat > ~/.honeybadger/rules/custom/my-rule.yaml << 'EOF'
+    id: my_custom_check
+    kind: pattern
+    scanner: supplychain
+    category: custom
+    severity: HIGH
+    signal: file_content
+    patterns:
+      - regex: 'SOME_DANGEROUS_PATTERN'
+        description: "My custom detection"
+    message: "Custom rule matched"
+    EOF
+    honeybadger scan ./my-project  # custom rule will fire
+
+See [rules/README.md](rules/README.md) for the full format spec.
+
 ## Release Checklist
 
 1. `make self-check` passes at strict paranoia (or `self-check-bootstrap` for first release)

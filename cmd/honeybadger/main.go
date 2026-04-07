@@ -14,6 +14,7 @@ import (
 	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/report"
+	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 	"github.com/famclaw/honeybadger/internal/store"
 )
@@ -40,6 +41,7 @@ func main() {
 	offline := flag.Bool("offline", false, "offline mode -- skip network checks")
 	path := flag.String("path", "", "subdirectory within repo")
 	llmTimeout := flag.Duration("llm-timeout", 5*time.Minute, "LLM call timeout (default 5m)")
+	rulesDir := flag.String("rules-dir", "", "custom rules directory")
 	// --mcp-server and --version are handled before flag.Parse (see below)
 
 	// Extract subcommand before parsing flags.
@@ -91,7 +93,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	exitCode, err := run(repoURL, *paranoia, *format, *llm, *db, *installedSHA, *installedToolHash, *force, *offline, *path, llmKey, llmModel, githubToken, gitlabToken, *llmTimeout)
+	exitCode, err := run(repoURL, *paranoia, *format, *llm, *db, *installedSHA, *installedToolHash, *force, *offline, *path, llmKey, llmModel, githubToken, gitlabToken, *llmTimeout, *rulesDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -99,9 +101,21 @@ func main() {
 	os.Exit(exitCode)
 }
 
-func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, installedToolHash string, force, offline bool, subPath, llmKey, llmModel, githubToken, gitlabToken string, llmTimeout time.Duration) (int, error) {
+func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, installedToolHash string, force, offline bool, subPath, llmKey, llmModel, githubToken, gitlabToken string, llmTimeout time.Duration, rulesDir string) (int, error) {
 	start := time.Now()
 	ctx := context.Background()
+
+	// Load rules
+	dir := rulesDir
+	if dir == "" {
+		dir = os.Getenv("HONEYBADGER_RULES_DIR")
+	}
+	rs, err := rules.Load(dir)
+	if err != nil {
+		// Embedded rule errors are bugs; user rule errors are config mistakes.
+		// Both are fatal — an incomplete rule set could silently miss threats.
+		return 1, fmt.Errorf("loading rules: %w", err)
+	}
 
 	// 1. Parse paranoia level
 	paranoia, err := scan.ParseParanoia(paranoiaStr)
@@ -205,6 +219,7 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		GithubToken:       githubToken,
 		GitlabToken:       gitlabToken,
 		LLMTimeout:        llmTimeout,
+		Rules:             rs,
 	}
 
 	emitter.Emit(engine.ProgressEvent("scan", "Running security scanners...")) //nolint:errcheck

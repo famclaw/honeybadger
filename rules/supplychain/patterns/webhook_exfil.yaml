@@ -1,0 +1,9 @@
+id: sc-webhook-exfil
+kind: pattern
+scanner: supplychain
+category: network
+severity: CRITICAL
+message: Data exfiltration via webhook inspection service
+patterns:
+  - regex: '(?i)(?:fetch|axios|got|request)\s*\(\s*[''"]https?://(?:webhook\.site|requestbin|pipedream|hookbin)'
+    description: HTTP request to webhook inspection service

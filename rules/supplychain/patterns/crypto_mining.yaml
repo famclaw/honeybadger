@@ -1,0 +1,9 @@
+id: sc-crypto-mining
+kind: pattern
+scanner: supplychain
+category: network
+severity: CRITICAL
+message: Crypto mining code detected
+patterns:
+  - regex: '(?i)(?:coinhive|cryptonight|stratum\+tcp|xmrig)'
+    description: crypto mining library or protocol
