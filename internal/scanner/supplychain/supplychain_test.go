@@ -2,9 +2,11 @@ package supplychain
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -130,6 +132,12 @@ func TestRunSupplyChain_Patterns(t *testing.T) {
 		},
 	}
 
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fetch.Repo{
@@ -139,7 +147,7 @@ func TestRunSupplyChain_Patterns(t *testing.T) {
 			}
 
 			out := make(chan scan.Finding, 100)
-			Run(context.Background(), repo, scan.Options{}, out)
+			Run(context.Background(), repo, opts, out)
 			close(out)
 
 			var findings []scan.Finding
@@ -166,6 +174,12 @@ func TestRunSupplyChain_Patterns(t *testing.T) {
 }
 
 func TestRunSupplyChain_SkipsBinaryContent(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
 	repo := &fetch.Repo{
 		Files: map[string][]byte{
 			"binary.dat": {0x00, 0x01, 0x02, 0x03},
@@ -173,7 +187,7 @@ func TestRunSupplyChain_SkipsBinaryContent(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, opts, out)
 	close(out)
 
 	var findings []scan.Finding
@@ -187,6 +201,12 @@ func TestRunSupplyChain_SkipsBinaryContent(t *testing.T) {
 }
 
 func TestRunSupplyChain_Typosquat(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
 	repo := &fetch.Repo{
 		Files: map[string][]byte{
 			"package.json": []byte(`{
@@ -199,7 +219,7 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, opts, out)
 	close(out)
 
 	var typosquats []scan.Finding
@@ -213,6 +233,13 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 	for _, f := range typosquats {
 		if f.Package == "recat" {
 			found = true
+			// Verify dictionary rule metadata flows through
+			if f.Severity != "HIGH" {
+				t.Errorf("expected severity HIGH from dictionary rule, got %q", f.Severity)
+			}
+			if !strings.Contains(f.Message, "resembles") {
+				t.Errorf("expected message to contain rule metadata with 'resembles', got %q", f.Message)
+			}
 			break
 		}
 	}
@@ -223,6 +250,12 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 
 // Regression: scanner was flagging _test.go and testdata/ files, causing false positives.
 func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
 	repo := &fetch.Repo{
 		Files: map[string][]byte{
 			// _test.go file with a dangerous pattern — should be skipped
@@ -235,7 +268,7 @@ func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, opts, out)
 	close(out)
 
 	var findings []scan.Finding
@@ -249,6 +282,12 @@ func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
 }
 
 func TestRunSupplyChain_NoFalsePositiveOnCleanFile(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
 	repo := &fetch.Repo{
 		Files: map[string][]byte{
 			"main.go": []byte("package main\n\nfunc main() {\n\tfmt.Println(\"Hello, world!\")\n}\n"),
@@ -256,7 +295,7 @@ func TestRunSupplyChain_NoFalsePositiveOnCleanFile(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, opts, out)
 	close(out)
 
 	var findings []scan.Finding

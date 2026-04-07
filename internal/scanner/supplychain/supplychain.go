@@ -2,6 +2,7 @@ package supplychain
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -9,77 +10,6 @@ import (
 	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
-
-var supplyChainPatterns = []struct {
-	name     string
-	regex    string
-	severity string
-	message  string
-}{
-	{"curl_pipe_bash", `curl[^|]+\|\s*(ba)?sh`, "HIGH", "Downloads and executes remote script via curl"},
-	{"wget_pipe_bash", `wget[^-][^|]+\|\s*(ba)?sh`, "HIGH", "Downloads and executes remote script via wget"},
-	{"eval_remote_fetch", `eval\s*\(\s*(fetch|require|import)\s*\(`, "HIGH", "Evaluates remotely fetched code"},
-	{"remote_exec", `exec\s*\(\s*["']https?://`, "HIGH", "Executes code from remote URL"},
-	{"shell_profile_write", `(>>|>)\s*~?\/?\.?(bashrc|zshrc|profile|bash_profile)`, "HIGH", "Modifies shell startup files"},
-	{"postinstall_hook", `"postinstall"\s*:\s*"[^"]+"`, "MEDIUM", "package.json postinstall hook present"},
-	{"path_traversal", `\.\./\.\./\.\./`, "MEDIUM", "Path traversal pattern detected"},
-	{"etc_access", `\/etc\/(passwd|shadow|sudoers|hosts)`, "HIGH", "Reads sensitive system files"},
-	{"ssh_dir_access", `~/\.ssh\/|\/\.ssh\/`, "HIGH", "Accesses SSH directory"},
-	{"home_dir_glob", `glob\s*\(\s*["']~\/\*`, "MEDIUM", "Globs home directory"},
-	{"dynamic_require", `require\s*\(\s*[^"']`, "LOW", "Dynamic require/import (variable path)"},
-	{"base64_eval", `eval\s*\(\s*(atob|Buffer\.from|base64)`, "HIGH", "Evaluates base64-decoded content"},
-	// Network risk patterns
-	{"reverse_shell", `(?i)(?:nc|ncat|netcat)\s+-[el]|bash\s+-i\s+>&|/dev/tcp/`, "CRITICAL", "Reverse shell pattern detected"},
-	{"crypto_mining", `(?i)(?:coinhive|cryptonight|stratum\+tcp|xmrig)`, "CRITICAL", "Crypto mining code detected"},
-	{"webhook_exfil", `(?i)(?:fetch|axios|got|request)\s*\(\s*['"]https?://(?:webhook\.site|requestbin|pipedream|hookbin)`, "CRITICAL", "Data exfiltration via webhook inspection service"},
-	{"hardcoded_ip", `https?://(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?/`, "HIGH", "Hardcoded IP endpoint"},
-}
-
-var compiledPatterns []struct {
-	name     string
-	re       *regexp.Regexp
-	severity string
-	message  string
-}
-
-func init() {
-	compiledPatterns = make([]struct {
-		name     string
-		re       *regexp.Regexp
-		severity string
-		message  string
-	}, len(supplyChainPatterns))
-	for i, p := range supplyChainPatterns {
-		compiledPatterns[i] = struct {
-			name     string
-			re       *regexp.Regexp
-			severity string
-			message  string
-		}{
-			name:     p.name,
-			re:       regexp.MustCompile(p.regex),
-			severity: p.severity,
-			message:  p.message,
-		}
-	}
-}
-
-var popularPackages = []string{
-	// npm
-	"react", "express", "lodash", "axios", "webpack", "typescript", "eslint",
-	"jest", "chalk", "commander", "yargs", "dotenv", "moment", "uuid",
-	"next", "vue", "angular", "svelte", "vite", "prettier", "babel",
-	"cors", "debug", "socket.io", "mongoose", "sequelize",
-	// AI / MCP
-	"@anthropic-ai/sdk", "@modelcontextprotocol/sdk", "openai", "mcp",
-	// Python
-	"requests", "flask", "django", "numpy", "pandas", "pydantic", "fastapi",
-	"boto3", "tensorflow", "torch", "scikit-learn", "celery", "sqlalchemy",
-	"httpx", "aiohttp", "beautifulsoup4", "selenium", "playwright",
-	// Go
-	"github.com/gorilla/mux", "github.com/gin-gonic/gin",
-	"github.com/stretchr/testify", "github.com/spf13/cobra",
-}
 
 // isBinaryContent checks for null bytes in the first 512 bytes.
 func isBinaryContent(data []byte) bool {
@@ -95,66 +25,45 @@ func isBinaryContent(data []byte) bool {
 	return false
 }
 
+// compiledPattern holds a compiled regex pattern from a YAML rule.
+type compiledPattern struct {
+	name     string
+	re       *regexp.Regexp
+	severity string
+	message  string
+}
+
+// dictRule holds a dictionary rule's metadata for typosquat matching.
+type dictRule struct {
+	Severity string
+	Message  string
+	Packages []string
+}
+
 // Run scans repository files for supply chain risk patterns.
 func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
-	// Resolve effective patterns and packages: use rules if loaded, else globals.
-	activePatterns := compiledPatterns
-	activePackages := popularPackages
+	// Load patterns and dictionaries from rules (YAML-only, no hardcoded fallbacks).
+	var activePatterns []compiledPattern
+	var dictRules []dictRule
 
-	if rs, ok := opts.Rules.(*rules.RuleSet); ok && rs != nil {
-		scRules := rs.ByScanner("supplychain")
-		if len(scRules) > 0 {
-			type rulePattern struct {
-				name     string
-				re       *regexp.Regexp
-				severity string
-				message  string
+	rs, _ := opts.Rules.(*rules.RuleSet)
+	for _, r := range rs.ByScanner("supplychain") {
+		switch r.Kind {
+		case "pattern":
+			for _, cp := range r.CompiledPatterns() {
+				activePatterns = append(activePatterns, compiledPattern{
+					name:     r.ID,
+					re:       cp.Re,
+					severity: r.Severity,
+					message:  r.Message,
+				})
 			}
-			var rulePatterns []rulePattern
-			var rulePackages []string
-
-			for _, r := range scRules {
-				switch r.Kind {
-				case "pattern":
-					for _, cp := range r.CompiledPatterns() {
-						rulePatterns = append(rulePatterns, rulePattern{
-							name:     r.ID,
-							re:       cp.Re,
-							severity: r.Severity,
-							message:  r.Message,
-						})
-					}
-				case "dictionary":
-					rulePackages = append(rulePackages, r.Packages...)
-				}
-			}
-
-			if len(rulePatterns) > 0 {
-				// Convert to the same type as compiledPatterns.
-				converted := make([]struct {
-					name     string
-					re       *regexp.Regexp
-					severity string
-					message  string
-				}, len(rulePatterns))
-				for i, rp := range rulePatterns {
-					converted[i] = struct {
-						name     string
-						re       *regexp.Regexp
-						severity string
-						message  string
-					}{
-						name:     rp.name,
-						re:       rp.re,
-						severity: rp.severity,
-						message:  rp.message,
-					}
-				}
-				activePatterns = converted
-			}
-			if len(rulePackages) > 0 {
-				activePackages = rulePackages
-			}
+		case "dictionary":
+			dictRules = append(dictRules, dictRule{
+				Severity: r.Severity,
+				Message:  r.Message,
+				Packages: r.Packages,
+			})
 		}
 	}
 
@@ -192,28 +101,31 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		}
 	}
 
-	// Typosquat detection
-	checkTyposquatsWithPackages(repo, out, activePackages)
+	// Typosquat detection using dictionary rules.
+	checkTyposquatsWithDictRules(repo, out, dictRules)
 }
 
-// checkTyposquatsWithPackages parses dependency names from package.json and requirements.txt
-// and compares them against the given popular packages using edit distance.
-func checkTyposquatsWithPackages(repo *fetch.Repo, out chan<- scan.Finding, packages []string) {
+// checkTyposquatsWithDictRules parses dependency names from package.json and requirements.txt
+// and compares them against dictionary rule packages using edit distance.
+// Each finding carries the rule's severity and message.
+func checkTyposquatsWithDictRules(repo *fetch.Repo, out chan<- scan.Finding, dicts []dictRule) {
 	depNames := extractDependencyNames(repo)
 	for _, dep := range depNames {
-		for _, popular := range packages {
-			if dep == popular {
-				continue
-			}
-			dist := scan.EditDistance(dep, popular)
-			// Flag if edit distance is 1 or 2 (close but not identical)
-			if dist > 0 && dist <= 2 {
-				out <- scan.Finding{
-					Type:     "finding",
-					Severity: scan.SevHigh,
-					Check:    "supplychain",
-					Message:  "Possible typosquat: \"" + dep + "\" is close to popular package \"" + popular + "\"",
-					Package:  dep,
+		for _, dr := range dicts {
+			for _, pkg := range dr.Packages {
+				if dep == pkg {
+					continue
+				}
+				dist := scan.EditDistance(dep, pkg)
+				// Flag if edit distance is 1 or 2 (close but not identical)
+				if dist > 0 && dist <= 2 {
+					out <- scan.Finding{
+						Type:     "finding",
+						Severity: dr.Severity,
+						Check:    "supplychain",
+						Message:  fmt.Sprintf("%s: %q resembles %q (edit distance %d)", dr.Message, dep, pkg, dist),
+						Package:  dep,
+					}
 				}
 			}
 		}

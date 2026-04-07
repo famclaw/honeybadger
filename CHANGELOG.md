@@ -10,6 +10,14 @@
 - `--rules-dir <path>` CLI flag to override the user rules directory.
 - `rules/README.md` -- format spec and contribution guide for YAML detection rules.
 
+### Fixed
+- Rule loading is now the sole code path -- hardcoded Go fallbacks deleted
+- Dictionary rule metadata (severity, message) now flows to typosquat findings
+- `--rules-dir` flag now works in MCP server mode (flag > env var > default)
+
+### Removed
+- Hardcoded pattern globals (`overridePatterns`, `sensitivePathPatterns`, `webhookDomains`, `popularPackages`, `supplyChainPatterns`, `compiledPatterns`)
+
 ### Notes
 - Correlation rules (rules that combine multiple signals) remain in Go code. Pattern and dictionary rules live in YAML. See `rules/README.md` for details.
 

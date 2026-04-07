@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -123,10 +124,16 @@ func TestExtract(t *testing.T) {
 		})
 	}
 
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fetch.Repo{Files: tt.files}
-			sig := Extract(repo, scan.Options{})
+			sig := Extract(repo, opts)
 
 			if got := len(sig.OverridePhrases); got < tt.wantOverrides {
 				t.Errorf("OverridePhrases = %d, want >= %d", got, tt.wantOverrides)
