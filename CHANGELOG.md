@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.1 -- 2026-04-07
+
+### Added
+- Multi-language prompt injection detection: Chinese, Russian, Spanish, French, German, Japanese, Korean, Arabic, Portuguese, Italian (10 new languages, 11 total)
+- Homoglyph detection -- flags words mixing Latin/Cyrillic/Greek/Armenian scripts within a single word
+
+### Fixed
+- Skillsafety scanner no longer misses non-English instruction smuggling
+
+## v0.2.0 -- 2026-04-07
+
+### Added
+- Skillsafety scanner: prompt injection, Unicode obfuscation, data exfiltration intent, multi-language hiding
+- Typosquat dictionary expanded to 53 packages
+- Integration docs: Claude Code hook guide, Codex CLI hook guide
+- Integrations table in README
+
 ## v0.1.0 -- 2026-04-06
 
 First release. 5 cross-compiled binaries (linux amd64/arm64/armv7, darwin

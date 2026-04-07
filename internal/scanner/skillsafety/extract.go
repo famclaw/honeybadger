@@ -9,6 +9,7 @@ import (
 
 // overridePatterns detects prompt-injection override phrases.
 var overridePatterns = []*regexp.Regexp{
+	// English
 	regexp.MustCompile(`(?i)ignore\s+(all\s+)?(previous|prior)\s+instructions`),
 	regexp.MustCompile(`(?i)disregard\s+(your\s+)?system\s+prompt`),
 	regexp.MustCompile(`(?i)forget\s+everything\s+above`),
@@ -17,6 +18,49 @@ var overridePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)override\s+safety`),
 	regexp.MustCompile(`(?i)bypass\s+(all\s+)?restrictions`),
 	regexp.MustCompile(`(?i)do\s+not\s+follow\s+(your\s+)?(original|previous)`),
+	// Chinese (Simplified)
+	regexp.MustCompile(`忽略(之前的|所有先前的|前面的|上面的)指[令示]`),
+	regexp.MustCompile(`无视(系统|之前的)(提示|指令)`),
+	regexp.MustCompile(`忘[记掉](上面|之前)的(所有)?(内容|指令)`),
+	regexp.MustCompile(`你(现在|从现在开始)(是|扮演)`),
+	// Russian
+	regexp.MustCompile(`(?i)игнорируй\s+(все\s+)?предыдущие\s+инструкции`),
+	regexp.MustCompile(`(?i)забудь\s+(все\s+)?(предыдущие|прошлые)\s+(инструкции|указания)`),
+	regexp.MustCompile(`(?i)не\s+следуй\s+(своим\s+)?(оригинальным|предыдущим)\s+инструкциям`),
+	regexp.MustCompile(`(?i)ты\s+теперь`),
+	// Spanish
+	regexp.MustCompile(`(?i)ignora\s+(todas\s+)?las\s+instrucciones\s+(anteriores|previas)`),
+	regexp.MustCompile(`(?i)olvida\s+(todo\s+lo\s+anterior|las\s+instrucciones\s+previas)`),
+	regexp.MustCompile(`(?i)ahora\s+eres\s+un`),
+	regexp.MustCompile(`(?i)tus\s+nuevas\s+instrucciones\s+son`),
+	// French
+	regexp.MustCompile(`(?i)ignore[rz]?\s+(toutes\s+)?les\s+instructions\s+pr[eé]c[eé]dentes`),
+	regexp.MustCompile(`(?i)oublie[rz]?\s+(tout\s+ce\s+qui\s+pr[eé]c[eè]de|les\s+instructions\s+pr[eé]c[eé]dentes)`),
+	regexp.MustCompile(`(?i)tu\s+es\s+maintenant`),
+	// German
+	regexp.MustCompile(`(?i)ignoriere?\s+(alle\s+)?vorherigen?\s+Anweisungen`),
+	regexp.MustCompile(`(?i)vergiss\s+(alles\s+)?(vorherige|bisherige)`),
+	regexp.MustCompile(`(?i)du\s+bist\s+(jetzt|nun)`),
+	// Japanese
+	regexp.MustCompile(`(以前の|これまでの|前の)指示を無視`),
+	regexp.MustCompile(`(システム)?プロンプトを無視`),
+	regexp.MustCompile(`あなたは(今|これから)`),
+	// Korean
+	regexp.MustCompile(`이전\s*지시[를사항]?\s*무시`),
+	regexp.MustCompile(`(시스템\s*)?프롬프트[를을]\s*무시`),
+	regexp.MustCompile(`당신은\s*이제`),
+	// Arabic
+	regexp.MustCompile(`تجاهل\s+(جميع\s+)?التعليمات\s+السابقة`),
+	regexp.MustCompile(`انسى?\s+(كل\s+)?(التعليمات|الإرشادات)\s+السابقة`),
+	regexp.MustCompile(`أنت\s+الآن`),
+	// Portuguese
+	regexp.MustCompile(`(?i)ignore\s+(todas\s+)?as\s+instru[çc][õo]es\s+(anteriores|pr[eé]vias)`),
+	regexp.MustCompile(`(?i)esque[çc]a\s+(tudo\s+)?o\s+que\s+(foi\s+dito|veio\s+antes)`),
+	regexp.MustCompile(`(?i)voc[êe]\s+(agora|agora\s+é)\s+um`),
+	// Italian
+	regexp.MustCompile(`(?i)ignora\s+(tutte\s+)?le\s+istruzioni\s+precedenti`),
+	regexp.MustCompile(`(?i)dimentica\s+(tutto\s+quello\s+che|le\s+istruzioni\s+precedenti)`),
+	regexp.MustCompile(`(?i)tu\s+sei\s+(ora|adesso)`),
 }
 
 // sensitivePathPatterns detects references to sensitive filesystem paths.
@@ -128,6 +172,7 @@ func Extract(repo *fetch.Repo) Signals {
 	sig.ZeroWidthChars = CountZeroWidth(body)
 	sig.RTLOverrides = CountRTLOverrides(body)
 	sig.HTMLComments = ExtractHTMLComments(body)
+	sig.HomoglyphWords = DetectHomoglyphs(body)
 
 	// Language detection on body.
 	primary, all, unexpected := DetectLanguages(body)
