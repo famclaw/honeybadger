@@ -2,11 +2,6 @@
 
 ## Unreleased
 
-### Added
-- `.honeybadgerignore` file support for suppressing findings by rule ID, glob, or SHA256
-- Piped input via `honeybadger scan -` (treats stdin as SKILL.md, 10 MB cap)
-- New NDJSON event type `suppression_summary`
-
 ### Changed
 - Detection rules migrated from Go to YAML. All skillsafety and supplychain patterns are now defined in `rules/*.yaml` files embedded at build time. Zero behavior change for existing users.
 

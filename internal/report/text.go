@@ -77,10 +77,6 @@ func (e *TextEmitter) Emit(v any) error {
 		}
 		return e.writef("[sandbox] Unavailable (%s), effective paranoia: %s\n", reason, ep)
 
-	case "suppression_summary":
-		count, _ := m["suppressed_count"].(float64)
-		return e.writef("[suppressed] %d finding(s) suppressed by .honeybadgerignore\n", int(count))
-
 	case "health":
 		stars, _ := m["stars"].(float64)
 		contribs, _ := m["contributors"].(float64)
