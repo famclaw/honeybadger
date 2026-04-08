@@ -48,6 +48,8 @@ type FetchOptions struct {
 // Route selects the appropriate Fetcher based on URL pattern.
 func Route(url string) (Fetcher, error) {
 	switch {
+	case url == "-":
+		return &StdinFetcher{}, nil
 	case strings.Contains(url, "github.com"):
 		return &GitHubFetcher{}, nil
 	case strings.Contains(url, "gitlab.com"):

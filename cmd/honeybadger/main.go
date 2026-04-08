@@ -13,6 +13,7 @@ import (
 
 	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/ignore"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -74,7 +75,7 @@ func main() {
 			subcommand = "scan"
 			// Next non-flag arg is the repo URL
 			for j := i + 1; j < len(args); j++ {
-				if !strings.HasPrefix(args[j], "-") && repoURL == "" {
+				if repoURL == "" && (!strings.HasPrefix(args[j], "-") || args[j] == "-") {
 					repoURL = args[j]
 				} else {
 					remaining = append(remaining, args[j])
@@ -182,6 +183,11 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		return 1, fmt.Errorf("routing: %w", err)
 	}
 
+	// Wire stdin reader for piped input
+	if sf, ok := fetcher.(*fetch.StdinFetcher); ok {
+		sf.Reader = os.Stdin
+	}
+
 	fetchOpts := fetch.FetchOptions{
 		GithubToken: githubToken,
 		GitlabToken: gitlabToken,
@@ -246,6 +252,19 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		for _, f := range toolFindings {
 			emitter.Emit(f) //nolint:errcheck
 			allFindings = append(allFindings, f)
+		}
+	}
+
+	// 7b. Apply .honeybadgerignore suppression
+	var suppressedCount int
+	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
+		ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore")
+		if parseErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to parse .honeybadgerignore: %v\n", parseErr)
+		} else {
+			var suppressed []ignore.SuppressedFinding
+			allFindings, suppressed = ignoreSet.Filter(allFindings)
+			suppressedCount = len(suppressed)
 		}
 	}
 
@@ -345,6 +364,14 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		"duration_ms":        time.Since(start).Milliseconds(),
 	}
 	emitter.Emit(result) //nolint:errcheck
+
+	// Emit suppression summary if any findings were suppressed
+	if suppressedCount > 0 {
+		emitter.Emit(map[string]any{ //nolint:errcheck
+			"type":             "suppression_summary",
+			"suppressed_count": suppressedCount,
+		})
+	}
 
 	// Write audit if --db provided
 	if dbPath != "" {
