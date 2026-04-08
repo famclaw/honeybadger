@@ -52,6 +52,31 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
 
 Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 
+### Piped input
+
+    cat SKILL.md | honeybadger scan -
+
+Reads from stdin and scans it as a single file (`SKILL.md` by default).
+Input is capped at 10 MB.
+
+### Suppressing findings
+
+Place a `.honeybadgerignore` file in your repository root. Each line suppresses
+findings by rule ID, optionally constrained by a glob pattern or snippet SHA256:
+
+    # Suppress all findings for a rule
+    SECRET_IN_CODE
+
+    # Suppress only in test fixtures
+    SECRET_IN_CODE *.test.yaml
+
+    # Suppress a specific snippet by SHA256
+    SECRET_IN_CODE sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+Suppressed findings are excluded from the verdict. A `suppression_summary`
+NDJSON event is emitted when findings are suppressed. In text mode, a summary
+line is printed after the verdict.
+
 ## What it checks
 
 | Check | Scanner | Description |
@@ -117,7 +142,7 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 
 ## Output
 
-Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, health, attestation, sandbox, result.
+Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, health, attestation, sandbox, suppression_summary, result.
 
 Findings include rule metadata when available: `rule_id`, `more_info_url`, and `references` from the source YAML rule.
 In text mode, the severity tag shows `[SEVERITY rule_id]` and a `→ url` line links to further documentation.
@@ -143,7 +168,12 @@ honeybadger/
 │   │   ├── fetch_test.go
 │   │   ├── github.go        # GitHub fetcher
 │   │   ├── gitlab.go        # GitLab fetcher
+│   │   ├── stdin.go         # Stdin fetcher (piped input via -)
+│   │   ├── stdin_test.go
 │   │   └── tarball.go       # Tarball fetcher
+│   ├── ignore/
+│   │   ├── ignore.go        # .honeybadgerignore parser and finding filter
+│   │   └── ignore_test.go
 │   ├── report/
 │   │   ├── types.go         # Emitter interface
 │   │   ├── ndjson.go        # NDJSON streaming emitter
@@ -211,7 +241,8 @@ honeybadger/
 **v0.1.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.1.0)
 
 All core scanners implemented and tested. Binaries signed with Sigstore cosign,
-SPDX SBOMs attached to every release.
+SPDX SBOMs attached to every release. Piped stdin input (`scan -`) and
+`.honeybadgerignore` suppression are implemented (unreleased).
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
