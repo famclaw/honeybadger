@@ -142,7 +142,7 @@ line is printed after the verdict.
 
 ## Output
 
-Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, health, attestation, sandbox, result.
+Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, health, attestation, sandbox, suppression_summary, result.
 
 Findings include rule metadata when available: `rule_id`, `more_info_url`, and `references` from the source YAML rule.
 In text mode, the severity tag shows `[SEVERITY rule_id]` and a `→ url` line links to further documentation.

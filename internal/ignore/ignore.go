@@ -51,7 +51,11 @@ func Parse(content []byte, source string) (*Set, error) {
 		if len(tokens) == 2 {
 			constraint := tokens[1]
 			if strings.HasPrefix(constraint, "sha256:") {
-				rule.SHA256 = strings.TrimPrefix(constraint, "sha256:")
+				hash := strings.TrimPrefix(constraint, "sha256:")
+				if hash == "" {
+					return nil, fmt.Errorf("%s:%d: empty sha256 hash", source, lineNum)
+				}
+				rule.SHA256 = hash
 			} else {
 				rule.PathGlob = constraint
 			}

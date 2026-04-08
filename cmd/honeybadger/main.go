@@ -240,22 +240,19 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	scanners := engine.BuildScannerList(scanOpts)
 	findings := scan.RunAll(ctx, repo, scanOpts, scanners)
 
+	// Collect all findings before emitting (suppression must happen first).
 	var allFindings []scan.Finding
 	for f := range findings {
-		emitter.Emit(f) //nolint:errcheck
 		allFindings = append(allFindings, f)
 	}
 
 	// 13b. Update verification: --installed-tool-hash
 	if installedToolHash != "" {
 		toolFindings := engine.CheckToolHash(repo, installedToolHash)
-		for _, f := range toolFindings {
-			emitter.Emit(f) //nolint:errcheck
-			allFindings = append(allFindings, f)
-		}
+		allFindings = append(allFindings, toolFindings...)
 	}
 
-	// 7b. Apply .honeybadgerignore suppression
+	// 7b. Apply .honeybadgerignore suppression before emitting.
 	var suppressedCount int
 	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
 		ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore")
@@ -266,6 +263,11 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 			allFindings, suppressed = ignoreSet.Filter(allFindings)
 			suppressedCount = len(suppressed)
 		}
+	}
+
+	// Now emit the kept findings.
+	for _, f := range allFindings {
+		emitter.Emit(f) //nolint:errcheck
 	}
 
 	// 8. Emit health event
