@@ -22,6 +22,7 @@ func TestRoute(t *testing.T) {
 		wantTyp string
 		wantErr bool
 	}{
+		{"stdin", "-", "*fetch.StdinFetcher", false},
 		{"github https", "https://github.com/owner/repo", "*fetch.GitHubFetcher", false},
 		{"github bare", "github.com/owner/repo", "*fetch.GitHubFetcher", false},
 		{"gitlab https", "https://gitlab.com/owner/repo", "*fetch.GitLabFetcher", false},
