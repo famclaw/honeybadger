@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 -- 2026-04-08
 
 ### Added
 - `.honeybadgerignore` file support for suppressing findings by rule ID, glob, or SHA256
