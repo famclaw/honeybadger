@@ -3,7 +3,7 @@ module github.com/famclaw/honeybadger
 go 1.26.0
 
 require (
-	github.com/mark3labs/mcp-go v0.47.1
+	github.com/mark3labs/mcp-go v0.49.0
 	github.com/zricethezav/gitleaks/v8 v8.30.1
 	gopkg.in/yaml.v3 v3.0.1
 )
