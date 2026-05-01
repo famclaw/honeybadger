@@ -8,7 +8,7 @@ import (
 
 // WriteAudit appends a JSON line to the audit file at path.
 // This is a lightweight approach compatible with future SQLite integration.
-func WriteAudit(path string, result map[string]any) error {
+func WriteAudit(path string, result any) error {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("opening audit file: %w", err)

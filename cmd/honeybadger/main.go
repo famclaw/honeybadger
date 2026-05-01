@@ -101,7 +101,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	exitCode, err := run(repoURL, *paranoia, *format, *llm, *db, *installedSHA, *installedToolHash, *force, *offline, *path, llmKey, llmModel, githubToken, gitlabToken, *llmTimeout, *rulesDir)
+	cfg := runConfig{
+		RepoURL:           repoURL,
+		Paranoia:          *paranoia,
+		Format:            *format,
+		LLMEndpoint:       *llm,
+		DBPath:            *db,
+		InstalledSHA:      *installedSHA,
+		InstalledToolHash: *installedToolHash,
+		Force:             *force,
+		Offline:           *offline,
+		SubPath:           *path,
+		LLMKey:            llmKey,
+		LLMModel:          llmModel,
+		GithubToken:       githubToken,
+		GitlabToken:       gitlabToken,
+		LLMTimeout:        *llmTimeout,
+		RulesDir:          *rulesDir,
+	}
+	exitCode, err := run(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -109,12 +127,33 @@ func main() {
 	os.Exit(exitCode)
 }
 
-func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, installedToolHash string, force, offline bool, subPath, llmKey, llmModel, githubToken, gitlabToken string, llmTimeout time.Duration, rulesDir string) (int, error) {
+// runConfig groups the inputs to run() so callers don't have to thread
+// 16 positional arguments through the call site.
+type runConfig struct {
+	RepoURL           string
+	Paranoia          string
+	Format            string
+	LLMEndpoint       string
+	DBPath            string
+	InstalledSHA      string
+	InstalledToolHash string
+	Force             bool
+	Offline           bool
+	SubPath           string
+	LLMKey            string
+	LLMModel          string
+	GithubToken       string
+	GitlabToken       string
+	LLMTimeout        time.Duration
+	RulesDir          string
+}
+
+func run(cfg runConfig) (int, error) {
 	start := time.Now()
 	ctx := context.Background()
 
 	// Load rules
-	dir := rulesDir
+	dir := cfg.RulesDir
 	if dir == "" {
 		dir = os.Getenv("HONEYBADGER_RULES_DIR")
 	}
@@ -126,14 +165,14 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 1. Parse paranoia level
-	paranoia, err := scan.ParseParanoia(paranoiaStr)
+	paranoia, err := scan.ParseParanoia(cfg.Paranoia)
 	if err != nil {
 		return 1, fmt.Errorf("invalid paranoia: %w", err)
 	}
 
 	// 2. Select emitter
 	var emitter report.Emitter
-	switch format {
+	switch cfg.Format {
 	case "text":
 		emitter = report.NewTextEmitter(os.Stdout)
 	default:
@@ -142,20 +181,19 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	defer emitter.Close()
 
 	// 3. Handle --force
-	if force {
-		result := map[string]any{
-			"type":      "result",
-			"verdict":   "PASS",
-			"reasoning": "Scan bypassed via --force flag",
-		}
-		if err := emitter.Emit(result); err != nil {
+	if cfg.Force {
+		if err := emitter.Emit(engine.ResultEarlyEvent{
+			Type:      "result",
+			Verdict:   "PASS",
+			Reasoning: "Scan bypassed via --force flag",
+		}); err != nil {
 			return 1, fmt.Errorf("writing output: %w", err)
 		}
 		return 0, nil
 	}
 
 	// 4. Tier detection
-	tier := engine.DetectTier(offline)
+	tier := engine.DetectTier(cfg.Offline)
 
 	// 5. Sandbox detection and event
 	sandboxAvailable, sandboxType, reason := engine.DetectSandbox()
@@ -169,22 +207,22 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 		}
 	}
 
-	if err := emitter.Emit(map[string]any{
-		"type":               "sandbox",
-		"available":          sandboxAvailable,
-		"reason":             reason,
-		"sandbox_type":       sandboxType,
-		"effective_paranoia": effectiveParanoia,
+	if err := emitter.Emit(engine.SandboxEvent{
+		Type:              "sandbox",
+		Available:         sandboxAvailable,
+		Reason:            reason,
+		SandboxType:       sandboxType,
+		EffectiveParanoia: effectiveParanoia,
 	}); err != nil {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
 	// 6. Fetch repo
-	if err := emitter.Emit(engine.ProgressEvent("fetch", "Fetching repository...")); err != nil {
+	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
 
-	fetcher, err := fetch.Route(repoURL)
+	fetcher, err := fetch.Route(cfg.RepoURL)
 	if err != nil {
 		return 1, fmt.Errorf("routing: %w", err)
 	}
@@ -195,26 +233,25 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	fetchOpts := fetch.FetchOptions{
-		GithubToken: githubToken,
-		GitlabToken: gitlabToken,
-		SubPath:     subPath,
+		GithubToken: cfg.GithubToken,
+		GitlabToken: cfg.GitlabToken,
+		SubPath:     cfg.SubPath,
 	}
 
-	repo, err := fetcher.Fetch(ctx, repoURL, fetchOpts)
+	repo, err := fetcher.Fetch(ctx, cfg.RepoURL, fetchOpts)
 	if err != nil {
 		return 1, fmt.Errorf("fetching repo: %w", err)
 	}
 
 	// 13a. Update verification: --installed-sha
-	if installedSHA != "" {
+	if cfg.InstalledSHA != "" {
 		archiveHash := engine.ComputeRepoHash(repo)
-		if archiveHash == installedSHA {
-			result := map[string]any{
-				"type":      "result",
-				"verdict":   "PASS",
-				"reasoning": "Installed SHA matches fetched repository content",
-			}
-			if err := emitter.Emit(result); err != nil {
+		if archiveHash == cfg.InstalledSHA {
+			if err := emitter.Emit(engine.ResultEarlyEvent{
+				Type:      "result",
+				Verdict:   "PASS",
+				Reasoning: "Installed SHA matches fetched repository content",
+			}); err != nil {
 				return 1, fmt.Errorf("writing output: %w", err)
 			}
 			return 0, nil
@@ -227,23 +264,23 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 
 	scanOpts := scan.Options{
 		Paranoia:          effectiveParanoiaLevel,
-		Format:            format,
-		LLMEndpoint:       llmEndpoint,
-		LLMKey:            llmKey,
-		LLMModel:          llmModel,
-		DBPath:            dbPath,
-		InstalledSHA:      installedSHA,
-		InstalledToolHash: installedToolHash,
-		Force:             force,
-		Offline:           offline,
-		RepoPath:          subPath,
-		GithubToken:       githubToken,
-		GitlabToken:       gitlabToken,
-		LLMTimeout:        llmTimeout,
+		Format:            cfg.Format,
+		LLMEndpoint:       cfg.LLMEndpoint,
+		LLMKey:            cfg.LLMKey,
+		LLMModel:          cfg.LLMModel,
+		DBPath:            cfg.DBPath,
+		InstalledSHA:      cfg.InstalledSHA,
+		InstalledToolHash: cfg.InstalledToolHash,
+		Force:             cfg.Force,
+		Offline:           cfg.Offline,
+		RepoPath:          cfg.SubPath,
+		GithubToken:       cfg.GithubToken,
+		GitlabToken:       cfg.GitlabToken,
+		LLMTimeout:        cfg.LLMTimeout,
 		Rules:             rs,
 	}
 
-	if err := emitter.Emit(engine.ProgressEvent("scan", "Running security scanners...")); err != nil {
+	if err := emitter.Emit(engine.NewProgressEvent("scan", "Running security scanners...")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
 
@@ -265,8 +302,8 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 13b. Update verification: --installed-tool-hash
-	if installedToolHash != "" {
-		toolFindings := engine.CheckToolHash(repo, installedToolHash)
+	if cfg.InstalledToolHash != "" {
+		toolFindings := engine.CheckToolHash(repo, cfg.InstalledToolHash)
 		allFindings = append(allFindings, toolFindings...)
 	}
 
@@ -291,17 +328,17 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 8. Emit health event
-	if err := emitter.Emit(map[string]any{
-		"type":                    "health",
-		"stars":                   repo.Health.Stars,
-		"contributors":            repo.Health.Contributors,
-		"age_days":                repo.Health.AgeDays,
-		"last_commit_days":        repo.Health.LastCommitDays,
-		"has_license":             repo.Health.HasLicense,
-		"has_security_md":         repo.Health.HasSecurityMD,
-		"has_signed_commits":      repo.Health.HasSignedCommits,
-		"recent_ownership_change": repo.Health.RecentOwnerChange,
-		"issues_mentioning_risk":  repo.Health.IssuesMentioningRisk,
+	if err := emitter.Emit(engine.HealthEvent{
+		Type:                 "health",
+		Stars:                repo.Health.Stars,
+		Contributors:         repo.Health.Contributors,
+		AgeDays:              repo.Health.AgeDays,
+		LastCommitDays:       repo.Health.LastCommitDays,
+		HasLicense:           repo.Health.HasLicense,
+		HasSecurityMD:        repo.Health.HasSecurityMD,
+		HasSignedCommits:     repo.Health.HasSignedCommits,
+		RecentOwnerChange:    repo.Health.RecentOwnerChange,
+		IssuesMentioningRisk: repo.Health.IssuesMentioningRisk,
 	}); err != nil {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
@@ -309,12 +346,12 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	// 9. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
-	if paranoia >= scan.ParanoiaFamily && llmEndpoint != "" {
-		if err := emitter.Emit(engine.ProgressEvent("llm", "Asking LLM for verdict...")); err != nil {
+	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" {
+		if err := emitter.Emit(engine.NewProgressEvent("llm", "Asking LLM for verdict...")); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 		}
 
-		llmCtx, llmCancel := context.WithTimeout(ctx, llmTimeout)
+		llmCtx, llmCancel := context.WithTimeout(ctx, cfg.LLMTimeout)
 		defer llmCancel()
 
 		llmOpts := report.LLMOptions{
@@ -323,13 +360,13 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 			Tier:     tier,
 		}
 		prompt := report.AssembleLLMPrompt(repo, allFindings, llmOpts)
-		v, err := report.CallLLM(llmCtx, prompt, llmEndpoint, llmKey, llmModel)
+		v, err := report.CallLLM(llmCtx, prompt, cfg.LLMEndpoint, cfg.LLMKey, cfg.LLMModel)
 		if err != nil {
 			msg := fmt.Sprintf("LLM call failed: %v", err)
 			if llmCtx.Err() == context.DeadlineExceeded {
-				msg = fmt.Sprintf("LLM timed out after %v — using static findings only", llmTimeout)
+				msg = fmt.Sprintf("LLM timed out after %v — using static findings only", cfg.LLMTimeout)
 			}
-			if err := emitter.Emit(engine.ProgressEvent("llm", msg)); err != nil {
+			if err := emitter.Emit(engine.NewProgressEvent("llm", msg)); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 			}
 		} else if v != nil {
@@ -373,23 +410,23 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	}
 
 	// 11. Emit final result
-	result := map[string]any{
-		"type":               "result",
-		"verdict":            verdict,
-		"reasoning":          reasoning,
-		"key_finding":        keyFinding,
-		"finding_counts":     findingCounts,
-		"cve_count":          cveCount,
-		"cve_max_severity":   cveMaxSev,
-		"attested":           false,
-		"llm_model":          llmModel,
-		"llm_used":           llmUsed,
-		"paranoia":           string(paranoia),
-		"effective_paranoia": effectiveParanoia,
-		"tier":               tier,
-		"sandbox":            sandboxType,
-		"scanned_at":         time.Now().UTC().Format(time.RFC3339),
-		"duration_ms":        time.Since(start).Milliseconds(),
+	result := engine.ResultEvent{
+		Type:              "result",
+		Verdict:           verdict,
+		Reasoning:         reasoning,
+		KeyFinding:        keyFinding,
+		FindingCounts:     findingCounts,
+		CVECount:          cveCount,
+		CVEMaxSeverity:    cveMaxSev,
+		Attested:          false,
+		LLMModel:          cfg.LLMModel,
+		LLMUsed:           llmUsed,
+		Paranoia:          string(paranoia),
+		EffectiveParanoia: effectiveParanoia,
+		Tier:              tier,
+		Sandbox:           sandboxType,
+		ScannedAt:         time.Now().UTC().Format(time.RFC3339),
+		DurationMS:        time.Since(start).Milliseconds(),
 	}
 	if err := emitter.Emit(result); err != nil {
 		return 1, fmt.Errorf("writing output: %w", err)
@@ -397,17 +434,17 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 
 	// Emit suppression summary if any findings were suppressed
 	if suppressedCount > 0 {
-		if err := emitter.Emit(map[string]any{
-			"type":             "suppression_summary",
-			"suppressed_count": suppressedCount,
+		if err := emitter.Emit(engine.SuppressionEvent{
+			Type:            "suppression_summary",
+			SuppressedCount: suppressedCount,
 		}); err != nil {
 			return 1, fmt.Errorf("writing output: %w", err)
 		}
 	}
 
 	// Write audit if --db provided
-	if dbPath != "" {
-		if err := store.WriteAudit(dbPath, result); err != nil {
+	if cfg.DBPath != "" {
+		if err := store.WriteAudit(cfg.DBPath, result); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: audit write failed: %v\n", err)
 		}
 	}

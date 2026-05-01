@@ -162,14 +162,6 @@ func DetectSandbox() (available bool, sandboxType, reason string) {
 	return false, "none", "No sandbox mechanism detected"
 }
 
-// ProgressEvent creates a progress event map.
-func ProgressEvent(phase, message string) map[string]any {
-	return map[string]any{
-		"type":    "progress",
-		"phase":   phase,
-		"message": message,
-	}
-}
 
 // ComputeRepoHash computes a SHA256 hash of all repo file contents in sorted order.
 func ComputeRepoHash(repo *fetch.Repo) string {

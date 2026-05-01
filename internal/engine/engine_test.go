@@ -309,14 +309,14 @@ func TestBuildScannerList_ParanoiaLevels(t *testing.T) {
 }
 
 func TestProgressEvent(t *testing.T) {
-	ev := ProgressEvent("fetch", "Fetching...")
-	if ev["type"] != "progress" {
-		t.Errorf("type = %v, want progress", ev["type"])
+	ev := NewProgressEvent("fetch", "Fetching...")
+	if ev.Type != "progress" {
+		t.Errorf("type = %q, want progress", ev.Type)
 	}
-	if ev["phase"] != "fetch" {
-		t.Errorf("phase = %v, want fetch", ev["phase"])
+	if ev.Phase != "fetch" {
+		t.Errorf("phase = %q, want fetch", ev.Phase)
 	}
-	if ev["message"] != "Fetching..." {
-		t.Errorf("message = %v, want Fetching...", ev["message"])
+	if ev.Message != "Fetching..." {
+		t.Errorf("message = %q, want Fetching...", ev.Message)
 	}
 }
