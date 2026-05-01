@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `Options.Rules` is now `*rules.RuleSet` (was `interface{}`). Compile-time type safety replaces runtime assertions; the misleading "import cycle" comment is removed.
+- Scanner runtime errors (panics, external-tool failures) are now `RuntimeError` events distinct from security findings. A panicking scanner no longer flips a clean repo to FAIL.
+- `RunAll` returns `<-chan scan.Event` (a sealed union of `Finding` and `RuntimeError`) instead of `<-chan Finding`.
+- `ScanFunc` signature gains a `chan<- RuntimeError` parameter for reporting scanner-internal failures.
+- `run()` parameters extracted into a `runConfig` struct (was 16 positional parameters).
+- Scan events (`SandboxEvent`, `HealthEvent`, `ResultEvent`, `ResultEarlyEvent`, `SuppressionEvent`, `ProgressEvent`) are typed structs in `internal/engine/events.go` instead of `map[string]any` literals.
+- `TextEmitter.Emit` is now atomic — multi-line findings can no longer be interleaved by concurrent emitters.
+- `DetectSandbox` on macOS verifies `sandbox-exec` via `exec.LookPath` instead of assuming presence.
+
+### Fixed
+- `Emit()` errors in the CLI are now handled — a broken pipe no longer produces empty output with exit code 0.
+- `WriteAudit` calls `f.Sync()` so audit data reaches disk before the function returns.
+- `interface{}` replaced with `any` in `internal/fetch/github.go`.
+- `fmt.Sprintf("%x", …)` replaced with `hex.EncodeToString` in `ComputeRepoHash` and `CheckToolHash`.
+
+### Removed
+- `SevError` severity. Scanner runtime errors are now `RuntimeError` events.
+
 ## v0.3.0 -- 2026-04-08
 
 ### Added
