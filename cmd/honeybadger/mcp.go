@@ -156,10 +156,16 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	}
 
 	scanners := engine.BuildScannerList(scanOpts)
-	findings := scan.RunAll(ctx, repo, scanOpts, scanners)
+	events := scan.RunAll(ctx, repo, scanOpts, scanners)
 	var allFindings []scan.Finding
-	for f := range findings {
-		allFindings = append(allFindings, f)
+	var runtimeErrors []scan.RuntimeError
+	for ev := range events {
+		switch v := ev.(type) {
+		case scan.Finding:
+			allFindings = append(allFindings, v)
+		case scan.RuntimeError:
+			runtimeErrors = append(runtimeErrors, v)
+		}
 	}
 
 	// 5. Tool hash verification
@@ -239,6 +245,10 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 		"effective_paranoia": effectiveParanoia,
 		"scanned_at":         time.Now().UTC().Format(time.RFC3339),
 		"duration_ms":        time.Since(start).Milliseconds(),
+	}
+
+	if len(runtimeErrors) > 0 {
+		result["runtime_errors"] = runtimeErrors
 	}
 
 	return result, nil

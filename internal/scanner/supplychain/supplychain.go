@@ -46,7 +46,7 @@ type dictRule struct {
 }
 
 // Run scans repository files for supply chain risk patterns.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, _ chan<- scan.RuntimeError) {
 	// Load patterns and dictionaries from rules (YAML-only, no hardcoded fallbacks).
 	var activePatterns []compiledPattern
 	var dictRules []dictRule

@@ -81,6 +81,11 @@ func (e *TextEmitter) Emit(v any) error {
 		count, _ := m["suppressed_count"].(float64)
 		return e.writef("[suppressed] %d finding(s) suppressed by .honeybadgerignore\n", int(count))
 
+	case "runtime_error":
+		scanner, _ := m["scanner"].(string)
+		msg, _ := m["message"].(string)
+		return e.writef("[error] scanner %q runtime error: %s\n", scanner, msg)
+
 	case "health":
 		stars, _ := m["stars"].(float64)
 		contribs, _ := m["contributors"].(float64)

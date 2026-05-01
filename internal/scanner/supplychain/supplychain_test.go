@@ -147,7 +147,7 @@ func TestRunSupplyChain_Patterns(t *testing.T) {
 			}
 
 			out := make(chan scan.Finding, 100)
-			Run(context.Background(), repo, opts, out)
+			Run(context.Background(), repo, opts, out, nil)
 			close(out)
 
 			var findings []scan.Finding
@@ -187,7 +187,7 @@ func TestRunSupplyChain_SkipsBinaryContent(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, opts, out)
+	Run(context.Background(), repo, opts, out, nil)
 	close(out)
 
 	var findings []scan.Finding
@@ -219,7 +219,7 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, opts, out)
+	Run(context.Background(), repo, opts, out, nil)
 	close(out)
 
 	var typosquats []scan.Finding
@@ -268,7 +268,7 @@ func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, opts, out)
+	Run(context.Background(), repo, opts, out, nil)
 	close(out)
 
 	var findings []scan.Finding
@@ -295,7 +295,7 @@ func TestRunSupplyChain_PatternRuleMetadata(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, opts, out)
+	Run(context.Background(), repo, opts, out, nil)
 	close(out)
 
 	var findings []scan.Finding
@@ -333,7 +333,7 @@ func TestRunSupplyChain_DictRuleMetadata(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, opts, out)
+	Run(context.Background(), repo, opts, out, nil)
 	close(out)
 
 	var found bool
@@ -365,7 +365,7 @@ func TestRunSupplyChain_NoFalsePositiveOnCleanFile(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, opts, out)
+	Run(context.Background(), repo, opts, out, nil)
 	close(out)
 
 	var findings []scan.Finding

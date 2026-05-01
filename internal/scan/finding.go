@@ -14,7 +14,6 @@ const (
 	SevMedium   = "MEDIUM"
 	SevLow      = "LOW"
 	SevInfo     = "INFO"
-	SevError    = "ERROR" // for runner panics
 )
 
 // Finding matches the NDJSON output spec.
@@ -88,8 +87,6 @@ func SeverityRank(sev string) int {
 		return 2
 	case SevInfo:
 		return 1
-	case SevError:
-		return 6
 	default:
 		return 0
 	}

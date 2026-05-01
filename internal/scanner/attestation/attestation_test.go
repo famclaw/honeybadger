@@ -152,7 +152,7 @@ jobs:
 		t.Run(tt.name, func(t *testing.T) {
 			ch := make(chan scan.Finding, 100)
 			go func() {
-				Run(context.Background(), tt.repo, tt.opts, ch)
+				Run(context.Background(), tt.repo, tt.opts, ch, nil)
 				close(ch)
 			}()
 			findings := collectFindings(ch)
@@ -230,7 +230,7 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
 		ch := make(chan scan.Finding, 100)
 		go func() {
-			Run(context.Background(), repo, opts, ch)
+			Run(context.Background(), repo, opts, ch, nil)
 			close(ch)
 		}()
 		findings := collectFindings(ch)
@@ -267,7 +267,7 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
 		ch := make(chan scan.Finding, 100)
 		go func() {
-			Run(context.Background(), repo, opts, ch)
+			Run(context.Background(), repo, opts, ch, nil)
 			close(ch)
 		}()
 		findings := collectFindings(ch)

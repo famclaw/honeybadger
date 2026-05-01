@@ -9,7 +9,7 @@ import (
 )
 
 func mockScanner(findings ...Finding) ScanFunc {
-	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding, _ chan<- RuntimeError) {
 		for _, f := range findings {
 			select {
 			case out <- f:
@@ -21,13 +21,13 @@ func mockScanner(findings ...Finding) ScanFunc {
 }
 
 func panicScanner() ScanFunc {
-	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding, _ chan<- RuntimeError) {
 		panic("intentional test panic")
 	}
 }
 
 func blockingScanner() ScanFunc {
-	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding) {
+	return func(ctx context.Context, repo *fetch.Repo, opts Options, out chan<- Finding, _ chan<- RuntimeError) {
 		<-ctx.Done()
 	}
 }
@@ -50,8 +50,10 @@ func TestRunAll_AllFindingsArrive(t *testing.T) {
 
 	ch := RunAll(context.Background(), dummyRepo(), Options{Paranoia: ParanoiaFamily}, scanners)
 	var findings []Finding
-	for f := range ch {
-		findings = append(findings, f)
+	for ev := range ch {
+		if f, ok := ev.(Finding); ok {
+			findings = append(findings, f)
+		}
 	}
 	if len(findings) != 6 {
 		t.Errorf("expected 6 findings, got %d", len(findings))
@@ -85,25 +87,31 @@ func TestRunAll_PanicRecovery(t *testing.T) {
 
 	ch := RunAll(context.Background(), dummyRepo(), Options{Paranoia: ParanoiaFamily}, scanners)
 	var findings []Finding
-	for f := range ch {
-		findings = append(findings, f)
-	}
-
-	if len(findings) < 2 {
-		t.Fatalf("expected at least 2 findings (1 error + 1 normal), got %d", len(findings))
-	}
-
-	var gotPanic, gotNormal bool
-	for _, f := range findings {
-		if f.Severity == SevError && f.Check == "runner" {
-			gotPanic = true
+	var runtimeErrors []RuntimeError
+	for ev := range ch {
+		switch v := ev.(type) {
+		case Finding:
+			findings = append(findings, v)
+		case RuntimeError:
+			runtimeErrors = append(runtimeErrors, v)
 		}
-		if f.Check == "good" {
-			gotNormal = true
+	}
+
+	var gotPanic bool
+	for _, e := range runtimeErrors {
+		if e.Scanner == "runner" {
+			gotPanic = true
 		}
 	}
 	if !gotPanic {
-		t.Error("expected an ERROR finding from panic recovery")
+		t.Errorf("expected a RuntimeError from panic recovery, got %d errors", len(runtimeErrors))
+	}
+
+	var gotNormal bool
+	for _, f := range findings {
+		if f.Check == "good" {
+			gotNormal = true
+		}
 	}
 	if !gotNormal {
 		t.Error("expected normal finding from non-panicking scanner")
@@ -117,6 +125,6 @@ func TestRunAll_EmptyScannerList(t *testing.T) {
 		count++
 	}
 	if count != 0 {
-		t.Errorf("expected 0 findings for empty scanner list, got %d", count)
+		t.Errorf("expected 0 events for empty scanner list, got %d", count)
 	}
 }

@@ -17,7 +17,7 @@ func TestRun(t *testing.T) {
 		},
 	}
 	ch := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{Paranoia: scan.ParanoiaFamily}, ch)
+	Run(context.Background(), repo, scan.Options{Paranoia: scan.ParanoiaFamily}, ch, nil)
 	close(ch)
 
 	var findings []scan.Finding
@@ -43,7 +43,7 @@ func TestRunCleanRepo(t *testing.T) {
 		},
 	}
 	ch := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{Paranoia: scan.ParanoiaFamily}, ch)
+	Run(context.Background(), repo, scan.Options{Paranoia: scan.ParanoiaFamily}, ch, nil)
 	close(ch)
 
 	var findings []scan.Finding
@@ -69,7 +69,7 @@ func TestRunContextCancellation(t *testing.T) {
 	cancel() // cancel immediately
 
 	ch := make(chan scan.Finding, 100)
-	Run(ctx, repo, scan.Options{Paranoia: scan.ParanoiaFamily}, ch)
+	Run(ctx, repo, scan.Options{Paranoia: scan.ParanoiaFamily}, ch, nil)
 	close(ch)
 
 	// We may get 0 or some findings depending on timing, but it must not hang.

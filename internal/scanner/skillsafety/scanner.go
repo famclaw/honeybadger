@@ -10,7 +10,7 @@ import (
 // Run implements scan.ScanFunc for the skillsafety scanner.
 // It extracts structured signals from the repository's skill files,
 // evaluates them against safety rules, and emits findings.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, _ chan<- scan.RuntimeError) {
 	signals := Extract(repo, opts)
 	findings := Evaluate(&signals)
 	for _, f := range findings {

@@ -12,16 +12,11 @@ import (
 )
 
 // Run scans repository files for hardcoded secrets using gitleaks.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, errs chan<- scan.RuntimeError) {
 	// Create gitleaks detector with default config (800+ credential patterns).
 	detector, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
-		out <- scan.Finding{
-			Type:     "finding",
-			Severity: scan.SevError,
-			Check:    "secrets",
-			Message:  "failed to load gitleaks config: " + err.Error(),
-		}
+		errs <- scan.NewRuntimeError("secrets", "failed to load gitleaks config: "+err.Error())
 		return
 	}
 

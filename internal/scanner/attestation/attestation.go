@@ -20,7 +20,7 @@ var attestationHTTPClient = &http.Client{Timeout: 30 * time.Second}
 var AttestationAPIBase = "https://api.github.com"
 
 // Run checks build provenance and attestation for a repository.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, _ chan<- scan.RuntimeError) {
 	// Only run at strict or paranoid paranoia levels.
 	if opts.Paranoia != scan.ParanoiaStrict && opts.Paranoia != scan.ParanoiaParanoid {
 		return

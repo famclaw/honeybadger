@@ -238,12 +238,18 @@ func run(repoURL, paranoiaStr, format, llmEndpoint, dbPath, installedSHA, instal
 	emitter.Emit(engine.ProgressEvent("scan", "Running security scanners...")) //nolint:errcheck
 
 	scanners := engine.BuildScannerList(scanOpts)
-	findings := scan.RunAll(ctx, repo, scanOpts, scanners)
+	events := scan.RunAll(ctx, repo, scanOpts, scanners)
 
-	// Collect all findings before emitting (suppression must happen first).
+	// Collect findings before emitting (suppression must happen first).
+	// Runtime errors are emitted directly and never enter verdict computation.
 	var allFindings []scan.Finding
-	for f := range findings {
-		allFindings = append(allFindings, f)
+	for ev := range events {
+		switch v := ev.(type) {
+		case scan.Finding:
+			allFindings = append(allFindings, v)
+		case scan.RuntimeError:
+			emitter.Emit(v) //nolint:errcheck
+		}
 	}
 
 	// 13b. Update verification: --installed-tool-hash
