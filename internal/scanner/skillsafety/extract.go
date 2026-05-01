@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
-	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -38,7 +37,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 	var activeSensitivePaths []dictSource
 	var activeWebhookDomains []dictSource
 
-	rs, _ := opts.Rules.(*rules.RuleSet)
+	rs := opts.Rules
 	for _, r := range rs.ByScanner("skillsafety") {
 		switch {
 		case r.Kind == "pattern" && r.Signal == "override_phrase":

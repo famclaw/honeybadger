@@ -3,6 +3,8 @@ package scan
 import (
 	"fmt"
 	"time"
+
+	"github.com/famclaw/honeybadger/internal/rules"
 )
 
 // Severity levels
@@ -109,5 +111,5 @@ type Options struct {
 	GithubToken       string
 	GitlabToken       string
 	LLMTimeout        time.Duration
-	Rules             interface{} // *rules.RuleSet, typed as interface{} to avoid import cycle
+	Rules             *rules.RuleSet
 }

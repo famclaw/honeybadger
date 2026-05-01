@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
-	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -52,7 +51,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 	var activePatterns []compiledPattern
 	var dictRules []dictRule
 
-	rs, _ := opts.Rules.(*rules.RuleSet)
+	rs := opts.Rules
 	for _, r := range rs.ByScanner("supplychain") {
 		switch r.Kind {
 		case "pattern":
