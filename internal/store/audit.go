@@ -15,5 +15,8 @@ func WriteAudit(path string, result any) error {
 	}
 	defer f.Close()
 	enc := json.NewEncoder(f)
-	return enc.Encode(result)
+	if err := enc.Encode(result); err != nil {
+		return err
+	}
+	return f.Sync()
 }

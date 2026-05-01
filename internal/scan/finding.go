@@ -18,23 +18,23 @@ const (
 
 // Finding matches the NDJSON output spec.
 type Finding struct {
-	Type      string `json:"type"`                // "finding" or "cve"
-	Severity  string `json:"severity"`
-	Check       string   `json:"check"`               // scanner name: secrets, cve, supplychain, meta, attestation, network
+	Type        string   `json:"type"` // "finding" or "cve"
+	Severity    string   `json:"severity"`
+	Check       string   `json:"check"` // scanner name: secrets, cve, supplychain, meta, attestation, network
 	RuleID      string   `json:"rule_id,omitempty"`
 	MoreInfoURL string   `json:"more_info_url,omitempty"`
 	References  []string `json:"references,omitempty"`
 	File        string   `json:"file,omitempty"`
-	Line      int    `json:"line,omitempty"`
-	Message   string `json:"message"`
-	Snippet   string `json:"snippet,omitempty"`
-	Host      string `json:"host,omitempty"`
-	Package   string `json:"package,omitempty"`   // for CVE findings
-	Version   string `json:"version,omitempty"`
-	ID        string `json:"id,omitempty"`        // CVE ID
-	Summary   string `json:"summary,omitempty"`
-	FixedIn   string `json:"fixed_in,omitempty"`
-	Ecosystem string `json:"ecosystem,omitempty"`
+	Line        int      `json:"line,omitempty"`
+	Message     string   `json:"message"`
+	Snippet     string   `json:"snippet,omitempty"`
+	Host        string   `json:"host,omitempty"`
+	Package     string   `json:"package,omitempty"` // for CVE findings
+	Version     string   `json:"version,omitempty"`
+	ID          string   `json:"id,omitempty"` // CVE ID
+	Summary     string   `json:"summary,omitempty"`
+	FixedIn     string   `json:"fixed_in,omitempty"`
+	Ecosystem   string   `json:"ecosystem,omitempty"`
 }
 
 // ParanoiaLevel controls which scanners run and how aggressively.

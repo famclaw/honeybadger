@@ -19,6 +19,8 @@ func NewTextEmitter(w io.Writer) *TextEmitter {
 }
 
 func (e *TextEmitter) Emit(v any) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	// Marshal to map to inspect the "type" field generically.
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -132,9 +134,9 @@ func (e *TextEmitter) writeVerdict(m map[string]any) error {
 	)
 }
 
+// writef is called only from Emit (directly or via writeVerdict). Emit holds
+// e.mu for the entire call, so this helper does not lock.
 func (e *TextEmitter) writef(format string, args ...any) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	_, err := fmt.Fprintf(e.w, format, args...)
 	return err
 }
