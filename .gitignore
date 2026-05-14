@@ -2,6 +2,7 @@ bin/
 dist/
 vendor/
 .claude/
+docs/superpowers/
 *.exe
 *.dll
 *.so
