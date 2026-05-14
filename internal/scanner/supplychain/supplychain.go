@@ -51,30 +51,31 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 	var activePatterns []compiledPattern
 	var dictRules []dictRule
 
-	rs := opts.Rules
-	for _, r := range rs.ByScanner("supplychain") {
-		switch r.Kind {
-		case "pattern":
-			for _, cp := range r.CompiledPatterns() {
-				activePatterns = append(activePatterns, compiledPattern{
-					name:        r.ID,
-					re:          cp.Re,
-					severity:    r.Severity,
-					message:     r.Message,
-					ruleID:      r.ID,
-					moreInfoURL: r.MoreInfoURL,
-					references:  r.References,
+	if rs := opts.Rules; rs != nil {
+		for _, r := range rs.ByScanner("supplychain") {
+			switch r.Kind {
+			case "pattern":
+				for _, cp := range r.CompiledPatterns() {
+					activePatterns = append(activePatterns, compiledPattern{
+						name:        r.ID,
+						re:          cp.Re,
+						severity:    r.Severity,
+						message:     r.Message,
+						ruleID:      r.ID,
+						moreInfoURL: r.MoreInfoURL,
+						references:  r.References,
+					})
+				}
+			case "dictionary":
+				dictRules = append(dictRules, dictRule{
+					Severity:    r.Severity,
+					Message:     r.Message,
+					Packages:    r.Packages,
+					RuleID:      r.ID,
+					MoreInfoURL: r.MoreInfoURL,
+					References:  r.References,
 				})
 			}
-		case "dictionary":
-			dictRules = append(dictRules, dictRule{
-				Severity:    r.Severity,
-				Message:     r.Message,
-				Packages:    r.Packages,
-				RuleID:      r.ID,
-				MoreInfoURL: r.MoreInfoURL,
-				References:  r.References,
-			})
 		}
 	}
 

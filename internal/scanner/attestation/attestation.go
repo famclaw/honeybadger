@@ -20,7 +20,7 @@ var attestationHTTPClient = &http.Client{Timeout: 30 * time.Second}
 var AttestationAPIBase = "https://api.github.com"
 
 // Run checks build provenance and attestation for a repository.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, _ chan<- scan.RuntimeError) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, errs chan<- scan.RuntimeError) {
 	// Only run at strict or paranoid paranoia levels.
 	if opts.Paranoia != scan.ParanoiaStrict && opts.Paranoia != scan.ParanoiaParanoid {
 		return
@@ -28,7 +28,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 
 	// 1. GitHub Attestation API check (if platform is github and not offline)
 	if repo.Platform == "github" && !opts.Offline {
-		checkGitHubAttestation(ctx, repo, opts, out)
+		checkGitHubAttestation(ctx, repo, opts, out, errs)
 	}
 
 	// 2. Workflow attestation check (if platform is github)
@@ -43,7 +43,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 	checkCosignArtifacts(repo, opts, out)
 }
 
-func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, errs chan<- scan.RuntimeError) {
 	if repo.SHA == "" {
 		out <- scan.Finding{
 			Type:     "finding",
@@ -59,12 +59,7 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Opt
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		out <- scan.Finding{
-			Type:     "finding",
-			Severity: scan.SevInfo,
-			Check:    "attestation",
-			Message:  fmt.Sprintf("Failed to create attestation API request: %v", err),
-		}
+		errs <- scan.NewRuntimeError("attestation", fmt.Sprintf("create request for %s/%s sha=%s: %v", repo.Owner, repo.Name, repo.SHA, err))
 		return
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -74,12 +69,7 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Opt
 
 	resp, err := attestationHTTPClient.Do(req)
 	if err != nil {
-		out <- scan.Finding{
-			Type:     "finding",
-			Severity: scan.SevInfo,
-			Check:    "attestation",
-			Message:  fmt.Sprintf("Attestation API call failed: %v", err),
-		}
+		errs <- scan.NewRuntimeError("attestation", fmt.Sprintf("API call %s/%s sha=%s: %v", repo.Owner, repo.Name, repo.SHA, err))
 		return
 	}
 	defer resp.Body.Close()

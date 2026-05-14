@@ -151,9 +151,11 @@ jobs:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ch := make(chan scan.Finding, 100)
+			errs := make(chan scan.RuntimeError, 4)
 			go func() {
-				Run(context.Background(), tt.repo, tt.opts, ch, nil)
+				Run(context.Background(), tt.repo, tt.opts, ch, errs)
 				close(ch)
+				close(errs)
 			}()
 			findings := collectFindings(ch)
 
@@ -229,9 +231,11 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}
 		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
 		ch := make(chan scan.Finding, 100)
+		errs := make(chan scan.RuntimeError, 4)
 		go func() {
-			Run(context.Background(), repo, opts, ch, nil)
+			Run(context.Background(), repo, opts, ch, errs)
 			close(ch)
+			close(errs)
 		}()
 		findings := collectFindings(ch)
 
@@ -266,9 +270,11 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}
 		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
 		ch := make(chan scan.Finding, 100)
+		errs := make(chan scan.RuntimeError, 4)
 		go func() {
-			Run(context.Background(), repo, opts, ch, nil)
+			Run(context.Background(), repo, opts, ch, errs)
 			close(ch)
+			close(errs)
 		}()
 		findings := collectFindings(ch)
 
