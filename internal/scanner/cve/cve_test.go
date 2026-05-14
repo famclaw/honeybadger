@@ -77,7 +77,7 @@ func TestRunCVE_WithVulnerabilities(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, scan.Options{}, out, nil)
 	close(out)
 
 	var findings []scan.Finding
@@ -115,7 +115,7 @@ func TestRunCVE_EmptyDeps(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, scan.Options{}, out, nil)
 	close(out)
 
 	var findings []scan.Finding
@@ -146,7 +146,7 @@ func TestRunCVE_OfflineMode(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{Offline: true}, out)
+	Run(context.Background(), repo, scan.Options{Offline: true}, out, nil)
 	close(out)
 
 	var findings []scan.Finding
@@ -182,7 +182,7 @@ func TestRunCVE_NoVulnerabilities(t *testing.T) {
 	}
 
 	out := make(chan scan.Finding, 100)
-	Run(context.Background(), repo, scan.Options{}, out)
+	Run(context.Background(), repo, scan.Options{}, out, nil)
 	close(out)
 
 	var findings []scan.Finding

@@ -160,7 +160,7 @@ func detectBehavior(files map[string][]byte) (network, filesystem, exec bool) {
 }
 
 // Run scans a repository's SKILL.md for metadata issues and permission mismatches.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, _ chan<- scan.RuntimeError) {
 	// Find SKILL.md in repo files
 	var skillContent []byte
 	var found bool

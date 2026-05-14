@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
-	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -47,35 +46,36 @@ type dictRule struct {
 }
 
 // Run scans repository files for supply chain risk patterns.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, _ chan<- scan.RuntimeError) {
 	// Load patterns and dictionaries from rules (YAML-only, no hardcoded fallbacks).
 	var activePatterns []compiledPattern
 	var dictRules []dictRule
 
-	rs, _ := opts.Rules.(*rules.RuleSet)
-	for _, r := range rs.ByScanner("supplychain") {
-		switch r.Kind {
-		case "pattern":
-			for _, cp := range r.CompiledPatterns() {
-				activePatterns = append(activePatterns, compiledPattern{
-					name:        r.ID,
-					re:          cp.Re,
-					severity:    r.Severity,
-					message:     r.Message,
-					ruleID:      r.ID,
-					moreInfoURL: r.MoreInfoURL,
-					references:  r.References,
+	if rs := opts.Rules; rs != nil {
+		for _, r := range rs.ByScanner("supplychain") {
+			switch r.Kind {
+			case "pattern":
+				for _, cp := range r.CompiledPatterns() {
+					activePatterns = append(activePatterns, compiledPattern{
+						name:        r.ID,
+						re:          cp.Re,
+						severity:    r.Severity,
+						message:     r.Message,
+						ruleID:      r.ID,
+						moreInfoURL: r.MoreInfoURL,
+						references:  r.References,
+					})
+				}
+			case "dictionary":
+				dictRules = append(dictRules, dictRule{
+					Severity:    r.Severity,
+					Message:     r.Message,
+					Packages:    r.Packages,
+					RuleID:      r.ID,
+					MoreInfoURL: r.MoreInfoURL,
+					References:  r.References,
 				})
 			}
-		case "dictionary":
-			dictRules = append(dictRules, dictRule{
-				Severity:    r.Severity,
-				Message:     r.Message,
-				Packages:    r.Packages,
-				RuleID:      r.ID,
-				MoreInfoURL: r.MoreInfoURL,
-				References:  r.References,
-			})
 		}
 	}
 

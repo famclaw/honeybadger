@@ -19,6 +19,8 @@ func NewTextEmitter(w io.Writer) *TextEmitter {
 }
 
 func (e *TextEmitter) Emit(v any) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	// Marshal to map to inspect the "type" field generically.
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -81,6 +83,11 @@ func (e *TextEmitter) Emit(v any) error {
 		count, _ := m["suppressed_count"].(float64)
 		return e.writef("[suppressed] %d finding(s) suppressed by .honeybadgerignore\n", int(count))
 
+	case "runtime_error":
+		scanner, _ := m["scanner"].(string)
+		msg, _ := m["message"].(string)
+		return e.writef("[error] scanner %q runtime error: %s\n", scanner, msg)
+
 	case "health":
 		stars, _ := m["stars"].(float64)
 		contribs, _ := m["contributors"].(float64)
@@ -127,9 +134,9 @@ func (e *TextEmitter) writeVerdict(m map[string]any) error {
 	)
 }
 
+// writef is called only from Emit (directly or via writeVerdict). Emit holds
+// e.mu for the entire call, so this helper does not lock.
 func (e *TextEmitter) writef(format string, args ...any) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	_, err := fmt.Fprintf(e.w, format, args...)
 	return err
 }

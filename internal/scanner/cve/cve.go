@@ -56,7 +56,7 @@ type osvBatchResponse struct {
 var osvEndpoint = osvBatchURL
 
 // Run queries osv.dev for known vulnerabilities in the repo's dependencies.
-func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, errs chan<- scan.RuntimeError) {
 
 	deps := ParseDeps(repo)
 	if len(deps) == 0 || opts.Offline {
@@ -65,12 +65,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 
 	vulns, err := queryOSV(ctx, deps)
 	if err != nil {
-		out <- scan.Finding{
-			Type:     "finding",
-			Severity: scan.SevError,
-			Check:    "cve",
-			Message:  fmt.Sprintf("osv.dev query failed: %v", err),
-		}
+		errs <- scan.NewRuntimeError("cve", fmt.Sprintf("osv.dev query failed: %v", err))
 		return
 	}
 

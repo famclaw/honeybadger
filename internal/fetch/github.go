@@ -118,13 +118,13 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 }
 
 // fetchRepoMetadata retrieves repository metadata from GET /repos/{owner}/{repo}.
-func (g *GitHubFetcher) fetchRepoMetadata(ctx context.Context, owner, repo, token string) (map[string]interface{}, error) {
+func (g *GitHubFetcher) fetchRepoMetadata(ctx context.Context, owner, repo, token string) (map[string]any, error) {
 	path := fmt.Sprintf("/repos/%s/%s", owner, repo)
 	body, _, err := g.githubAPI(ctx, path, token)
 	if err != nil {
 		return nil, err
 	}
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, fmt.Errorf("decoding repo metadata: %w", err)
 	}
@@ -339,7 +339,7 @@ func isBinaryExtension(path string) bool {
 }
 
 // jsonFloat extracts a float64 from a map.
-func jsonFloat(m map[string]interface{}, key string) float64 {
+func jsonFloat(m map[string]any, key string) float64 {
 	v, ok := m[key]
 	if !ok {
 		return 0
@@ -349,7 +349,7 @@ func jsonFloat(m map[string]interface{}, key string) float64 {
 }
 
 // jsonString extracts a string from a map.
-func jsonString(m map[string]interface{}, key string) string {
+func jsonString(m map[string]any, key string) string {
 	v, ok := m[key]
 	if !ok {
 		return ""

@@ -117,22 +117,28 @@ func TestRunSecrets(t *testing.T) {
 			}
 
 			ch := make(chan scan.Finding, 100)
+			errs := make(chan scan.RuntimeError, 4)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			go func() {
-				Run(ctx, repo, scan.Options{Paranoia: scan.ParanoiaStrict}, ch)
+				Run(ctx, repo, scan.Options{Paranoia: scan.ParanoiaStrict}, ch, errs)
 				close(ch)
+				close(errs)
 			}()
 
 			var findings []scan.Finding
-			for f := range ch {
-				if f.Severity == scan.SevError {
-					t.Logf("scanner error: %s", f.Message)
-					continue
+			done := make(chan struct{})
+			go func() {
+				for e := range errs {
+					t.Logf("scanner runtime error: %s", e.Message)
 				}
+				close(done)
+			}()
+			for f := range ch {
 				findings = append(findings, f)
 			}
+			<-done
 
 			if len(findings) < tt.wantFindings {
 				t.Errorf("got %d findings, want at least %d", len(findings), tt.wantFindings)

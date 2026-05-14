@@ -4,6 +4,7 @@ package engine
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -156,20 +157,15 @@ func DetectSandbox() (available bool, sandboxType, reason string) {
 
 	// Check macOS sandbox-exec
 	if runtime.GOOS == "darwin" {
-		return true, "sandbox-exec", "macOS sandbox-exec available"
+		if _, err := exec.LookPath("sandbox-exec"); err == nil {
+			return true, "sandbox-exec", "macOS sandbox-exec available"
+		}
+		return false, "none", "sandbox-exec not in PATH"
 	}
 
 	return false, "none", "No sandbox mechanism detected"
 }
 
-// ProgressEvent creates a progress event map.
-func ProgressEvent(phase, message string) map[string]any {
-	return map[string]any{
-		"type":    "progress",
-		"phase":   phase,
-		"message": message,
-	}
-}
 
 // ComputeRepoHash computes a SHA256 hash of all repo file contents in sorted order.
 func ComputeRepoHash(repo *fetch.Repo) string {
@@ -184,7 +180,7 @@ func ComputeRepoHash(repo *fetch.Repo) string {
 		h.Write([]byte(p))
 		h.Write(repo.Files[p])
 	}
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // CheckToolHash searches for MCP tool registrations and compares hash.
@@ -227,7 +223,7 @@ func CheckToolHash(repo *fetch.Repo, expectedHash string) []scan.Finding {
 
 	toolJSON, _ := json.Marshal(names)
 	h := sha256.Sum256(toolJSON)
-	actualHash := fmt.Sprintf("%x", h[:])
+	actualHash := hex.EncodeToString(h[:])
 
 	if actualHash != expectedHash {
 		return []scan.Finding{{
@@ -251,6 +247,9 @@ func BuildScannerList(opts scan.Options) []scan.ScanFunc {
 	case scan.ParanoiaFamily:
 		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run}
 	case scan.ParanoiaStrict:
+		// Same scanners as paranoid — the behavioral difference between strict
+		// and paranoid lives in ComputeVerdict, which escalates WARN → FAIL
+		// for both levels.
 		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run, attestation.Run}
 	case scan.ParanoiaParanoid:
 		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, skillsafety.Run, attestation.Run}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
-	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
@@ -38,33 +37,34 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 	var activeSensitivePaths []dictSource
 	var activeWebhookDomains []dictSource
 
-	rs, _ := opts.Rules.(*rules.RuleSet)
-	for _, r := range rs.ByScanner("skillsafety") {
-		switch {
-		case r.Kind == "pattern" && r.Signal == "override_phrase":
-			for _, cp := range r.CompiledPatterns() {
-				activeOverridePatterns = append(activeOverridePatterns, overridePattern{
-					re:          cp.Re,
-					ruleID:      r.ID,
-					moreInfoURL: r.MoreInfoURL,
-					references:  r.References,
-				})
-			}
-		case r.Kind == "dictionary" && r.Category == "exfil_intent":
-			if r.ID == "ss-sensitive-paths" {
-				activeSensitivePaths = append(activeSensitivePaths, dictSource{
-					entries:     r.Packages,
-					ruleID:      r.ID,
-					moreInfoURL: r.MoreInfoURL,
-					references:  r.References,
-				})
-			} else if r.ID == "ss-webhook-domains" {
-				activeWebhookDomains = append(activeWebhookDomains, dictSource{
-					entries:     r.Packages,
-					ruleID:      r.ID,
-					moreInfoURL: r.MoreInfoURL,
-					references:  r.References,
-				})
+	if rs := opts.Rules; rs != nil {
+		for _, r := range rs.ByScanner("skillsafety") {
+			switch {
+			case r.Kind == "pattern" && r.Signal == "override_phrase":
+				for _, cp := range r.CompiledPatterns() {
+					activeOverridePatterns = append(activeOverridePatterns, overridePattern{
+						re:          cp.Re,
+						ruleID:      r.ID,
+						moreInfoURL: r.MoreInfoURL,
+						references:  r.References,
+					})
+				}
+			case r.Kind == "dictionary" && r.Category == "exfil_intent":
+				if r.ID == "ss-sensitive-paths" {
+					activeSensitivePaths = append(activeSensitivePaths, dictSource{
+						entries:     r.Packages,
+						ruleID:      r.ID,
+						moreInfoURL: r.MoreInfoURL,
+						references:  r.References,
+					})
+				} else if r.ID == "ss-webhook-domains" {
+					activeWebhookDomains = append(activeWebhookDomains, dictSource{
+						entries:     r.Packages,
+						ruleID:      r.ID,
+						moreInfoURL: r.MoreInfoURL,
+						references:  r.References,
+					})
+				}
 			}
 		}
 	}

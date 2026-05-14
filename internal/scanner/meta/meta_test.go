@@ -156,7 +156,7 @@ func main() { println("hello") }
 			ch := make(chan scan.Finding, 100)
 
 			go func() {
-				Run(context.Background(), repo, opts, ch)
+				Run(context.Background(), repo, opts, ch, nil)
 				close(ch)
 			}()
 			findings := collectFindings(ch)
