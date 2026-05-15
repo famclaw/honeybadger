@@ -136,9 +136,9 @@ line is printed after the verdict.
 |-------|----------|-----|-----------|
 | off | None | No | Nothing |
 | minimal | secrets, cve | No | CRITICAL |
-| family | secrets, cve, supplychain, meta | Yes | HIGH+ |
-| strict | all + attestation | Yes | MEDIUM+ (WARN=FAIL) |
-| paranoid | all + allowlist | Yes | LOW+ |
+| family | secrets, cve, supplychain, meta, capability, skillsafety | Yes | HIGH+ |
+| strict | family + attestation | Yes | MEDIUM+ (WARN=FAIL) |
+| paranoid | family + attestation + allowlist | Yes | LOW+ |
 
 ## Output
 
