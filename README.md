@@ -282,11 +282,9 @@ honeybadger/
 
 ## Status
 
-**v0.5.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.5.0)
+**v0.4.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.4.0)
 
-Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
-attestation, mcptool. Detection rules are YAML-defined and runtime-extensible.
-Binaries signed with Sigstore cosign, SPDX SBOMs attached to every release.
+**v0.5.0 in development** adds the `mcptool` scanner for MCP tool manifest analysis, bringing the total to eight scanners: secrets, cve, supplychain, meta, capability, skillsafety, attestation, mcptool. Detection rules are YAML-defined and runtime-extensible. Binaries signed with Sigstore cosign, SPDX SBOMs attached to every release.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
