@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -71,7 +70,7 @@ func runDetections(ctx context.Context, repo *fetch.Repo, opts scan.Options, too
 	}
 
 	// Detection 1 — injection (works in both modes).
-	injFindings := detectInjection(tools, opts.Rules)
+	injFindings, injHitNames := detectInjectionWithHits(tools, opts.Rules)
 	emit(injFindings)
 
 	// Detection 2 — unicode (works in both modes).
@@ -91,14 +90,23 @@ func runDetections(ctx context.Context, repo *fetch.Repo, opts scan.Options, too
 		return
 	}
 
-	// Detection 3 — shadowing. Build the injection-hit set for escalation.
-	injHits := map[string]bool{}
-	for _, f := range injFindings {
-		if name := toolNameFromMessage(f.Message); name != "" {
-			injHits[name] = true
+	// Enrich manifest tools with source-file locations (best-effort) so the
+	// capability detector's source-confirmation layer can run.
+	if srcTools := extractFromSource(repo); len(srcTools) > 0 {
+		srcFile := map[string]string{}
+		for _, st := range srcTools {
+			srcFile[st.Name] = st.SourceFile
+		}
+		for i := range tools {
+			if f, ok := srcFile[tools[i].Name]; ok {
+				tools[i].SourceFile = f
+			}
 		}
 	}
-	emit(detectShadowing(tools, injHits))
+
+	// Detection 3 — shadowing. Use the injection hit set returned directly by
+	// detectInjectionWithHits — no message-string parsing required.
+	emit(detectShadowing(tools, injHitNames))
 
 	// Detection 4 — capability mismatch (layers 1-4).
 	emit(detectCapability(tools, repo.Files))
@@ -117,20 +125,4 @@ func runDetections(ctx context.Context, repo *fetch.Repo, opts scan.Options, too
 		}
 		emit(detectRugPull(tools, baseline))
 	}
-}
-
-// toolNameFromMessage extracts the tool name from an injection finding message
-// of the form: Prompt injection in tool "NAME" field ...
-func toolNameFromMessage(msg string) string {
-	const marker = `in tool "`
-	i := strings.Index(msg, marker)
-	if i < 0 {
-		return ""
-	}
-	rest := msg[i+len(marker):]
-	j := strings.IndexByte(rest, '"')
-	if j < 0 {
-		return ""
-	}
-	return rest[:j]
 }

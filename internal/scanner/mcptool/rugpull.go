@@ -61,13 +61,51 @@ func toolDiff(prev, cur ToolDef) string {
 		sort.Strings(added)
 		parts = append(parts, "new parameters: "+strings.Join(added, ", "))
 	}
+	var removed []string
+	for name := range prevParams {
+		if _, ok := curParams[name]; !ok {
+			removed = append(removed, name)
+		}
+	}
+	if len(removed) > 0 {
+		sort.Strings(removed)
+		parts = append(parts, "removed parameters: "+strings.Join(removed, ", "))
+	}
 	for name, curDesc := range curParams {
 		if prevDesc, ok := prevParams[name]; ok && prevDesc != curDesc {
 			parts = append(parts, fmt.Sprintf("parameter %q description changed", name))
 		}
 	}
+	if annotationsDiffer(prev.Annotations, cur.Annotations) {
+		parts = append(parts, "annotations changed")
+	}
 	sort.Strings(parts)
 	return strings.Join(parts, "; ")
+}
+
+// annotationsDiffer reports whether two Annotations differ, including nil-vs-set.
+func annotationsDiffer(a, b *Annotations) bool {
+	if (a == nil) != (b == nil) {
+		return true
+	}
+	if a == nil {
+		return false
+	}
+	return ptrBoolDiffers(a.ReadOnlyHint, b.ReadOnlyHint) ||
+		ptrBoolDiffers(a.DestructiveHint, b.DestructiveHint) ||
+		ptrBoolDiffers(a.IdempotentHint, b.IdempotentHint) ||
+		ptrBoolDiffers(a.OpenWorldHint, b.OpenWorldHint)
+}
+
+// ptrBoolDiffers reports whether two *bool values differ, treating nil as absent.
+func ptrBoolDiffers(a, b *bool) bool {
+	if (a == nil) != (b == nil) {
+		return true
+	}
+	if a == nil {
+		return false
+	}
+	return *a != *b
 }
 
 // paramSet maps param name -> description for diffing.

@@ -3,6 +3,7 @@ package mcptool
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // wireManifest matches the MCP tools/list response JSON.
@@ -66,6 +67,9 @@ func parseManifest(data []byte) ([]ToolDef, error) {
 			}
 			td.Params = append(td.Params, pd)
 		}
+		sort.Slice(td.Params, func(i, j int) bool {
+			return td.Params[i].Name < td.Params[j].Name
+		})
 		tools = append(tools, td)
 	}
 	return tools, nil

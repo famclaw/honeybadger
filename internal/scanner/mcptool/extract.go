@@ -9,7 +9,8 @@ import (
 
 var (
 	// goNewToolRe matches mcp.NewTool("name", ... WithDescription("desc") ...)
-	goNewToolRe = regexp.MustCompile(`(?s)NewTool\(\s*"([^"]+)".*?WithDescription\(\s*"([^"]*)"`)
+	// [^)]*? prevents bridging across two NewTool calls (stops at the first ")").
+	goNewToolRe = regexp.MustCompile(`(?s)NewTool\(\s*"([^"]+)"[^)]*?WithDescription\(\s*"([^"]*)"`)
 	// goStructRe matches Tool{Name: "name", Description: "desc"}
 	goStructRe = regexp.MustCompile(`(?s)Tool\{[^}]*?Name:\s*"([^"]+)"[^}]*?Description:\s*"([^"]*)"`)
 	// goRegisterRe matches RegisterTool("name", "desc", ...)

@@ -44,12 +44,23 @@ func collectInjectionPatterns(rs *rules.RuleSet) []injectionPattern {
 
 // detectInjection runs detection 1: prompt-injection patterns over every text
 // field of every tool. Returns one finding per (tool, field, rule) match.
+// It is a thin wrapper around detectInjectionWithHits for callers that only
+// need the findings slice.
 func detectInjection(tools []ToolDef, rs *rules.RuleSet) []scan.Finding {
+	findings, _ := detectInjectionWithHits(tools, rs)
+	return findings
+}
+
+// detectInjectionWithHits runs detection 1 and also returns the set of tool
+// names that had at least one injection hit, so callers do not need to parse
+// the finding message strings.
+func detectInjectionWithHits(tools []ToolDef, rs *rules.RuleSet) ([]scan.Finding, map[string]bool) {
 	if rs == nil {
-		return nil
+		return nil, nil
 	}
 	pats := collectInjectionPatterns(rs)
 	var out []scan.Finding
+	hits := map[string]bool{}
 	for _, td := range tools {
 		for _, tf := range textFields(td) {
 			for _, p := range pats {
@@ -66,9 +77,10 @@ func detectInjection(tools []ToolDef, rs *rules.RuleSet) []scan.Finding {
 							td.Name, tf.Label, scan.Redact(loc, 80)),
 						Snippet: scan.Redact(loc, 120),
 					})
+					hits[td.Name] = true
 				}
 			}
 		}
 	}
-	return out
+	return out, hits
 }

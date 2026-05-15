@@ -68,3 +68,32 @@ func TestExtractPythonTool(t *testing.T) {
 		t.Fatalf("Python Tool() not extracted: %+v", tools)
 	}
 }
+
+// TestExtractGoNewToolNoBridging ensures the regex does not span two NewTool
+// calls: the first tool (no WithDescription) must NOT steal the second tool's
+// description.
+func TestExtractGoNewToolNoBridging(t *testing.T) {
+	src := `package main
+var a = mcp.NewTool("first",
+	mcp.WithReadOnly())
+var b = mcp.NewTool("second",
+	mcp.WithDescription("Second tool description"))`
+	repo := &fetch.Repo{Files: mkFiles(map[string]string{"main.go": src})}
+	tools := extractFromSource(repo)
+	// "first" should not have "Second tool description"
+	for _, td := range tools {
+		if td.Name == "first" && td.Description == "Second tool description" {
+			t.Fatalf("goNewToolRe bridged two tool declarations: first tool got second's description")
+		}
+	}
+	// "second" should have its description
+	var foundSecond bool
+	for _, td := range tools {
+		if td.Name == "second" && td.Description == "Second tool description" {
+			foundSecond = true
+		}
+	}
+	if !foundSecond {
+		t.Fatalf("second tool's description not extracted correctly: %+v", tools)
+	}
+}
