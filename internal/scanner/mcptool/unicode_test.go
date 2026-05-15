@@ -3,7 +3,7 @@ package mcptool
 import "testing"
 
 func TestUnicodeZeroWidth(t *testing.T) {
-	tools := []ToolDef{{Name: "t", Description: "hello​world"}}
+	tools := []ToolDef{{Name: "t", Description: "hello\u200bworld"}}
 	fs := detectUnicode(tools)
 	if len(fs) == 0 || fs[0].Severity != "HIGH" {
 		t.Fatalf("zero-width char not detected as HIGH: %+v", fs)

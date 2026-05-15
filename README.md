@@ -253,6 +253,8 @@ honeybadger/
 │       ├── fixtures_test.go  # Smoke tests for all fixtures
 │       └── mock_osv.go       # Mock osv.dev server for testing CVE scanner
 ├── rules/
+│   ├── supplychain/               # Supply-chain detection YAML rules
+│   ├── skillsafety/               # Skill-safety detection YAML rules
 │   └── mcptool/
 │       ├── concealment.yaml       # Concealment / obfuscation prompt-injection patterns
 │       ├── threat-framing.yaml    # Threat-framing prompt-injection patterns

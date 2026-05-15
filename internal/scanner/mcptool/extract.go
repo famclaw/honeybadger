@@ -28,7 +28,15 @@ var (
 // Returns a name-sorted, deduplicated slice.
 func extractFromSource(repo *fetch.Repo) []ToolDef {
 	byName := map[string]ToolDef{}
-	for path, content := range repo.Files {
+	// Iterate files in sorted path order so that, when the same tool name
+	// appears in multiple files, the chosen SourceFile is deterministic.
+	paths := make([]string, 0, len(repo.Files))
+	for path := range repo.Files {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		content := repo.Files[path]
 		if !isExtractableSource(path) {
 			continue
 		}

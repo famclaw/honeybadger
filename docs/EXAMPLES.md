@@ -110,17 +110,13 @@ The MCP server returns errors inline in the tool result rather than using exit c
 
 First, retrieve the `tools/list` response from the MCP server and save it to a file:
 
-```bash
-# Using mcp-client or any MCP-compatible tool to capture tools/list output
-mcp-client stdio -- ./my-mcp-server 2>/dev/null \
-  | jq '.result' > tools.json
-```
+    # Using mcp-client or any MCP-compatible tool to capture tools/list output
+    mcp-client stdio -- ./my-mcp-server 2>/dev/null \
+      | jq '.result' > tools.json
 
 ### Scan tool definitions from a manifest
 
-```bash
-honeybadger scan ./my-mcp-server --tool-manifest tools.json
-```
+    honeybadger scan ./my-mcp-server --tool-manifest tools.json
 
 HoneyBadger reads `tools.json` (a `tools/list` JSON response) and analyzes every
 tool definition for prompt injection, Unicode obfuscation, cross-tool shadowing,
@@ -130,13 +126,11 @@ and capability mismatch. The server binary is never executed during scanning.
 
 Save the approved tool definitions once, then compare on each scan:
 
-```bash
-# Save approved baseline
-cp tools.json approved.json
+    # Save approved baseline
+    cp tools.json approved.json
 
-# Later, after an update, detect changes
-honeybadger scan ./my-mcp-server --tool-manifest tools.json --tool-baseline approved.json
-```
+    # Later, after an update, detect changes
+    honeybadger scan ./my-mcp-server --tool-manifest tools.json --tool-baseline approved.json
 
 Any tool definitions that differ from `approved.json` are flagged as rug-pull
 findings, letting you detect silent behavior changes between server versions.

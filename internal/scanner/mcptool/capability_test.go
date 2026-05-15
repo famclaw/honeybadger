@@ -1,10 +1,6 @@
 package mcptool
 
-import (
-	"testing"
-
-	"github.com/famclaw/honeybadger/internal/scan"
-)
+import "testing"
 
 func btrue() *bool { b := true; return &b }
 
@@ -51,7 +47,6 @@ func TestCapabilityCleanReadOnly(t *testing.T) {
 	if hasRule(fs, "mcp-capability-mismatch") != nil {
 		t.Fatalf("clean read-only tool flagged: %+v", fs)
 	}
-	_ = scan.SevLow
 }
 
 func TestCapabilityLayer4SourceEscalation(t *testing.T) {

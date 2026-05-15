@@ -92,6 +92,11 @@ func runDetections(ctx context.Context, repo *fetch.Repo, opts scan.Options, too
 
 	// Enrich manifest tools with source-file locations (best-effort) so the
 	// capability detector's source-confirmation layer can run.
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
 	if srcTools := extractFromSource(repo); len(srcTools) > 0 {
 		srcFile := map[string]string{}
 		for _, st := range srcTools {
@@ -106,13 +111,28 @@ func runDetections(ctx context.Context, repo *fetch.Repo, opts scan.Options, too
 
 	// Detection 3 — shadowing. Use the injection hit set returned directly by
 	// detectInjectionWithHits — no message-string parsing required.
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
 	emit(detectShadowing(tools, injHitNames))
 
 	// Detection 4 — capability mismatch (layers 1-4).
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
 	emit(detectCapability(tools, repo.Files))
 
 	// Detection 5 — rug-pull (only when a baseline is supplied).
 	if opts.ToolBaseline != "" {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		data, err := os.ReadFile(opts.ToolBaseline)
 		if err != nil {
 			errs <- scan.NewRuntimeError("mcptool", fmt.Sprintf("read --tool-baseline: %v", err))

@@ -39,6 +39,10 @@ func depMatches(base, text, marker string) bool {
 	if base == "requirements.txt" || base == "pyproject.toml" {
 		for _, line := range strings.Split(text, "\n") {
 			tok := strings.TrimSpace(line)
+			// Strip inline comments (Python uses # to end-of-line).
+			if i := strings.IndexByte(tok, '#'); i >= 0 {
+				tok = tok[:i]
+			}
 			tok = strings.Trim(tok, `"' ,`)
 			for _, sep := range []string{"==", ">=", "<=", "~=", ">", "<", "="} {
 				if i := strings.Index(tok, sep); i >= 0 {

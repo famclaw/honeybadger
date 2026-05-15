@@ -11,21 +11,37 @@ import (
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
-// collect runs Run and gathers findings and runtime errors.
+// collect runs Run and gathers findings and runtime errors. Run executes in a
+// goroutine while the caller drains both channels, so an unbuffered (or
+// over-full) channel cannot deadlock the test.
 func collect(t *testing.T, repo *fetch.Repo, opts scan.Options) ([]scan.Finding, []scan.RuntimeError) {
 	t.Helper()
-	out := make(chan scan.Finding, 64)
-	errs := make(chan scan.RuntimeError, 16)
-	Run(context.Background(), repo, opts, out, errs)
-	close(out)
-	close(errs)
+	out := make(chan scan.Finding)
+	errs := make(chan scan.RuntimeError)
 	var fs []scan.Finding
-	for f := range out {
-		fs = append(fs, f)
-	}
 	var es []scan.RuntimeError
-	for e := range errs {
-		es = append(es, e)
+
+	go func() {
+		Run(context.Background(), repo, opts, out, errs)
+		close(out)
+		close(errs)
+	}()
+
+	for out != nil || errs != nil {
+		select {
+		case f, ok := <-out:
+			if !ok {
+				out = nil
+				continue
+			}
+			fs = append(fs, f)
+		case e, ok := <-errs:
+			if !ok {
+				errs = nil
+				continue
+			}
+			es = append(es, e)
+		}
 	}
 	return fs, es
 }
