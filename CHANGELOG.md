@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0 -- 2026-05-15
+
+### Added
+- `mcptool` scanner (8th scanner): analyzes MCP tool definitions for prompt
+  injection, Unicode obfuscation, cross-tool shadowing, capability mismatch,
+  and rug-pull drift. Fed by a caller-supplied `--tool-manifest` (MCP
+  `tools/list` JSON) or, when absent, best-effort source extraction.
+- `--tool-manifest` and `--tool-baseline` CLI flags.
+- `mcp-no-tools-found` finding -- an MCP server whose tools cannot be analyzed
+  no longer passes silently.
+- `rules/mcptool/` YAML rule directory (concealment / threat-framing /
+  silent-redirect prompt-injection patterns).
+
 ## v0.4.0 -- 2026-05-15
 
 ### Added
