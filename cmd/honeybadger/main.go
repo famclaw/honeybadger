@@ -43,6 +43,8 @@ func main() {
 	path := flag.String("path", "", "subdirectory within repo")
 	llmTimeout := flag.Duration("llm-timeout", 5*time.Minute, "LLM call timeout (default 5m)")
 	rulesDir := flag.String("rules-dir", "", "custom rules directory")
+	toolManifest := flag.String("tool-manifest", "", "path to MCP tools/list JSON for tool-definition analysis")
+	toolBaseline := flag.String("tool-baseline", "", "path to approved MCP tools/list JSON for rug-pull diffing")
 	// --mcp-server and --version are handled before flag.Parse (see below)
 
 	// Extract subcommand before parsing flags.
@@ -118,6 +120,8 @@ func main() {
 		GitlabToken:       gitlabToken,
 		LLMTimeout:        *llmTimeout,
 		RulesDir:          *rulesDir,
+		ToolManifest:      *toolManifest,
+		ToolBaseline:      *toolBaseline,
 	}
 	exitCode, err := run(cfg)
 	if err != nil {
@@ -146,6 +150,8 @@ type runConfig struct {
 	GitlabToken       string
 	LLMTimeout        time.Duration
 	RulesDir          string
+	ToolManifest      string
+	ToolBaseline      string
 }
 
 func run(cfg runConfig) (int, error) {
@@ -278,6 +284,8 @@ func run(cfg runConfig) (int, error) {
 		GitlabToken:       cfg.GitlabToken,
 		LLMTimeout:        cfg.LLMTimeout,
 		Rules:             rs,
+		ToolManifest:      cfg.ToolManifest,
+		ToolBaseline:      cfg.ToolBaseline,
 	}
 
 	if err := emitter.Emit(engine.NewProgressEvent("scan", "Running security scanners...")); err != nil {

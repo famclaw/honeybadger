@@ -106,3 +106,10 @@ func TestBlockThresholds(t *testing.T) {
 		t.Error("BlockThresholds should not have an entry for ParanoiaOff")
 	}
 }
+
+func TestOptionsHasToolFields(t *testing.T) {
+	o := Options{ToolManifest: "m.json", ToolBaseline: "b.json"}
+	if o.ToolManifest != "m.json" || o.ToolBaseline != "b.json" {
+		t.Fatalf("ToolManifest/ToolBaseline not settable")
+	}
+}
