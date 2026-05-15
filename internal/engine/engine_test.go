@@ -293,9 +293,9 @@ func TestBuildScannerList_ParanoiaLevels(t *testing.T) {
 	}{
 		{scan.ParanoiaOff, 0},
 		{scan.ParanoiaMinimal, 2},
-		{scan.ParanoiaFamily, 6},
-		{scan.ParanoiaStrict, 7},
-		{scan.ParanoiaParanoid, 7},
+		{scan.ParanoiaFamily, 7},
+		{scan.ParanoiaStrict, 8},
+		{scan.ParanoiaParanoid, 8},
 	}
 
 	for _, tt := range tests {
@@ -318,5 +318,16 @@ func TestProgressEvent(t *testing.T) {
 	}
 	if ev.Message != "Fetching..." {
 		t.Errorf("message = %q, want Fetching...", ev.Message)
+	}
+}
+
+func TestBuildScannerListIncludesMcptool(t *testing.T) {
+	got := BuildScannerList(scan.Options{Paranoia: scan.ParanoiaFamily})
+	if len(got) != 7 {
+		t.Fatalf("family scanner count = %d, want 7", len(got))
+	}
+	gotMinimal := BuildScannerList(scan.Options{Paranoia: scan.ParanoiaMinimal})
+	if len(gotMinimal) != 2 {
+		t.Fatalf("minimal scanner count = %d, want 2 (mcptool must not run at minimal)", len(gotMinimal))
 	}
 }
