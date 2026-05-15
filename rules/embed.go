@@ -5,5 +5,5 @@ import "embed"
 
 // FS holds the embedded rule YAML files.
 //
-//go:embed all:supplychain all:skillsafety
+//go:embed all:supplychain all:skillsafety all:mcptool
 var FS embed.FS

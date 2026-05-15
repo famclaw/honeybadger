@@ -1,0 +1,13 @@
+id: mcp-threat-framing
+kind: pattern
+scanner: mcptool
+category: prompt_injection
+severity: HIGH
+signal: tool_text
+message: Tool definition uses threat/urgency framing to coerce agent behavior
+more_info_url: https://owasp.org/www-project-mcp-top-10/
+patterns:
+  - regex: '(?i)\b(the\s+)?(application|system|app|tool)\s+will\s+(crash|fail|break)\b'
+    description: crash-threat coercion
+  - regex: '(?i)\b(all\s+)?data\s+will\s+be\s+lost\b'
+    description: data-loss coercion

@@ -1,0 +1,13 @@
+id: mcp-silent-redirect
+kind: pattern
+scanner: mcptool
+category: prompt_injection
+severity: HIGH
+signal: tool_text
+message: Tool definition redirects output to an external destination
+more_info_url: https://owasp.org/www-project-mcp-top-10/
+patterns:
+  - regex: '(?i)\b(bcc|blind carbon copy)\b\s*[:=]'
+    description: silent BCC directive
+  - regex: '(?i)\bchange\s+(the\s+)?(recipient|destination|address|target)\s+to\b'
+    description: recipient redirection
