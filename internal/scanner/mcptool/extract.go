@@ -14,6 +14,12 @@ var (
 	goStructRe = regexp.MustCompile(`(?s)Tool\{[^}]*?Name:\s*"([^"]+)"[^}]*?Description:\s*"([^"]*)"`)
 	// goRegisterRe matches RegisterTool("name", "desc", ...)
 	goRegisterRe = regexp.MustCompile(`RegisterTool\(\s*"([^"]+)"\s*,\s*"([^"]*)"`)
+	// tsRegisterRe matches server.registerTool("name", { ... description: "desc" ... })
+	tsRegisterRe = regexp.MustCompile(`(?s)registerTool\(\s*["']([^"']+)["']\s*,\s*\{[^}]*?description:\s*["']([^"']*)["']`)
+	// tsServerToolRe matches server.tool("name", "desc", ...)
+	tsServerToolRe = regexp.MustCompile(`\.tool\(\s*["']([^"']+)["']\s*,\s*["']([^"']*)["']`)
+	// pyToolRe matches Tool(name="name", description="desc", ...)
+	pyToolRe = regexp.MustCompile(`(?s)Tool\(\s*name\s*=\s*["']([^"']+)["']\s*,\s*description\s*=\s*["']([^"']*)["']`)
 )
 
 // extractFromSource heuristically extracts (name, description) tool definitions
@@ -77,5 +83,12 @@ func extractGo(text string) []ToolDef {
 	return out
 }
 
-// extractTSPython is implemented in Task 6.
-func extractTSPython(text string) []ToolDef { return nil }
+func extractTSPython(text string) []ToolDef {
+	var out []ToolDef
+	for _, re := range []*regexp.Regexp{tsRegisterRe, tsServerToolRe, pyToolRe} {
+		for _, m := range re.FindAllStringSubmatch(text, -1) {
+			out = append(out, ToolDef{Name: m[1], Description: m[2]})
+		}
+	}
+	return out
+}

@@ -41,3 +41,30 @@ func init() { server.RegisterTool("hello", "Say hello", handler) }`
 		t.Fatalf("RegisterTool not extracted: %+v", tools)
 	}
 }
+
+func TestExtractTSRegisterTool(t *testing.T) {
+	src := `server.registerTool("calculate-bmi", { title: "BMI", description: "Calculate BMI" }, handler);`
+	repo := &fetch.Repo{Files: mkFiles(map[string]string{"s.ts": src})}
+	tools := extractFromSource(repo)
+	if len(tools) != 1 || tools[0].Name != "calculate-bmi" || tools[0].Description != "Calculate BMI" {
+		t.Fatalf("TS registerTool not extracted: %+v", tools)
+	}
+}
+
+func TestExtractTSServerTool(t *testing.T) {
+	src := `server.tool("read_file", "Read a file", schema, handler);`
+	repo := &fetch.Repo{Files: mkFiles(map[string]string{"s.js": src})}
+	tools := extractFromSource(repo)
+	if len(tools) != 1 || tools[0].Name != "read_file" || tools[0].Description != "Read a file" {
+		t.Fatalf("TS server.tool not extracted: %+v", tools)
+	}
+}
+
+func TestExtractPythonTool(t *testing.T) {
+	src := `tools = [Tool(name="git_status", description="Show status", inputSchema=s)]`
+	repo := &fetch.Repo{Files: mkFiles(map[string]string{"s.py": src})}
+	tools := extractFromSource(repo)
+	if len(tools) != 1 || tools[0].Name != "git_status" || tools[0].Description != "Show status" {
+		t.Fatalf("Python Tool() not extracted: %+v", tools)
+	}
+}
