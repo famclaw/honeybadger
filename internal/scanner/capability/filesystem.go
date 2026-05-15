@@ -12,7 +12,7 @@ var (
 	fsGoRe       = regexp.MustCompile(`os\.Open|os\.ReadFile|os\.WriteFile|ioutil\.ReadFile|os\.Create|filepath\.Walk`)
 	fsPyRe       = regexp.MustCompile(`open\(|pathlib\.Path\(|shutil\.|os\.path\.`)
 	fsJSRe       = regexp.MustCompile(`fs\.readFile|fs\.writeFile|fs\.readFileSync|fs\.writeFileSync|fs\.promises\.`)
-	fsShellRe    = regexp.MustCompile(`(^|\n)\s*(cat|rm|cp|mv|tee|mkdir)\s`)
+	fsShellRe    = regexp.MustCompile(`(^|\||;|&&)\s*(cat|rm|cp|mv|tee|mkdir)\s`)
 )
 
 func detectFilesystem(files map[string][]byte) []evidence {

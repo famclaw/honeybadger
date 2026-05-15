@@ -9,7 +9,7 @@ var (
 	binsPyRe       = regexp.MustCompile(`subprocess\.(?:run|Popen)\(\["([a-zA-Z0-9_.-]+)"`)
 	binsGoRe       = regexp.MustCompile(`exec\.(?:Command|CommandContext)\(\s*(?:ctx,\s*)?"([a-zA-Z0-9_.-]+)"`)
 	binsJSRe       = regexp.MustCompile(`(?:child_process\.(?:spawn|exec)|execSync)\("([a-zA-Z0-9_.-]+)"`)
-	binsBacktickRe = regexp.MustCompile("`([a-zA-Z0-9_.-]+) ")
+	binsBacktickRe = regexp.MustCompile("`([a-zA-Z0-9_.-]+)(?:\\s|`)")
 	binsTokRe      = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 )
 
