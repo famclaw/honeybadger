@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 -- 2026-05-15
 
 ### Added
 - `capability` scanner: detects drift between `requires.{network,filesystem,bins,env_optional}` declared in `SKILL.md` frontmatter and the actual code. Active contradictions (declared:false but used) are SevHigh; undeclared usage is SevMedium. Runs at family/strict/paranoid paranoia. Per-file findings with `cap-*-drift` RuleIDs; skips `_test.go` / `testdata/` / `testfixture/`.

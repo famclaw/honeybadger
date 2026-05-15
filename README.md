@@ -90,7 +90,7 @@ line is printed after the verdict.
 | Data exfil | supplychain | Webhook/requestbin exfiltration endpoints |
 | Typosquat | supplychain | Edit-distance check against popular package names |
 | SKILL.md fields | meta | Required fields and format validation |
-| Permission mismatch | meta | Declared vs actual network/filesystem/exec usage |
+| Capability drift | capability | Declared `requires.*` vs actual code: network/filesystem/bins/env reads (family+) |
 | Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
 | Prompt injection | skillsafety | Override phrases in 11 languages (family+) |
@@ -136,9 +136,9 @@ line is printed after the verdict.
 |-------|----------|-----|-----------|
 | off | None | No | Nothing |
 | minimal | secrets, cve | No | CRITICAL |
-| family | secrets, cve, supplychain, meta | Yes | HIGH+ |
-| strict | all + attestation | Yes | MEDIUM+ (WARN=FAIL) |
-| paranoid | all + allowlist | Yes | LOW+ |
+| family | secrets, cve, supplychain, meta, capability, skillsafety | Yes | HIGH+ |
+| strict | family + attestation | Yes | MEDIUM+ (WARN=FAIL) |
+| paranoid | family + attestation + allowlist | Yes | LOW+ |
 
 ## Output
 
@@ -203,6 +203,13 @@ honeybadger/
 │   │   ├── meta/
 │   │   │   ├── meta.go          # SKILL.md meta scanner
 │   │   │   └── meta_test.go
+│   │   ├── capability/
+│   │   │   ├── capability.go    # Capability drift scanner (requires vs code)
+│   │   │   ├── network.go       # Network capability evidence detection
+│   │   │   ├── filesystem.go    # Filesystem capability evidence detection
+│   │   │   ├── bins.go          # Executable invocation detection
+│   │   │   ├── env.go           # Environment variable read detection
+│   │   │   └── capability_test.go
 │   │   └── attestation/
 │   │       ├── attestation.go   # Attestation verification scanner
 │   │       └── attestation_test.go
@@ -238,11 +245,11 @@ honeybadger/
 
 ## Status
 
-**v0.1.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.1.0)
+**v0.4.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.4.0)
 
-All core scanners implemented and tested. Binaries signed with Sigstore cosign,
-SPDX SBOMs attached to every release. Piped stdin input (`scan -`) and
-`.honeybadgerignore` suppression are implemented (unreleased).
+Seven scanners: secrets, cve, supplychain, meta, capability, skillsafety,
+attestation. Detection rules are YAML-defined and runtime-extensible. Binaries
+signed with Sigstore cosign, SPDX SBOMs attached to every release.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
