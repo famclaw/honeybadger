@@ -293,9 +293,9 @@ func TestBuildScannerList_ParanoiaLevels(t *testing.T) {
 	}{
 		{scan.ParanoiaOff, 0},
 		{scan.ParanoiaMinimal, 2},
-		{scan.ParanoiaFamily, 5},
-		{scan.ParanoiaStrict, 6},
-		{scan.ParanoiaParanoid, 6},
+		{scan.ParanoiaFamily, 6},
+		{scan.ParanoiaStrict, 7},
+		{scan.ParanoiaParanoid, 7},
 	}
 
 	for _, tt := range tests {

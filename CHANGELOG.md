@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- `capability` scanner: detects drift between `requires.{network,filesystem,bins,env_optional}` declared in `SKILL.md` frontmatter and the actual code. Active contradictions (declared:false but used) are SevHigh; undeclared usage is SevMedium. Runs at family/strict/paranoid paranoia. Per-file findings with `cap-*-drift` RuleIDs; skips `_test.go` / `testdata/` / `testfixture/`.
+
 ### Changed
 - `Options.Rules` is now `*rules.RuleSet` (was `interface{}`). Compile-time type safety replaces runtime assertions; the misleading "import cycle" comment is removed.
 - Scanner runtime errors (panics, external-tool failures) are now `RuntimeError` events distinct from security findings. A panicking scanner no longer flips a clean repo to FAIL.
@@ -11,6 +14,8 @@
 - Scan events (`SandboxEvent`, `HealthEvent`, `ResultEvent`, `ResultEarlyEvent`, `SuppressionEvent`, `ProgressEvent`) are typed structs in `internal/engine/events.go` instead of `map[string]any` literals.
 - `TextEmitter.Emit` is now atomic — multi-line findings can no longer be interleaved by concurrent emitters.
 - `DetectSandbox` on macOS verifies `sandbox-exec` via `exec.LookPath` instead of assuming presence.
+- `meta.parseFrontmatter` exported as `meta.ParseFrontmatter` for reuse by the `capability` scanner.
+- `meta` scanner narrowed to frontmatter validation only. Network / filesystem / exec drift detection moved into the new `capability` scanner.
 
 ### Fixed
 - `Emit()` errors in the CLI are now handled — a broken pipe no longer produces empty output with exit code 0.
