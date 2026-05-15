@@ -11,6 +11,9 @@ import (
 // writeVerbRe matches write/network/exec verbs in a tool name or description.
 var writeVerbRe = regexp.MustCompile(`(?i)\b(write|create|insert|update|patch|put|set|send|post|upload|save|append|modify|edit|push|delete|remove|drop|truncate|exec|execute|spawn|deploy|publish|fetch|download)\b`)
 
+// sourceWriteRe matches write/network/exec evidence in source files.
+var sourceWriteRe = regexp.MustCompile(`(?i)(os\.(Write|Create|Remove|Mkdir)|ioutil\.WriteFile|http\.(Get|Post|Client)|exec\.Command|subprocess\.|requests\.(get|post)|open\([^)]*['"][rwa]\+?b?['"])`)
+
 // suspectParamNames are parameter names implying a write payload or network target.
 var suspectParamNames = map[string]struct{}{
 	"content": {}, "body": {}, "data": {}, "payload": {}, "message": {},
@@ -44,8 +47,10 @@ func detectCapability(tools []ToolDef, repoFiles map[string][]byte) []scan.Findi
 
 		// Layer 2: write/network verb in name or description.
 		if writeVerbRe.MatchString(td.Name) || writeVerbRe.MatchString(td.Description) {
-			out = append(out, mismatchFinding(td,
-				"declared readOnlyHint:true but name/description implies write or network access"))
+			f := mismatchFinding(td,
+				"declared readOnlyHint:true but name/description implies write or network access")
+			escalateIfSourceConfirms(&f, td, repoFiles)
+			out = append(out, f)
 			continue
 		}
 		// Layer 3: suspect parameter names.
@@ -56,8 +61,21 @@ func detectCapability(tools []ToolDef, repoFiles map[string][]byte) []scan.Findi
 			}
 		}
 		if len(bad) > 0 {
-			out = append(out, mismatchFinding(td,
-				fmt.Sprintf("declared readOnlyHint:true but has write/network parameters: %s", strings.Join(bad, ", "))))
+			f := mismatchFinding(td,
+				fmt.Sprintf("declared readOnlyHint:true but has write/network parameters: %s", strings.Join(bad, ", ")))
+			escalateIfSourceConfirms(&f, td, repoFiles)
+			out = append(out, f)
+			continue
+		}
+		// Layer 4: source-only evidence (manifest looks clean but source confirms writes).
+		if td.SourceFile != "" && repoFiles != nil {
+			if content, ok := repoFiles[td.SourceFile]; ok && sourceWriteRe.Match(content) {
+				f := mismatchFinding(td,
+					"declared readOnlyHint:true but source-only evidence of write/network/exec")
+				f.Severity = scan.SevHigh
+				f.Message += " (confirmed by source: handler file performs write/network/exec)"
+				out = append(out, f)
+			}
 		}
 	}
 	return out
@@ -71,5 +89,21 @@ func mismatchFinding(td ToolDef, detail string) scan.Finding {
 		RuleID:   "mcp-capability-mismatch",
 		File:     td.SourceFile,
 		Message:  fmt.Sprintf("Tool %q capability mismatch: %s", td.Name, detail),
+	}
+}
+
+// escalateIfSourceConfirms upgrades a mismatch finding to HIGH (layer 4) when
+// the tool's source file shows actual write/network/exec evidence.
+func escalateIfSourceConfirms(f *scan.Finding, td ToolDef, repoFiles map[string][]byte) {
+	if td.SourceFile == "" || repoFiles == nil {
+		return
+	}
+	content, ok := repoFiles[td.SourceFile]
+	if !ok {
+		return
+	}
+	if sourceWriteRe.Match(content) {
+		f.Severity = scan.SevHigh
+		f.Message += " (confirmed by source: handler file performs write/network/exec)"
 	}
 }

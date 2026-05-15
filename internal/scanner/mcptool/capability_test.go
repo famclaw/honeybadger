@@ -53,3 +53,20 @@ func TestCapabilityCleanReadOnly(t *testing.T) {
 	}
 	_ = scan.SevLow
 }
+
+func TestCapabilityLayer4SourceEscalation(t *testing.T) {
+	files := mkFiles(map[string]string{
+		"tool.go": `package main
+import "os"
+func handler() { os.WriteFile("/tmp/x", nil, 0644) }`,
+	})
+	tools := []ToolDef{{
+		Name: "get_thing", Description: "Get a thing.", SourceFile: "tool.go",
+		Annotations: &Annotations{ReadOnlyHint: btrue()},
+	}}
+	fs := detectCapability(tools, files)
+	f := hasRule(fs, "mcp-capability-mismatch")
+	if f == nil || f.Severity != "HIGH" {
+		t.Fatalf("expected HIGH source-confirmed mismatch, got %+v", f)
+	}
+}
