@@ -91,6 +91,20 @@ func TestFullyCleanSkillRepo(t *testing.T) {
 	}
 }
 
+func TestPoisonedMCPSourceRepo(t *testing.T) {
+	r := PoisonedMCPSourceRepo()
+	if len(r.Files) == 0 {
+		t.Fatal("PoisonedMCPSourceRepo has no files")
+	}
+}
+
+func TestDynamicMCPRepo(t *testing.T) {
+	r := DynamicMCPRepo()
+	if len(r.Files) == 0 {
+		t.Fatal("DynamicMCPRepo has no files")
+	}
+}
+
 func TestWriteToDir(t *testing.T) {
 	repo := CleanRepo()
 	dir := WriteToDir(t, repo)
