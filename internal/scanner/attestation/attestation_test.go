@@ -118,9 +118,22 @@ jobs:
 			wantContains: "No build attestation workflow configured",
 		},
 		{
-			name: "missing SHA256SUMS at paranoid",
+			name: "missing SHA256SUMS on source scan -> INFO",
 			repo: &fetch.Repo{
 				Platform: "local",
+				Owner:    "test",
+				Name:     "repo",
+				Files:    map[string][]byte{},
+			},
+			opts:         scan.Options{Paranoia: scan.ParanoiaParanoid, Offline: true},
+			wantCount:    -1,
+			wantSeverity: scan.SevInfo,
+			wantContains: "SHA256SUMS",
+		},
+		{
+			name: "missing SHA256SUMS on release tarball -> HIGH",
+			repo: &fetch.Repo{
+				Platform: "tarball",
 				Owner:    "test",
 				Name:     "repo",
 				Files:    map[string][]byte{},
