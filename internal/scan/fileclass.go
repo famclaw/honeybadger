@@ -203,6 +203,29 @@ func severityForRank(rank int) string {
 	}
 }
 
+// appBuildManifests are filenames that mark a repository as a built,
+// compiled-language application rather than an agent skill. Skills are
+// SKILL.md-centric script bundles; they do not ship these.
+var appBuildManifests = map[string]bool{
+	"go.mod": true, "cargo.toml": true, "pom.xml": true,
+	"build.gradle": true, "build.gradle.kts": true,
+}
+
+// IsApplicationRepo reports whether the repository is a compiled-language
+// application. The skill-oriented scanners (capability drift, skillsafety
+// exfil-intent correlation) analyse a skill's own files; running them across
+// an application's source tree is a category error — the application's code
+// is the implementation of a tool, not "the skill's scripts".
+func IsApplicationRepo(files map[string][]byte) bool {
+	for p := range files {
+		base := strings.ToLower(path.Base(strings.ReplaceAll(p, "\\", "/")))
+		if appBuildManifests[base] {
+			return true
+		}
+	}
+	return false
+}
+
 // ApplyFileRoles re-weights findings by the role of the file each was found
 // in: test/rule-corpus findings are dropped, documentation findings are
 // downgraded, code/config findings pass through. Findings with no File field

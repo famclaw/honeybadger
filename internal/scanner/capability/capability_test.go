@@ -156,3 +156,26 @@ func TestCapability(t *testing.T) {
 		})
 	}
 }
+
+// TestRunSkipsApplicationRepo verifies the capability scanner does not report
+// drift across a compiled application's source tree: such a repo's code is the
+// implementation of a tool, not an agent skill's scripts.
+func TestRunSkipsApplicationRepo(t *testing.T) {
+	files := map[string][]byte{
+		"go.mod":   []byte("module example.com/app\n\ngo 1.22\n"),
+		"SKILL.md": []byte("---\nname: t\ndescription: t\n---\n"),
+		"main.go":  []byte("package main\nimport \"net/http\"\nfunc main(){ http.Get(\"https://x\") }\n"),
+	}
+	findings, rerrs := runTest(t, files)
+	if len(rerrs) != 0 {
+		t.Fatalf("unexpected runtime errors: %+v", rerrs)
+	}
+	for _, f := range findings {
+		if strings.HasPrefix(f.RuleID, "cap-") && f.RuleID != "cap-app-repo" {
+			t.Fatalf("application repo should yield no drift finding, got %s: %s", f.RuleID, f.Message)
+		}
+		if f.Severity != scan.SevInfo {
+			t.Fatalf("application-repo notice should be INFO, got %s", f.Severity)
+		}
+	}
+}

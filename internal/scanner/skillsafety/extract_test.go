@@ -189,3 +189,29 @@ func TestExtractSkipsNonSourceFiles(t *testing.T) {
 		t.Errorf("WebhookURLs = %d, want 0 (rule/test/prose sources skipped)", len(sig.WebhookURLs))
 	}
 }
+
+// TestExtractApplicationRepo verifies the exfil-intent signal pass is skipped
+// for compiled applications: an app's source legitimately contains path
+// strings and URLs that do not constitute a skill's exfiltration intent.
+func TestExtractApplicationRepo(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	files := map[string][]byte{
+		"go.mod":   []byte("module example.com/app\n\ngo 1.22\n"),
+		"SKILL.md": []byte("---\nname: test\n---\nA clean skill description."),
+		// Application source: a security tool that references paths and URLs.
+		"scanner.go": []byte("package x\nconst envFile = \".env\"\nconst doc = \"https://owasp.org/x\"\n"),
+	}
+	sig := Extract(&fetch.Repo{Files: files}, opts)
+
+	if len(sig.SensitivePaths) != 0 {
+		t.Errorf("SensitivePaths = %d, want 0 for application repo", len(sig.SensitivePaths))
+	}
+	if len(sig.ExternalURLs) != 0 {
+		t.Errorf("ExternalURLs = %d, want 0 for application repo", len(sig.ExternalURLs))
+	}
+}

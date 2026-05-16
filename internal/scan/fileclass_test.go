@@ -139,3 +139,26 @@ func TestApplyFileRolesMarkdown(t *testing.T) {
 		t.Errorf("no-line markdown finding = %q, want LOW (downgraded)", bySev["no line info"])
 	}
 }
+
+func TestIsApplicationRepo(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string][]byte
+		want  bool
+	}{
+		{"go app", map[string][]byte{"go.mod": {}, "main.go": {}}, true},
+		{"rust app", map[string][]byte{"Cargo.toml": {}}, true},
+		{"maven app", map[string][]byte{"pom.xml": {}}, true},
+		{"nested go.mod", map[string][]byte{"sub/go.mod": {}}, true},
+		{"skill bundle", map[string][]byte{"SKILL.md": {}, "helper.sh": {}}, false},
+		{"python skill", map[string][]byte{"SKILL.md": {}, "pyproject.toml": {}}, false},
+		{"empty", map[string][]byte{}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsApplicationRepo(c.files); got != c.want {
+				t.Errorf("IsApplicationRepo(%s) = %v, want %v", c.name, got, c.want)
+			}
+		})
+	}
+}
