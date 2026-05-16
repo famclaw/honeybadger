@@ -73,7 +73,7 @@ findings by rule ID, optionally constrained by a glob pattern or snippet SHA256:
     SECRET_IN_CODE *.test.yaml
 
     # Suppress a specific snippet by SHA256
-    SECRET_IN_CODE sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    SECRET_IN_CODE sha256:<64-hex-digit-sha256-of-the-snippet>
 
 Suppressed findings are excluded from the verdict. A `suppression_summary`
 NDJSON event is emitted when findings are suppressed. In text mode, a summary
