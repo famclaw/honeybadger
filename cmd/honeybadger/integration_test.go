@@ -208,7 +208,7 @@ func TestMCP_ScanVerdicts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := testfixture.WriteToDir(t, tt.repo)
 
-			s := newMCPServer()
+			s := newMCPServer("")
 			c, err := mcpclient.NewInProcessClient(s)
 			if err != nil {
 				t.Fatalf("NewInProcessClient: %v", err)
@@ -254,6 +254,30 @@ func TestMCP_ScanVerdicts(t *testing.T) {
 			verdict, _ := resultMap["verdict"].(string)
 			if verdict != tt.wantVerdict {
 				t.Errorf("verdict = %q, want %q\nresult: %s", verdict, tt.wantVerdict, text.Text)
+			}
+		})
+	}
+}
+
+// TestCLI_SelfScanNoFalsePositive is the regression guard for the self-check
+// false-positive fix. honeybadger's own repository is a clean reference repo:
+// it must not FAIL its own scan at any paranoia tier. A clean reference repo
+// that FAILs strips all discriminating signal from the FAIL verdict — the
+// graduated-paranoia design depends on this invariant holding.
+func TestCLI_SelfScanNoFalsePositive(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolving repo root: %v", err)
+	}
+	for _, tier := range []string{"family", "strict", "paranoid"} {
+		t.Run(tier, func(t *testing.T) {
+			cmd := exec.Command(testBinary, "scan", repoRoot,
+				"--paranoia", tier, "--format", "ndjson", "--offline")
+			out, _ := cmd.CombinedOutput()
+			result := findResultEvent(t, out)
+			if verdict, _ := result["verdict"].(string); verdict == "FAIL" {
+				t.Errorf("self-scan at --paranoia %s returned FAIL; honeybadger "+
+					"must pass its own scan\noutput: %s", tier, out)
 			}
 		})
 	}

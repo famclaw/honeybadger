@@ -292,6 +292,10 @@ poisoning, cross-tool shadowing, capability mismatch, and rug-pull drift.
 Detection rules are YAML-defined and runtime-extensible. Binaries signed with
 Sigstore cosign, SPDX SBOMs attached to every release.
 
+File-role classification distinguishes a threat *described* in documentation
+or defined in a rule corpus from one *present* in executable code, so
+HoneyBadger passes its own scan cleanly at every paranoia tier.
+
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Building
