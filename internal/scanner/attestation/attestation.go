@@ -175,6 +175,9 @@ func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Findin
 		}
 		return
 	}
+	// Source-tree scan: release artifacts legitimately do not exist yet. This
+	// stays INFO so it never blocks — ComputeVerdict's rule that INFO never
+	// escalates the verdict is what keeps a source self-scan green at paranoid.
 	out <- scan.Finding{
 		Type:     "finding",
 		Severity: scan.SevInfo,

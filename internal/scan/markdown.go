@@ -29,19 +29,21 @@ func CodeBlockLines(content []byte) map[int]bool {
 
 		if inFence {
 			inCode[lineNum] = true
-			if strings.HasPrefix(trimmed, fenceMarker) {
+			// CommonMark: a closing fence must be at least as long as the
+			// opening one, so compare against the full opening run.
+			if closeRun := leadingRun(trimmed, fenceMarker[0]); len(closeRun) >= len(fenceMarker) {
 				inFence = false
 			}
 			continue
 		}
 
 		if strings.HasPrefix(trimmed, "```") {
-			inFence, fenceMarker = true, "```"
+			inFence, fenceMarker = true, leadingRun(trimmed, '`')
 			inCode[lineNum] = true
 			continue
 		}
 		if strings.HasPrefix(trimmed, "~~~") {
-			inFence, fenceMarker = true, "~~~"
+			inFence, fenceMarker = true, leadingRun(trimmed, '~')
 			inCode[lineNum] = true
 			continue
 		}
@@ -52,6 +54,15 @@ func CodeBlockLines(content []byte) map[int]bool {
 		}
 	}
 	return inCode
+}
+
+// leadingRun returns the run of byte c at the start of s.
+func leadingRun(s string, c byte) string {
+	i := 0
+	for i < len(s) && s[i] == c {
+		i++
+	}
+	return s[:i]
 }
 
 // CodeBlockOnly returns content with every prose line blanked, preserving

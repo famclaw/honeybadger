@@ -165,6 +165,10 @@ func TestRunSkipsApplicationRepo(t *testing.T) {
 		"go.mod":   []byte("module example.com/app\n\ngo 1.22\n"),
 		"SKILL.md": []byte("---\nname: t\ndescription: t\n---\n"),
 		"main.go":  []byte("package main\nimport \"net/http\"\nfunc main(){ http.Get(\"https://x\") }\n"),
+		// Enough compiled source to clear minAppSourceFiles — a real app.
+		"a.go": []byte("package main\n"),
+		"b.go": []byte("package main\n"),
+		"c.go": []byte("package main\n"),
 	}
 	findings, rerrs := runTest(t, files)
 	if len(rerrs) != 0 {

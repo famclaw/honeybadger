@@ -50,6 +50,25 @@ func TestCodeBlockOnly(t *testing.T) {
 	}
 }
 
+// A four-backtick fence must not be closed by an inner three-backtick line —
+// CommonMark requires the closing fence to be at least as long as the opening.
+func TestCodeBlockLinesNestedFence(t *testing.T) {
+	md := "````\n" + // 1 open (4 backticks)
+		"```\n" + // 2 inner 3-backtick line — must NOT close the fence
+		"still inside code\n" + // 3 still code
+		"````\n" + // 4 real close (4 backticks)
+		"prose after\n" // 5 prose
+	got := CodeBlockLines([]byte(md))
+	for _, ln := range []int{1, 2, 3, 4} {
+		if !got[ln] {
+			t.Errorf("line %d should still be inside the four-backtick fence", ln)
+		}
+	}
+	if got[5] {
+		t.Error("line 5 should be prose after the fence closed")
+	}
+}
+
 func TestIsMarkdown(t *testing.T) {
 	for _, p := range []string{"README.md", "docs/X.MARKDOWN", "a/b.md"} {
 		if !IsMarkdown(p) {

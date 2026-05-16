@@ -205,6 +205,9 @@ func TestExtractApplicationRepo(t *testing.T) {
 		"SKILL.md": []byte("---\nname: test\n---\nA clean skill description."),
 		// Application source: a security tool that references paths and URLs.
 		"scanner.go": []byte("package x\nconst envFile = \".env\"\nconst doc = \"https://owasp.org/x\"\n"),
+		// Enough compiled source to clear minAppSourceFiles — a real app.
+		"a.go": []byte("package x\n"),
+		"b.go": []byte("package x\n"),
 	}
 	sig := Extract(&fetch.Repo{Files: files}, opts)
 

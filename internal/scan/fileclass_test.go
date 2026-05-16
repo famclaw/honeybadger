@@ -31,6 +31,7 @@ func TestClassifyFile(t *testing.T) {
 		{"superpowers plan", "docs/superpowers/plans/2026-04-05-x.md", nil, RoleDoc},
 		{"license", "LICENSE", nil, RoleDoc},
 		{"skill manifest is not doc", "SKILL.md", nil, RoleCode},
+		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleTest},
 		{"ci workflow", ".github/workflows/release.yml", nil, RoleConfig},
 		{"json config", "config.json", nil, RoleConfig},
 		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleRules},
@@ -81,10 +82,10 @@ func TestAdjustSeverity(t *testing.T) {
 
 func TestApplyFileRoles(t *testing.T) {
 	files := map[string][]byte{
-		"README.md":                     []byte("# doc"),
-		"internal/foo_test.go":           []byte("package x"),
-		"rules/x.yaml":                   []byte(sampleRuleYAML),
-		"internal/foo.go":                []byte("package x"),
+		"README.md":            []byte("# doc"),
+		"internal/foo_test.go": []byte("package x"),
+		"rules/x.yaml":         []byte(sampleRuleYAML),
+		"internal/foo.go":      []byte("package x"),
 	}
 	findings := []Finding{
 		{Check: "supplychain", Severity: SevCritical, File: "README.md", Message: "doc match"},
@@ -146,13 +147,26 @@ func TestIsApplicationRepo(t *testing.T) {
 		files map[string][]byte
 		want  bool
 	}{
-		{"go app", map[string][]byte{"go.mod": {}, "main.go": {}}, true},
-		{"rust app", map[string][]byte{"Cargo.toml": {}}, true},
-		{"maven app", map[string][]byte{"pom.xml": {}}, true},
-		{"nested go.mod", map[string][]byte{"sub/go.mod": {}}, true},
+		{"go app", map[string][]byte{
+			"go.mod": {}, "main.go": {}, "a.go": {}, "b.go": {},
+		}, true},
+		{"rust app", map[string][]byte{
+			"Cargo.toml": {}, "src/main.rs": {}, "src/a.rs": {}, "src/b.rs": {},
+		}, true},
+		{"maven app", map[string][]byte{
+			"pom.xml": {}, "A.java": {}, "B.java": {}, "C.java": {},
+		}, true},
 		{"skill bundle", map[string][]byte{"SKILL.md": {}, "helper.sh": {}}, false},
 		{"python skill", map[string][]byte{"SKILL.md": {}, "pyproject.toml": {}}, false},
 		{"empty", map[string][]byte{}, false},
+		// Anti-evasion: a lone build manifest dropped into a skill bundle must
+		// not disable the skill scanners — it needs real compiled source too.
+		{"token go.mod cannot fake an app", map[string][]byte{
+			"go.mod": {}, "SKILL.md": {}, "helper.sh": {},
+		}, false},
+		{"manifest with too little source", map[string][]byte{
+			"go.mod": {}, "main.go": {},
+		}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

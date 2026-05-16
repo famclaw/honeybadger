@@ -85,13 +85,14 @@ func ClassifyFile(rel string, content []byte) FileRole {
 	base := path.Base(p)
 	ext := path.Ext(p)
 
+	// Test material is classified first: a SKILL.md or rule YAML living under
+	// a testdata/ tree is a deliberately crafted fixture, not a live artifact.
+	if isTestPath(p, base) {
+		return RoleTest
+	}
 	// SKILL.md is the skill manifest — the subject of analysis, not prose.
 	if base == "skill.md" {
 		return RoleCode
-	}
-
-	if isTestPath(p, base) {
-		return RoleTest
 	}
 	if (ext == ".yaml" || ext == ".yml") && isRuleYAML(content) {
 		return RoleRules
@@ -211,19 +212,36 @@ var appBuildManifests = map[string]bool{
 	"build.gradle": true, "build.gradle.kts": true,
 }
 
+// compiledSourceExts are source extensions of compiled-language applications.
+var compiledSourceExts = map[string]bool{
+	".go": true, ".rs": true, ".java": true, ".kt": true, ".scala": true,
+}
+
+// minAppSourceFiles is how many compiled-language source files must accompany
+// a build manifest before a repository counts as an application. Requiring
+// real source — not just the manifest — closes an evasion path: an attacker
+// cannot drop a 3-byte go.mod into a malicious skill bundle to suppress the
+// skill-oriented scanners, because the source files would still be missing.
+const minAppSourceFiles = 3
+
 // IsApplicationRepo reports whether the repository is a compiled-language
 // application. The skill-oriented scanners (capability drift, skillsafety
 // exfil-intent correlation) analyse a skill's own files; running them across
 // an application's source tree is a category error — the application's code
 // is the implementation of a tool, not "the skill's scripts".
 func IsApplicationRepo(files map[string][]byte) bool {
+	hasManifest := false
+	sourceCount := 0
 	for p := range files {
-		base := strings.ToLower(path.Base(strings.ReplaceAll(p, "\\", "/")))
-		if appBuildManifests[base] {
-			return true
+		norm := strings.ToLower(strings.ReplaceAll(p, "\\", "/"))
+		if appBuildManifests[path.Base(norm)] {
+			hasManifest = true
+		}
+		if compiledSourceExts[path.Ext(norm)] {
+			sourceCount++
 		}
 	}
-	return false
+	return hasManifest && sourceCount >= minAppSourceFiles
 }
 
 // ApplyFileRoles re-weights findings by the role of the file each was found
