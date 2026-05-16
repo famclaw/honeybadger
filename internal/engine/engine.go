@@ -55,6 +55,13 @@ func ComputeVerdict(findings []scan.Finding, paranoia scan.ParanoiaLevel, llmVer
 			keyFinding = f.Message
 		}
 
+		// INFO findings are informational by definition and never escalate
+		// the verdict — not even the WARN band at paranoid, where the block
+		// threshold is LOW.
+		if rank <= scan.SeverityRank(scan.SevInfo) {
+			continue
+		}
+
 		if rank >= thresholdRank {
 			verdict = "FAIL"
 			reasoning = fmt.Sprintf("Finding at %s severity meets or exceeds %s threshold", f.Severity, threshold)

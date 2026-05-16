@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.5.1 -- 2026-05-16
+
+### Fixed
+- Self-check false positives: HoneyBadger now passes its own scan at every
+  paranoia tier (`minimal`/`family`/`strict`/`paranoid` all PASS). Previously
+  the repo failed its own scan above `minimal`, which stripped all signal from
+  a `FAIL` verdict at four of five tiers.
+
+### Added
+- File-role classification (`internal/scan/fileclass.go`): every scanned file
+  is classified as code, test, documentation, config, or rule corpus. Findings
+  in test fixtures and in HoneyBadger's own rule definitions are dropped;
+  findings in documentation are downgraded. A threat *described* in prose is no
+  longer scored like a threat *present* in executable code. The rule-corpus
+  role is content-sniffed, so it does not blind scans of third-party repos.
+- Markdown-aware documentation handling (`internal/scan/markdown.go`): a
+  detector match in prose (a sentence, a table cell) is dropped; a match inside
+  a fenced or indented code block is reduced to INFO.
+- `scan.IsApplicationRepo`: the capability-drift and skillsafety exfil-intent
+  scanners are skill-oriented; they no longer run across the source tree of a
+  compiled application that merely bundles a `SKILL.md`.
+- `TestCLI_SelfScanNoFalsePositive` regression guard.
+
+### Changed
+- `ComputeVerdict`: INFO findings never escalate the verdict. At `paranoid`,
+  the WARN band coincided with INFO severity, so a single informational
+  finding escalated to FAIL.
+- `attestation`: missing SHA256SUMS / cosign signatures are release-artifact
+  checks — reported at INFO for source-tree scans, and only at HIGH/MEDIUM
+  when a packaged release artifact is scanned.
+- The release-workflow self-check gate is tightened from `--paranoia minimal`
+  to `--paranoia paranoid`.
+
 ## v0.5.0 -- 2026-05-16
 
 ### Added

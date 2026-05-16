@@ -62,6 +62,15 @@ func TestComputeVerdict(t *testing.T) {
 			wantHasKF: true,
 		},
 		{
+			name: "INFO finding at paranoid -> PASS",
+			findings: []scan.Finding{
+				{Type: "finding", Severity: scan.SevInfo, Check: "meta", Message: "informational note"},
+			},
+			paranoia:  scan.ParanoiaParanoid,
+			wantV:     "PASS",
+			wantHasKF: true,
+		},
+		{
 			name: "CRITICAL finding at minimal -> FAIL",
 			findings: []scan.Finding{
 				{Type: "finding", Severity: scan.SevCritical, Check: "secrets", Message: "critical secret"},
@@ -101,15 +110,6 @@ func TestComputeVerdict(t *testing.T) {
 			name: "LOW finding at paranoid -> FAIL",
 			findings: []scan.Finding{
 				{Type: "finding", Severity: scan.SevLow, Check: "meta", Message: "low issue"},
-			},
-			paranoia:  scan.ParanoiaParanoid,
-			wantV:     "FAIL",
-			wantHasKF: true,
-		},
-		{
-			name: "INFO finding at paranoid -> WARN escalated to FAIL",
-			findings: []scan.Finding{
-				{Type: "finding", Severity: scan.SevInfo, Check: "meta", Message: "info"},
 			},
 			paranoia:  scan.ParanoiaParanoid,
 			wantV:     "FAIL",

@@ -136,6 +136,15 @@ func checkAttestationWorkflow(repo *fetch.Repo, opts scan.Options, out chan<- sc
 	}
 }
 
+// isReleaseArtifactScan reports whether the scan target is a packaged release
+// artifact rather than a source tree. SHA256SUMS and cosign signatures are
+// produced at release time and published as release assets — they never live
+// in a source repository — so their absence is only a finding when a release
+// artifact is being scanned.
+func isReleaseArtifactScan(repo *fetch.Repo) bool {
+	return repo.Platform == "tarball"
+}
+
 func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path := range repo.Files {
 		base := strings.ToLower(path)
@@ -154,13 +163,26 @@ func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Findin
 		}
 	}
 
-	if opts.Paranoia == scan.ParanoiaParanoid {
+	if opts.Paranoia != scan.ParanoiaParanoid {
+		return
+	}
+	if isReleaseArtifactScan(repo) {
 		out <- scan.Finding{
 			Type:     "finding",
 			Severity: scan.SevHigh,
 			Check:    "attestation",
 			Message:  "No SHA256SUMS file for release verification",
 		}
+		return
+	}
+	// Source-tree scan: release artifacts legitimately do not exist yet. This
+	// stays INFO so it never blocks — ComputeVerdict's rule that INFO never
+	// escalates the verdict is what keeps a source self-scan green at paranoid.
+	out <- scan.Finding{
+		Type:     "finding",
+		Severity: scan.SevInfo,
+		Check:    "attestation",
+		Message:  "No SHA256SUMS file in scanned source; release-artifact verification requires scanning a published release",
 	}
 }
 
@@ -178,12 +200,22 @@ func checkCosignArtifacts(repo *fetch.Repo, opts scan.Options, out chan<- scan.F
 		}
 	}
 
-	if opts.Paranoia == scan.ParanoiaParanoid {
+	if opts.Paranoia != scan.ParanoiaParanoid {
+		return
+	}
+	if isReleaseArtifactScan(repo) {
 		out <- scan.Finding{
 			Type:     "finding",
 			Severity: scan.SevMedium,
 			Check:    "attestation",
 			Message:  "No cosign signature artifacts found",
 		}
+		return
+	}
+	out <- scan.Finding{
+		Type:     "finding",
+		Severity: scan.SevInfo,
+		Check:    "attestation",
+		Message:  "No cosign signature artifacts in scanned source; signature verification requires scanning a published release",
 	}
 }

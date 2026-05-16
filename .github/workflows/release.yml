@@ -32,17 +32,16 @@ jobs:
 
       - uses: anchore/sbom-action/download-syft@v0
 
-      # Self-check: HoneyBadger scans itself before release
-      # Self-check at minimal paranoia (secrets + CVE only). Higher levels
-      # false-positive on our own scanner: supplychain.go contains reverse shell
-      # and crypto mining regexes as detection patterns, which the supply chain
-      # scanner flags as threats. This is inherent to any security scanner.
+      # Self-check: HoneyBadger scans itself before release at the strictest
+      # paranoia tier. File-role classification (rules corpus, test fixtures,
+      # documentation prose) lets the scanner tell a threat it *describes* from
+      # one it *contains*, so the repo passes its own paranoid scan cleanly.
       # Build, run, and clean up in a single step to keep git state clean for GoReleaser.
       - name: HoneyBadger self-check
         run: |
           CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w" -o /tmp/honeybadger-selfcheck ./cmd/honeybadger
           /tmp/honeybadger-selfcheck scan . \
-            --paranoia minimal --offline --format ndjson | tee /tmp/self-report.json
+            --paranoia paranoid --offline --format ndjson | tee /tmp/self-report.json
           verdict=$(grep '"type":"result"' /tmp/self-report.json | jq -r .verdict)
           if [ "$verdict" = "FAIL" ]; then
             echo "::error::Self-check verdict=FAIL — aborting release"

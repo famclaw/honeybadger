@@ -73,7 +73,7 @@ findings by rule ID, optionally constrained by a glob pattern or snippet SHA256:
     SECRET_IN_CODE *.test.yaml
 
     # Suppress a specific snippet by SHA256
-    SECRET_IN_CODE sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    SECRET_IN_CODE sha256:<64-hex-digit-sha256-of-the-snippet>
 
 Suppressed findings are excluded from the verdict. A `suppression_summary`
 NDJSON event is emitted when findings are suppressed. In text mode, a summary
@@ -291,6 +291,10 @@ attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
 poisoning, cross-tool shadowing, capability mismatch, and rug-pull drift.
 Detection rules are YAML-defined and runtime-extensible. Binaries signed with
 Sigstore cosign, SPDX SBOMs attached to every release.
+
+File-role classification distinguishes a threat *described* in documentation
+or defined in a rule corpus from one *present* in executable code, so
+HoneyBadger passes its own scan cleanly at every paranoia tier.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

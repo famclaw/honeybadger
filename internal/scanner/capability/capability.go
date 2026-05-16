@@ -36,6 +36,21 @@ type envEvidence struct {
 // (declared:true) are skipped. The scanner is gated by paranoia level in the
 // engine layer — Run itself does not check Paranoia.
 func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, errs chan<- scan.RuntimeError) {
+	// 0. Capability drift compares a skill's declared requires.* against its
+	// own scripts. A compiled application that merely bundles a SKILL.md is
+	// not a skill — its source tree is the implementation of a tool — so
+	// drift analysis would only produce category-error noise.
+	if scan.IsApplicationRepo(repo.Files) {
+		out <- scan.Finding{
+			Type:     "finding",
+			Check:    "capability",
+			Severity: scan.SevInfo,
+			RuleID:   "cap-app-repo",
+			Message:  "repository is a compiled application bundling a skill manifest; capability-drift analysis applies to skills and was skipped",
+		}
+		return
+	}
+
 	// 1. Locate SKILL.md (case-insensitive)
 	var skillContent []byte
 	for path, content := range repo.Files {
