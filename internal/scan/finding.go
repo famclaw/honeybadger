@@ -109,4 +109,6 @@ type Options struct {
 	GitlabToken       string
 	LLMTimeout        time.Duration
 	Rules             *rules.RuleSet
+	ToolManifest      string // path to MCP tools/list JSON (--tool-manifest)
+	ToolBaseline      string // path to approved tools/list JSON (--tool-baseline)
 }

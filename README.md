@@ -42,6 +42,8 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
       --db string            Path to audit trail file
       --installed-sha string SHA256 of installed version
       --installed-tool-hash  SHA256 of installed MCP tool definitions
+      --tool-manifest string  Path to MCP tools/list JSON for tool-definition analysis
+      --tool-baseline string  Path to approved tools/list JSON for rug-pull diffing
       --force                Skip scan, exit 0
       --offline              Skip network calls, scan local only
       --path string          Subdirectory within repo to scan
@@ -99,8 +101,15 @@ line is printed after the verdict.
 | RTL override | skillsafety | Right-to-left text direction manipulation (family+) |
 | Data exfil intent | skillsafety | Sensitive paths + external/webhook URLs correlation (family+) |
 | Multi-language hiding | skillsafety | Unexpected script blocks in primary-language skills (family+) |
+| MCP tool injection | mcptool | Prompt injection in MCP tool/param descriptions, titles, defaults, enums (family+) |
+| MCP tool obfuscation | mcptool | Zero-width / homoglyph / RTL / Tags-block chars in tool definitions (family+) |
+| MCP cross-tool shadowing | mcptool | One tool's description redefining another tool's behavior (family+) |
+| MCP capability mismatch | mcptool | Tool declares readOnlyHint but params/source show writes (family+) |
+| MCP rug pull | mcptool | Tool definitions changed since the approved baseline (family+) |
 
 ## Why HoneyBadger
+
+HoneyBadger analyzes MCP tool definitions from a caller-supplied manifest and never executes the server, unlike scanners that call `tools/list` on a live server.
 
 | | HoneyBadger | Cisco MCP Scanner | Snyk agent-scan | Proximity |
 |---|:-:|:-:|:-:|:-:|
@@ -210,9 +219,32 @@ honeybadger/
 │   │   │   ├── bins.go          # Executable invocation detection
 │   │   │   ├── env.go           # Environment variable read detection
 │   │   │   └── capability_test.go
-│   │   └── attestation/
-│   │       ├── attestation.go   # Attestation verification scanner
-│   │       └── attestation_test.go
+│   │   ├── attestation/
+│   │   │   ├── attestation.go   # Attestation verification scanner
+│   │   │   └── attestation_test.go
+│   │   └── mcptool/
+│   │       ├── mcptool.go           # MCP tool scanner entry point
+│   │       ├── manifest.go          # tools/list JSON loader
+│   │       ├── model.go             # MCP tool definition types
+│   │       ├── detect.go            # Top-level detection dispatcher
+│   │       ├── extract.go           # Source-based tool extraction (no manifest)
+│   │       ├── textfields.go        # Text field enumeration across tool structs
+│   │       ├── injection.go         # Prompt-injection pattern detection
+│   │       ├── unicode.go           # Zero-width / homoglyph / RTL / Tags-block detection
+│   │       ├── shadowing.go         # Cross-tool shadowing detection
+│   │       ├── capability.go        # readOnlyHint vs params/source mismatch detection
+│   │       ├── rugpull.go           # Baseline diff / rug-pull detection
+│   │       ├── mcptool_test.go
+│   │       ├── manifest_test.go
+│   │       ├── detect_test.go
+│   │       ├── extract_test.go
+│   │       ├── textfields_test.go
+│   │       ├── injection_test.go
+│   │       ├── unicode_test.go
+│   │       ├── shadowing_test.go
+│   │       ├── capability_test.go
+│   │       ├── rugpull_test.go
+│   │       └── integration_test.go
 │   ├── store/
 │   │   ├── audit.go          # JSONL audit trail writer
 │   │   └── audit_test.go
@@ -220,6 +252,13 @@ honeybadger/
 │       ├── fixtures.go       # Builder functions returning *fetch.Repo with in-memory files
 │       ├── fixtures_test.go  # Smoke tests for all fixtures
 │       └── mock_osv.go       # Mock osv.dev server for testing CVE scanner
+├── rules/
+│   ├── supplychain/               # Supply-chain detection YAML rules
+│   ├── skillsafety/               # Skill-safety detection YAML rules
+│   └── mcptool/
+│       ├── concealment.yaml       # Concealment / obfuscation prompt-injection patterns
+│       ├── threat-framing.yaml    # Threat-framing prompt-injection patterns
+│       └── silent-redirect.yaml   # Silent-redirect prompt-injection patterns
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/
@@ -247,9 +286,7 @@ honeybadger/
 
 **v0.4.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.4.0)
 
-Seven scanners: secrets, cve, supplychain, meta, capability, skillsafety,
-attestation. Detection rules are YAML-defined and runtime-extensible. Binaries
-signed with Sigstore cosign, SPDX SBOMs attached to every release.
+**v0.5.0 in development** adds the `mcptool` scanner for MCP tool manifest analysis, bringing the total to eight scanners: secrets, cve, supplychain, meta, capability, skillsafety, attestation, mcptool. Detection rules are YAML-defined and runtime-extensible. Binaries signed with Sigstore cosign, SPDX SBOMs attached to every release.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

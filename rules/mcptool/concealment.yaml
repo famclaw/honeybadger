@@ -1,0 +1,15 @@
+id: mcp-concealment
+kind: pattern
+scanner: mcptool
+category: prompt_injection
+severity: HIGH
+signal: tool_text
+message: Tool definition instructs the agent to conceal behavior from the user
+more_info_url: https://owasp.org/www-project-mcp-top-10/
+patterns:
+  - regex: '(?i)\b(do not|don.?t|never)\s+(mention|tell|inform|notify|reveal)\b'
+    description: concealment directive
+  - regex: '(?i)\b(hide|keep)\s+(this|it|that)\s+(from|secret)\b'
+    description: concealment directive
+  - regex: '(?i)\bwithout\s+(the\s+)?user.?s?\s+(knowledge|awareness|consent)\b'
+    description: covert action directive

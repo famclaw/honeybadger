@@ -104,6 +104,37 @@ Each line is a self-contained JSON object:
 
 The MCP server returns errors inline in the tool result rather than using exit codes.
 
+## Scanning MCP tool definitions
+
+### Capture a server's tool manifest
+
+First, retrieve the `tools/list` response from the MCP server and save it to a file:
+
+    # Using mcp-client or any MCP-compatible tool to capture tools/list output
+    mcp-client stdio -- ./my-mcp-server 2>/dev/null \
+      | jq '.result' > tools.json
+
+### Scan tool definitions from a manifest
+
+    honeybadger scan ./my-mcp-server --tool-manifest tools.json
+
+HoneyBadger reads `tools.json` (a `tools/list` JSON response) and analyzes every
+tool definition for prompt injection, Unicode obfuscation, cross-tool shadowing,
+and capability mismatch. The server binary is never executed during scanning.
+
+### Rug-pull detection against an approved baseline
+
+Save the approved tool definitions once, then compare on each scan:
+
+    # Save approved baseline
+    cp tools.json approved.json
+
+    # Later, after an update, detect changes
+    honeybadger scan ./my-mcp-server --tool-manifest tools.json --tool-baseline approved.json
+
+Any tool definitions that differ from `approved.json` are flagged as rug-pull
+findings, letting you detect silent behavior changes between server versions.
+
 ## CI/CD Integration
 
 ### GitHub Action step
