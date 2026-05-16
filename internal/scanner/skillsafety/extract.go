@@ -122,26 +122,27 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 	// by design, and Markdown prose merely describes them — none constitute a
 	// live threat, so the signal pass restricts itself to real code/config and
 	// to code blocks within documentation.
-	//
-	// The exfil-intent correlation (sensitive paths + URLs) is meaningful
-	// within a skill's small script bundle; across a compiled application's
-	// source tree it only produces category-error noise, so it is skipped for
-	// application repositories.
-	if !scan.IsApplicationRepo(repo.Files) {
-		for path, content := range repo.Files {
-			role := scan.ClassifyFile(path, content)
-			switch role {
-			case scan.RoleTest, scan.RoleRules:
-				continue
-			}
-			// Blank Markdown prose in documentation only — SKILL.md is the skill
-			// manifest, where prose is the executable instruction surface.
-			if role == scan.RoleDoc && scan.IsMarkdown(path) {
-				content = scan.CodeBlockOnly(content)
-			}
-			s := string(content)
-			fileLines := strings.Split(s, "\n")
+	isAppRepo := scan.IsApplicationRepo(repo.Files)
+	for path, content := range repo.Files {
+		role := scan.ClassifyFile(path, content)
+		switch role {
+		case scan.RoleTest, scan.RoleRules:
+			continue
+		}
+		// Blank Markdown prose in documentation only — SKILL.md is the skill
+		// manifest, where prose is the executable instruction surface.
+		if role == scan.RoleDoc && scan.IsMarkdown(path) {
+			content = scan.CodeBlockOnly(content)
+		}
+		s := string(content)
+		fileLines := strings.Split(s, "\n")
 
+		// The exfil-intent correlation (sensitive paths + URLs) is meaningful
+		// within a skill's small script bundle; across a compiled application's
+		// source tree it only produces category-error noise, so it is skipped
+		// for application repos. Exec-instruction detection below is a separate
+		// signal and runs regardless.
+		if !isAppRepo {
 			for _, ds := range activeSensitivePaths {
 				for _, sp := range ds.entries {
 					if strings.Contains(s, sp) {
@@ -172,17 +173,17 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 					}
 				}
 			}
+		}
 
-			// Exec instructions.
-			for i, line := range fileLines {
-				if loc := execRe.FindString(line); loc != "" {
-					sig.ExecInstructions = append(sig.ExecInstructions, Match{
-						Pattern: execRe.String(),
-						Text:    loc,
-						File:    path,
-						Line:    i + 1,
-					})
-				}
+		// Exec instructions.
+		for i, line := range fileLines {
+			if loc := execRe.FindString(line); loc != "" {
+				sig.ExecInstructions = append(sig.ExecInstructions, Match{
+					Pattern: execRe.String(),
+					Text:    loc,
+					File:    path,
+					Line:    i + 1,
+				})
 			}
 		}
 	}

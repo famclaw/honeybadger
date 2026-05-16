@@ -30,8 +30,10 @@ func CodeBlockLines(content []byte) map[int]bool {
 		if inFence {
 			inCode[lineNum] = true
 			// CommonMark: a closing fence must be at least as long as the
-			// opening one, so compare against the full opening run.
-			if closeRun := leadingRun(trimmed, fenceMarker[0]); len(closeRun) >= len(fenceMarker) {
+			// opening one and carry no non-whitespace after the fence (an
+			// info string like ```json only opens, never closes).
+			if closeRun := leadingRun(trimmed, fenceMarker[0]); len(closeRun) >= len(fenceMarker) &&
+				strings.TrimSpace(trimmed[len(closeRun):]) == "" {
 				inFence = false
 			}
 			continue

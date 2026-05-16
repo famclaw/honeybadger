@@ -69,6 +69,26 @@ func TestCodeBlockLinesNestedFence(t *testing.T) {
 	}
 }
 
+// A line with an info string (```json) is a valid OPENING fence but never a
+// closing one — CommonMark forbids non-whitespace after a closing fence — so
+// it must not terminate an enclosing code block.
+func TestCodeBlockLinesInfoStringDoesNotClose(t *testing.T) {
+	md := "```\n" + // 1 open
+		"```json\n" + // 2 info-string line — NOT a closing fence
+		"{\"k\": 1}\n" + // 3 still code
+		"```\n" + // 4 real close
+		"prose after\n" // 5 prose
+	got := CodeBlockLines([]byte(md))
+	for _, ln := range []int{1, 2, 3, 4} {
+		if !got[ln] {
+			t.Errorf("line %d should be inside the code block", ln)
+		}
+	}
+	if got[5] {
+		t.Error("line 5 should be prose after the fence closed")
+	}
+}
+
 func TestIsMarkdown(t *testing.T) {
 	for _, p := range []string{"README.md", "docs/X.MARKDOWN", "a/b.md"} {
 		if !IsMarkdown(p) {

@@ -174,12 +174,19 @@ func TestRunSkipsApplicationRepo(t *testing.T) {
 	if len(rerrs) != 0 {
 		t.Fatalf("unexpected runtime errors: %+v", rerrs)
 	}
+	sawAppRepo := false
 	for _, f := range findings {
 		if strings.HasPrefix(f.RuleID, "cap-") && f.RuleID != "cap-app-repo" {
 			t.Fatalf("application repo should yield no drift finding, got %s: %s", f.RuleID, f.Message)
 		}
-		if f.Severity != scan.SevInfo {
-			t.Fatalf("application-repo notice should be INFO, got %s", f.Severity)
+		if f.RuleID == "cap-app-repo" {
+			sawAppRepo = true
+			if f.Severity != scan.SevInfo {
+				t.Fatalf("application-repo notice should be INFO, got %s", f.Severity)
+			}
 		}
+	}
+	if !sawAppRepo {
+		t.Fatalf("expected a cap-app-repo finding, got %+v", findings)
 	}
 }
