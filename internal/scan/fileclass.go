@@ -207,6 +207,11 @@ func severityForRank(rank int) string {
 // in: test/rule-corpus findings are dropped, documentation findings are
 // downgraded, code/config findings pass through. Findings with no File field
 // are left untouched (the caller's scanner-level scoping handles those).
+//
+// For Markdown documents the line of the match is consulted: a match in prose
+// (a sentence, a table cell) is dropped because prose only *describes* a
+// pattern, while a match inside a code block is reduced to INFO because an
+// example snippet is not the executable artifact.
 func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 	kept := make([]Finding, 0, len(findings))
 	for _, f := range findings {
@@ -214,7 +219,18 @@ func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 			kept = append(kept, f)
 			continue
 		}
-		role := ClassifyFile(f.File, files[f.File])
+		content := files[f.File]
+		role := ClassifyFile(f.File, content)
+
+		if role == RoleDoc && IsMarkdown(f.File) && f.Line > 0 {
+			if !CodeBlockLines(content)[f.Line] {
+				continue // prose match — described, not present
+			}
+			f.Severity = SevInfo // code-block example — informational only
+			kept = append(kept, f)
+			continue
+		}
+
 		sev, ok := AdjustSeverity(f.Severity, role)
 		if !ok {
 			continue

@@ -118,7 +118,21 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 	}
 
 	// Scan all text files for sensitive paths, URLs, exec instructions.
+	// Test fixtures and honeybadger's own rule corpus define attack patterns
+	// by design, and Markdown prose merely describes them — none constitute a
+	// live threat, so the signal pass restricts itself to real code/config and
+	// to code blocks within documentation.
 	for path, content := range repo.Files {
+		role := scan.ClassifyFile(path, content)
+		switch role {
+		case scan.RoleTest, scan.RoleRules:
+			continue
+		}
+		// Blank Markdown prose in documentation only — SKILL.md is the skill
+		// manifest, where prose is the executable instruction surface.
+		if role == scan.RoleDoc && scan.IsMarkdown(path) {
+			content = scan.CodeBlockOnly(content)
+		}
 		s := string(content)
 		fileLines := strings.Split(s, "\n")
 

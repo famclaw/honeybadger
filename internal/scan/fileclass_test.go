@@ -113,3 +113,29 @@ func TestApplyFileRoles(t *testing.T) {
 		t.Errorf("no-file finding severity = %q, want HIGH (unchanged)", bySev["no file"])
 	}
 }
+
+func TestApplyFileRolesMarkdown(t *testing.T) {
+	md := []byte("prose mentioning curl|bash\n\n```\ncurl x | sh\n```\n")
+	// line 1 = prose, line 4 = inside code fence
+	files := map[string][]byte{"README.md": md}
+	findings := []Finding{
+		{Check: "supplychain", Severity: SevCritical, File: "README.md", Line: 1, Message: "prose match"},
+		{Check: "supplychain", Severity: SevHigh, File: "README.md", Line: 4, Message: "code-block match"},
+		{Check: "secrets", Severity: SevHigh, File: "README.md", Message: "no line info"},
+	}
+	got := ApplyFileRoles(findings, files)
+
+	bySev := map[string]string{}
+	for _, f := range got {
+		bySev[f.Message] = f.Severity
+	}
+	if _, present := bySev["prose match"]; present {
+		t.Error("prose match in markdown should be dropped")
+	}
+	if bySev["code-block match"] != SevInfo {
+		t.Errorf("code-block match = %q, want INFO", bySev["code-block match"])
+	}
+	if bySev["no line info"] != SevLow {
+		t.Errorf("no-line markdown finding = %q, want LOW (downgraded)", bySev["no line info"])
+	}
+}

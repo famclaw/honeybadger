@@ -158,3 +158,34 @@ func TestExtract(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractSkipsNonSourceFiles verifies the all-files signal pass ignores
+// honeybadger's own rule corpus, test fixtures, and Markdown prose — content
+// that describes attack patterns rather than constituting them.
+func TestExtractSkipsNonSourceFiles(t *testing.T) {
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("loading rules: %v", err)
+	}
+	opts := scan.Options{Rules: rs}
+
+	files := map[string][]byte{
+		"SKILL.md": []byte("---\nname: test\n---\nA clean skill description."),
+		// Rule corpus: literally defines the sensitive-path dictionary.
+		"rules/exfil.yaml": []byte("id: ss-sensitive-paths\nkind: dictionary\n" +
+			"scanner: skillsafety\ncategory: exfil_intent\nseverity: HIGH\n" +
+			"message: m\npackages:\n  - \"~/.ssh/\"\n  - \"id_rsa\"\n"),
+		// Test fixture: webhook URL and path are fixtures, not threats.
+		"exfil_test.go": []byte("u := \"https://webhook.site/abc123\"\np := \"~/.ssh/id_rsa\"\n"),
+		// Documentation prose merely describing what the scanner detects.
+		"README.md": []byte("HoneyBadger flags access to ~/.ssh/ paired with https://webhook.site URLs.\n"),
+	}
+	sig := Extract(&fetch.Repo{Files: files}, opts)
+
+	if len(sig.SensitivePaths) != 0 {
+		t.Errorf("SensitivePaths = %d, want 0 (rule/test/prose sources skipped)", len(sig.SensitivePaths))
+	}
+	if len(sig.WebhookURLs) != 0 {
+		t.Errorf("WebhookURLs = %d, want 0 (rule/test/prose sources skipped)", len(sig.WebhookURLs))
+	}
+}
