@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.5.0 -- 2026-05-15
+## v0.5.0 -- 2026-05-16
 
 ### Added
 - `mcptool` scanner (8th scanner): analyzes MCP tool definitions for prompt
