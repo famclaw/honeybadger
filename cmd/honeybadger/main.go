@@ -315,6 +315,11 @@ func run(cfg runConfig) (int, error) {
 		allFindings = append(allFindings, toolFindings...)
 	}
 
+	// 7a. Re-weight findings by file role: drop matches in test fixtures and
+	// honeybadger's own rule corpus, downgrade matches in documentation. This
+	// keeps "a threat described" from scoring like "a threat present".
+	allFindings = scan.ApplyFileRoles(allFindings, repo.Files)
+
 	// 7b. Apply .honeybadgerignore suppression before emitting.
 	var suppressedCount int
 	if raw, ok := repo.Files[".honeybadgerignore"]; ok {

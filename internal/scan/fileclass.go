@@ -1,0 +1,226 @@
+package scan
+
+import (
+	"path"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// FileRole classifies a repository file by what kind of artifact it is.
+// Scanners and the verdict pipeline use the role to discriminate a threat
+// that is *present* in executable code from one merely *described* in prose,
+// embedded in a test fixture, or defined in honeybadger's own rule corpus.
+type FileRole int
+
+const (
+	// RoleCode is real source: findings carry full severity.
+	RoleCode FileRole = iota
+	// RoleTest is a test file or fixture. Attack strings here are expected
+	// test inputs, not live threats — findings are dropped.
+	RoleTest
+	// RoleDoc is documentation/prose. A described pattern is far weaker
+	// signal than a present one — findings are downgraded.
+	RoleDoc
+	// RoleConfig is configuration (CI workflows, JSON/TOML/INI). Findings
+	// keep their severity; scanner-specific scoping handles config noise.
+	RoleConfig
+	// RoleRules is a honeybadger rule definition (detection patterns by
+	// design). Pattern matches here are data, not threats — findings dropped.
+	RoleRules
+)
+
+// String renders the role for diagnostics.
+func (r FileRole) String() string {
+	switch r {
+	case RoleCode:
+		return "code"
+	case RoleTest:
+		return "test"
+	case RoleDoc:
+		return "doc"
+	case RoleConfig:
+		return "config"
+	case RoleRules:
+		return "rules"
+	default:
+		return "unknown"
+	}
+}
+
+// knownScanners are the scanner names a honeybadger rule YAML may target.
+var knownScanners = map[string]bool{
+	"supplychain": true, "skillsafety": true, "secrets": true,
+	"capability": true, "cve": true, "meta": true,
+	"mcptool": true, "attestation": true,
+}
+
+// testDirSegments are path segments that mark a file as test material.
+var testDirSegments = map[string]bool{
+	"testdata": true, "testfixture": true, "testfixtures": true,
+	"__tests__": true, "__mocks__": true,
+}
+
+// docExts are file extensions treated as documentation/prose.
+var docExts = map[string]bool{
+	".md": true, ".markdown": true, ".rst": true, ".txt": true, ".adoc": true,
+}
+
+// docBasenames are extensionless files treated as documentation.
+var docBasenames = map[string]bool{
+	"LICENSE": true, "NOTICE": true, "AUTHORS": true, "COPYING": true,
+}
+
+// configExts are configuration file extensions.
+var configExts = map[string]bool{
+	".yaml": true, ".yml": true, ".toml": true, ".ini": true,
+	".cfg": true, ".json": true,
+}
+
+// ClassifyFile determines the FileRole of a repository file from its path
+// (relative, any OS separator) and, when available, its content. Content is
+// only consulted to recognise honeybadger rule YAML; nil content is fine.
+func ClassifyFile(rel string, content []byte) FileRole {
+	p := strings.ToLower(strings.ReplaceAll(rel, "\\", "/"))
+	base := path.Base(p)
+	ext := path.Ext(p)
+
+	// SKILL.md is the skill manifest — the subject of analysis, not prose.
+	if base == "skill.md" {
+		return RoleCode
+	}
+
+	if isTestPath(p, base) {
+		return RoleTest
+	}
+	if (ext == ".yaml" || ext == ".yml") && isRuleYAML(content) {
+		return RoleRules
+	}
+	if isDocPath(p, base, ext) {
+		return RoleDoc
+	}
+	if configExts[ext] || strings.HasPrefix(base, "dockerfile") || hasSegment(p, ".github") {
+		return RoleConfig
+	}
+	return RoleCode
+}
+
+func isTestPath(p, base string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if testDirSegments[seg] {
+			return true
+		}
+	}
+	if strings.HasSuffix(base, "_test.go") {
+		return true
+	}
+	// JS/TS: foo.test.ts, foo.spec.js
+	if strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") {
+		return true
+	}
+	// Python: test_foo.py, foo_test.py
+	if strings.HasSuffix(p, ".py") &&
+		(strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) {
+		return true
+	}
+	return false
+}
+
+func isDocPath(p, base, ext string) bool {
+	if docExts[ext] {
+		return true
+	}
+	if docBasenames[strings.ToUpper(base)] {
+		return true
+	}
+	return hasSegment(p, "docs") || hasSegment(p, "doc")
+}
+
+func hasSegment(p, seg string) bool {
+	for _, s := range strings.Split(p, "/") {
+		if s == seg {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleSniff is the minimal shape of a honeybadger rule YAML.
+type ruleSniff struct {
+	ID      string `yaml:"id"`
+	Kind    string `yaml:"kind"`
+	Scanner string `yaml:"scanner"`
+}
+
+// isRuleYAML reports whether content parses as a honeybadger detection rule.
+func isRuleYAML(content []byte) bool {
+	if len(content) == 0 {
+		return false
+	}
+	var r ruleSniff
+	if err := yaml.Unmarshal(content, &r); err != nil {
+		return false
+	}
+	if r.ID == "" || !knownScanners[r.Scanner] {
+		return false
+	}
+	return r.Kind == "pattern" || r.Kind == "dictionary"
+}
+
+// AdjustSeverity maps a finding's raw severity through the file role it was
+// found in. The second return is false when the finding should be dropped.
+func AdjustSeverity(raw string, role FileRole) (string, bool) {
+	switch role {
+	case RoleTest, RoleRules:
+		return "", false
+	case RoleDoc:
+		// A described threat is two severity levels weaker than a present one.
+		rank := SeverityRank(raw) - 2
+		if rank < 1 {
+			return "", false
+		}
+		return severityForRank(rank), true
+	default: // RoleCode, RoleConfig
+		return raw, true
+	}
+}
+
+// severityForRank is the inverse of SeverityRank.
+func severityForRank(rank int) string {
+	switch rank {
+	case 5:
+		return SevCritical
+	case 4:
+		return SevHigh
+	case 3:
+		return SevMedium
+	case 2:
+		return SevLow
+	case 1:
+		return SevInfo
+	default:
+		return ""
+	}
+}
+
+// ApplyFileRoles re-weights findings by the role of the file each was found
+// in: test/rule-corpus findings are dropped, documentation findings are
+// downgraded, code/config findings pass through. Findings with no File field
+// are left untouched (the caller's scanner-level scoping handles those).
+func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
+	kept := make([]Finding, 0, len(findings))
+	for _, f := range findings {
+		if f.File == "" {
+			kept = append(kept, f)
+			continue
+		}
+		role := ClassifyFile(f.File, files[f.File])
+		sev, ok := AdjustSeverity(f.Severity, role)
+		if !ok {
+			continue
+		}
+		f.Severity = sev
+		kept = append(kept, f)
+	}
+	return kept
+}
