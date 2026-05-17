@@ -196,7 +196,11 @@ honeybadger/
 │   │   ├── finding_test.go
 │   │   ├── scan.go          # ScanFunc type, RunAll (concurrent runner with fan-in)
 │   │   ├── scan_test.go
-│   │   └── helpers.go       # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
+│   │   ├── helpers.go       # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
+│   │   ├── fileclass.go     # File-role classifier (Code/Test/Doc/Config/Rules), finding re-weighting
+│   │   ├── fileclass_test.go
+│   │   ├── markdown.go      # Markdown code-block vs prose discrimination
+│   │   └── markdown_test.go
 │   ├── scanner/
 │   │   ├── secrets/
 │   │   │   ├── secrets.go       # Secrets scanner (gitleaks-powered)
@@ -284,7 +288,7 @@ honeybadger/
 
 ## Status
 
-**v0.5.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.5.0)
+**v0.5.1 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.5.1)
 
 Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
 attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
