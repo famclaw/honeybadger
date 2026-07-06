@@ -115,10 +115,6 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: dist/honeybadger-*
-        permissions:
-          id-token: write
-          attestations: write
-          contents: read
 
       # Attest SBOM files
       - name: Attest SBOMs
