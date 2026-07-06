@@ -112,19 +112,9 @@ jobs:
 
       # Attest build provenance for all binaries
       - name: Attest build provenance
-        run: |
-          for f in dist/honeybadger-*; do
-            [ -f "$f" ] || continue
-            case "$f" in
-              *.json|*.bundle|*.sig|*.pem) continue ;;
-            esac
-            echo "Attesting: $f"
-            if ! gh attestation create "$f" --repo "${{ github.repository }}"; then
-              echo "::warning::Attestation failed for $f"
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/honeybadger-*
 
       # Attest SBOM files
       - name: Attest SBOMs
