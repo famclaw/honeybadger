@@ -274,8 +274,62 @@ func CallLLM(ctx context.Context, prompt string, endpoint, apiKey, model string)
 	content := chatResp.Choices[0].Message.Content
 	var verdict LLMVerdict
 	if err := json.Unmarshal([]byte(content), &verdict); err != nil {
-		return nil, fmt.Errorf("llm verdict parse: %w", err)
+		// If strict unmarshal fails, try to extract JSON object from potentially trailing content
+		extracted, extractErr := extractJSONObject(content)
+		if extractErr != nil {
+			return nil, fmt.Errorf("llm verdict parse: %w", err)
+		}
+		if err := json.Unmarshal(extracted, &verdict); err != nil {
+			return nil, fmt.Errorf("llm verdict parse: %w", err)
+		}
 	}
 
 	return &verdict, nil
+}
+
+// extractJSONObject scans for the first balanced { ... } substring in s, tracking
+// quoted-string state so braces inside strings don't miscount. Returns the byte slice
+// of that object; returns an error if no balanced object is found.
+func extractJSONObject(s string) ([]byte, error) {
+	var depth int
+	var start int
+	var inString bool
+	var stringDelimiter rune
+	var escaped bool
+
+	for i, char := range s {
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		switch char {
+		case '\\':
+			escaped = true
+		case '"', '\'':
+			if !inString {
+				inString = true
+				stringDelimiter = char
+			} else if stringDelimiter == char {
+				inString = false
+			}
+		case '{':
+			if !inString {
+				if depth == 0 {
+					start = i
+				}
+				depth++
+			}
+		case '}':
+			if !inString {
+				depth--
+				if depth == 0 {
+					// Found balanced braces, return the content
+					return []byte(s[start : i+1]), nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no balanced JSON object found in content")
 }

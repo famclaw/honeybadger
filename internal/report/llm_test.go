@@ -187,3 +187,68 @@ func TestCallLLMTimeout(t *testing.T) {
 		t.Fatal("expected timeout error, got nil")
 	}
 }
+
+func TestExtractJSONObject(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		wantErr  bool
+	}{
+		{
+			name:     "simple JSON",
+			input:    `{"verdict":"PASS","reasoning":"ok","key_finding":null}`,
+			expected: `{"verdict":"PASS","reasoning":"ok","key_finding":null}`,
+			wantErr:  false,
+		},
+		{
+			name:     "JSON with trailing prose",
+			input:    `{"verdict":"WARN","reasoning":"suspicious outbound call","key_finding":"net/http dial in init()"} some trailing text`,
+			expected: `{"verdict":"WARN","reasoning":"suspicious outbound call","key_finding":"net/http dial in init()"}`,
+			wantErr:  false,
+		},
+		{
+			name:     "JSON with code fences",
+			input:    `{"verdict":"FAIL","reasoning":"found sensitive data","key_finding":"secrets in .env"}` + "\n" + "```js\nconsole.log('test');\n```",
+			expected: `{"verdict":"FAIL","reasoning":"found sensitive data","key_finding":"secrets in .env"}`,
+			wantErr:  false,
+		},
+		{
+			name:    "malformed JSON",
+			input:   `{"verdict":"FAIL","reasoning":"found sensitive data","key_finding":"secrets in .env"`,
+			wantErr: true,
+		},
+		{
+			name:    "no JSON object",
+			input:   "some random text without JSON",
+			wantErr: true,
+		},
+		{
+			name:     "JSON with nested braces in string",
+			input:    `{"verdict":"PASS","reasoning":"found { in string","key_finding":null}`,
+			expected: `{"verdict":"PASS","reasoning":"found { in string","key_finding":null}`,
+			wantErr:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := extractJSONObject(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("extractJSONObject() expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("extractJSONObject() unexpected error: %v", err)
+				return
+			}
+
+			if string(result) != tc.expected {
+				t.Errorf("extractJSONObject() = %s, want %s", string(result), tc.expected)
+			}
+		})
+	}
+}
