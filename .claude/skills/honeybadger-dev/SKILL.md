@@ -17,4 +17,4 @@ description: How to add a scanner, lockfile parser, or rule to HoneyBadger, plus
 - New test fixture: add to `internal/testfixture/` with secrets built at runtime.
 
 ## Before submitting
-`make test` · `make self-check` (scans itself) · `go test -tags integration ./...`. Open the PR against `main`.
+`make build` · `make test` · `make self-check` (scans itself) · `go test -tags integration ./...`. Open the PR against `main`.
