@@ -229,6 +229,16 @@ func TestExtractJSONObject(t *testing.T) {
 			expected: `{"verdict":"PASS","reasoning":"found { in string","key_finding":null}`,
 			wantErr:  false,
 		},
+		{
+			// Regression for the CodeRabbit finding: an apostrophe in
+			// surrounding prose used to open a "string" that never closed,
+			// so the extractor swallowed the `}` inside the JSON and
+			// returned "no balanced JSON object found".
+			name:     "JSON with apostrophe in surrounding text",
+			input:    `Here's the result: {"verdict":"PASS","reasoning":"ok","key_finding":null}`,
+			expected: `{"verdict":"PASS","reasoning":"ok","key_finding":null}`,
+			wantErr:  false,
+		},
 	}
 
 	for _, tc := range tests {

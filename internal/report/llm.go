@@ -306,7 +306,12 @@ func extractJSONObject(s string) ([]byte, error) {
 		switch char {
 		case '\\':
 			escaped = true
-		case '"', '\'':
+		case '"':
+			// JSON only uses double-quoted strings. Tracking `'` as a
+			// delimiter would treat any apostrophe in surrounding prose
+			// (e.g. "Here's the result: {...}", "it's", "don't") as opening
+			// a string that never closes, and the extractor would miss the
+			// balanced `}` inside the JSON.
 			if !inString {
 				inString = true
 				stringDelimiter = char
