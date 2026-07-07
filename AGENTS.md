@@ -111,7 +111,7 @@ Tests live in each package's `_test.go` file. `internal/testfixture` provides in
 - `RunAll` returns a channel of `Event` (Finding or RuntimeError) for concurrent fan-in
 - `isBinaryContent` skips binary files using null-byte detection
 - `CheckToolHash` uses regex to extract tool names from source code
-- `ComputeVerdict` drops `INFO` findings entirely and escalates `WARN` to `FAIL` in `strict`/`paranoid` tiers
+- `ComputeVerdict` never lets `INFO` findings escalate the verdict (they can still be the reported key finding) and escalates `WARN` to `FAIL` in `strict`/`paranoid` tiers
 - `parseGitHubURL` strips the scheme, `github.com/` prefix, `.git` suffix, and trailing slash to extract owner/repo (no SSH/`git@` handling)
 - `buildSourceBlock` prioritizes dependency files, build scripts, and files with findings
 - `extractDependencyNames` parses `package.json` and `requirements.txt` for typosquatting
