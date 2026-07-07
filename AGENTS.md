@@ -105,7 +105,7 @@ Tests live in each package's `_test.go` file. `internal/testfixture` provides in
 ### Notable sharp edges
 
 - File-role classification drops findings in test fixtures and rule corpus (not just test files)
-- LLM verdict uses `--paranoia` level for context but only applies `high` threshold for `WARN` escalation in `strict`/`paranoid` mode
+- LLM prompt receives the `--paranoia` level (and other scan context) as input; the actual `WARN`→`FAIL` escalation happens in `ComputeVerdict`, not the LLM path
 - MCP-server mode optionally accepts `--rules-dir` via CLI, else falls back to `HONEYBADGER_RULES_DIR` / default
 - YAML rule loading is the sole code path — hardcoded Go patterns were removed in v0.3.0
 - `RunAll` returns a channel of `Event` (Finding or RuntimeError) for concurrent fan-in
