@@ -57,7 +57,7 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 | supplychain | Remote script execution, typosquatting, reverse shells | YAML (patterns/dictionaries) | Low to High |
 | meta | SKILL.md frontmatter validation | Code (YAML parsing) | Low to Medium |
 | capability | Drift between declared permissions and code usage | Code (frontmatter vs source) | Medium to High |
-| skillsafety | Prompt injection, Unicode obfuscation, data exfiltration intent | YAML + code (11 languages, 8 checks) | Medium to High |
+| skillsafety | Prompt injection, Unicode obfuscation, data exfiltration intent | YAML + code (7 scripts, 8 checks) | Medium to High |
 | mcptool | MCP tool injection, shadowing, capability mismatch, rug-pull | YAML (concealment, threat-framing, silent-redirect) | Medium to High |
 | attestation | Build provenance, Cosign signatures, SHA256SUMS | Code (GitHub API, file checks) | Info to High |
 
