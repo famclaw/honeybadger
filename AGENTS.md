@@ -39,12 +39,12 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 | Package | Responsibility | Key types / entry points | Depends on (other internal/) |
 |---|---|---|---|
 | engine | Verdict logic, tier/sandbox detection, scanner list builder | `BuildScannerList`, `ComputeVerdict` | scan, report |
-| fetch | Repo routing and fetching | `Route`, `Fetcher`, `Repo` | ignore, rules |
+| fetch | Repo routing and fetching | `Route`, `Fetcher`, `Repo` | — |
 | ignore | .honeybadgerignore parser and suppression | `Parse`, `Set.Match` | scan |
 | report | Output formatting (NDJSON, text, LLM) | `NewNDJSONEmitter`, `NewTextEmitter`, `CallLLM` | scan |
 | scan | Core types, finding struct, severity constants | `Finding`, `ScanFunc`, `RunAll` | fetch |
-| scanner | Individual scanners (7 total) | `Run` functions | scan, fetch |
-| store | Audit trail writer | `WriteAudit` | report |
+| scanner | Individual scanners (8 total) | `Run` functions | scan, fetch, rules |
+| store | Audit trail writer | `WriteAudit` | — |
 | testfixture | In-memory repo builders for testing | `fixtures.go` | fetch |
 
 ### Scanners
