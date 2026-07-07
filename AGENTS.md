@@ -82,7 +82,7 @@ Config loaded from CLI flags, env vars (`HONEYBADGER_LLM`, `GITHUB_TOKEN`), and 
 
 ### Testing conventions
 
-Tests live in each package's `_test.go` file. Golden files and `testdata/` dirs used. `internal/testfixture` provides in-memory repos for testing. `integration_test.go` handles CLI + MCP integration.
+Tests live in each package's `_test.go` file. `internal/testfixture` provides in-memory repos (`CleanRepo`, `SecretsRepo`, etc.) and a mock osv.dev server (`NewMockOSVServer`); fixtures build secrets at runtime to avoid push protection. `integration_test.go` and `e2e_test.go` handle CLI + MCP integration.
 
 ### "Where does X live?" — quick index
 
