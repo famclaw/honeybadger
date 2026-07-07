@@ -119,6 +119,33 @@ func TestMatch(t *testing.T) {
 			want: true,
 		},
 		{
+			name:  "basename glob matches nested fixture",
+			rules: "SECRET_LEAK *.test.yaml\n",
+			finding: scan.Finding{
+				RuleID: "SECRET_LEAK",
+				File:   "fixtures/skills/bad.test.yaml",
+			},
+			want: true,
+		},
+		{
+			name:  "basename glob matches windows path",
+			rules: "SECRET_LEAK *.test.yaml\n",
+			finding: scan.Finding{
+				RuleID: "SECRET_LEAK",
+				File:   `fixtures\skills\bad.test.yaml`,
+			},
+			want: true,
+		},
+		{
+			name:  "path glob matches windows path",
+			rules: "SECRET_LEAK fixtures/*.yaml\n",
+			finding: scan.Finding{
+				RuleID: "SECRET_LEAK",
+				File:   `fixtures\config.yaml`,
+			},
+			want: true,
+		},
+		{
 			name:  "glob does not match",
 			rules: "SECRET_LEAK *.go\n",
 			finding: scan.Finding{

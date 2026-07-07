@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -76,8 +77,7 @@ func (s *Set) Match(f *scan.Finding) *Rule {
 			continue
 		}
 		if r.PathGlob != "" {
-			matched, err := filepath.Match(r.PathGlob, f.File)
-			if err != nil || !matched {
+			if !matchPathGlob(r.PathGlob, f.File) {
 				continue
 			}
 		}
@@ -110,4 +110,21 @@ func (s *Set) Filter(findings []scan.Finding) ([]scan.Finding, []SuppressedFindi
 		}
 	}
 	return kept, suppressed
+}
+
+func matchPathGlob(pattern, file string) bool {
+	pattern = normalizePathGlob(pattern)
+	file = normalizePathGlob(file)
+	if matched, err := path.Match(pattern, file); err == nil && matched {
+		return true
+	}
+	if strings.Contains(pattern, "/") {
+		return false
+	}
+	matched, err := path.Match(pattern, path.Base(file))
+	return err == nil && matched
+}
+
+func normalizePathGlob(s string) string {
+	return strings.ReplaceAll(filepath.ToSlash(s), `\`, "/")
 }
