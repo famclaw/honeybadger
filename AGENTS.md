@@ -42,6 +42,7 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 | fetch | Repo routing and fetching | `Route`, `Fetcher`, `Repo` | — |
 | ignore | .honeybadgerignore parser and suppression | `Parse`, `Set.Match` | scan |
 | report | Output formatting (NDJSON, text, LLM) | `NewNDJSONEmitter`, `NewTextEmitter`, `CallLLM` | scan |
+| rules | Embedded + user YAML rule loading and compilation | `Load`, `RuleSet`, `Rule` | — |
 | scan | Core types, finding struct, severity constants | `Finding`, `ScanFunc`, `RunAll` | fetch |
 | scanner | Individual scanners (8 total) | `Run` functions | scan, fetch, rules |
 | store | Audit trail writer | `WriteAudit` | — |
