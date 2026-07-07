@@ -113,8 +113,8 @@ func (s *Set) Filter(findings []scan.Finding) ([]scan.Finding, []SuppressedFindi
 }
 
 func matchPathGlob(pattern, file string) bool {
-	pattern = normalizePathGlob(pattern)
-	file = normalizePathGlob(file)
+	pattern = normalizePathGlobPattern(pattern)
+	file = normalizePathGlobFile(file)
 	if matched, err := path.Match(pattern, file); err == nil && matched {
 		return true
 	}
@@ -125,6 +125,34 @@ func matchPathGlob(pattern, file string) bool {
 	return err == nil && matched
 }
 
-func normalizePathGlob(s string) string {
+func normalizePathGlobFile(s string) string {
 	return strings.ReplaceAll(filepath.ToSlash(s), `\`, "/")
+}
+
+func normalizePathGlobPattern(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' {
+			b.WriteByte(s[i])
+			continue
+		}
+		if i+1 < len(s) && isGlobEscapeTarget(s[i+1]) {
+			b.WriteByte(s[i])
+			i++
+			b.WriteByte(s[i])
+			continue
+		}
+		b.WriteByte('/')
+	}
+	return b.String()
+}
+
+func isGlobEscapeTarget(c byte) bool {
+	switch c {
+	case '*', '?', '[', ']', '\\':
+		return true
+	default:
+		return false
+	}
 }

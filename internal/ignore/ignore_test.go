@@ -146,6 +146,33 @@ func TestMatch(t *testing.T) {
 			want: true,
 		},
 		{
+			name:  "path glob does not fall back to basename",
+			rules: "SECRET_LEAK sub/*.yaml\n",
+			finding: scan.Finding{
+				RuleID: "SECRET_LEAK",
+				File:   "other/sub/config.yaml",
+			},
+			want: false,
+		},
+		{
+			name:  "escaped glob star matches literal star",
+			rules: `SECRET_LEAK secret\*.yaml` + "\n",
+			finding: scan.Finding{
+				RuleID: "SECRET_LEAK",
+				File:   "secret*.yaml",
+			},
+			want: true,
+		},
+		{
+			name:  "escaped glob bracket matches literal bracket",
+			rules: `SECRET_LEAK config\[prod\].yaml` + "\n",
+			finding: scan.Finding{
+				RuleID: "SECRET_LEAK",
+				File:   "config[prod].yaml",
+			},
+			want: true,
+		},
+		{
 			name:  "glob does not match",
 			rules: "SECRET_LEAK *.go\n",
 			finding: scan.Finding{
