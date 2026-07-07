@@ -32,7 +32,7 @@ HoneyBadger is a Go security scanner that analyzes AI agent skills and MCP serve
 
 ### Runtime shape
 
-The process starts with `cmd/honeybadger/main.go` parsing flags and routing to either CLI or MCP server mode. The scan pipeline runs in `internal/scan/scan.go` using concurrent `RunAll` with fan-in. Input is fetched via `internal/fetch` (GitHub, GitLab, stdin, tarball). Findings are emitted as NDJSON or text via `internal/report`. Configuration comes from flags, env vars, and `~/.honeybadger/rules/`. MCP server mode runs `honeybadger --mcp-server` and speaks JSON-RPC over stdio.
+The process starts with `cmd/honeybadger/main.go` parsing flags and routing to either CLI or MCP server mode. The scan pipeline runs in `internal/scan/scan.go` using concurrent `RunAll` with fan-in. Input is fetched via `internal/fetch` (GitHub, GitLab, stdin, tarball, local path). Findings are emitted as NDJSON or text via `internal/report`. Configuration comes from flags, env vars, and `~/.honeybadger/rules/`. MCP server mode runs `honeybadger --mcp-server` and speaks JSON-RPC over stdio.
 
 ### Package map (internal/)
 
@@ -112,7 +112,7 @@ Tests live in each package's `_test.go` file. Golden files and `testdata/` dirs 
 - `isBinaryContent` skips binary files using null-byte detection
 - `CheckToolHash` uses regex to extract tool names from source code
 - `ComputeVerdict` drops `INFO` findings entirely and escalates `WARN` to `FAIL` in `strict`/`paranoid` tiers
-- `parseGitHubURL` handles `git@github.com:` style URLs and strips `.git` suffix
+- `parseGitHubURL` strips the scheme, `github.com/` prefix, `.git` suffix, and trailing slash to extract owner/repo (no SSH/`git@` handling)
 - `buildSourceBlock` prioritizes dependency files, build scripts, and files with findings
 - `extractDependencyNames` parses `package.json` and `requirements.txt` for typosquatting
 - `detectShadowing` uses the injection hit set from `detectInjectionWithHits` for cross-tool analysis
