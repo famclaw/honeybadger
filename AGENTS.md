@@ -105,7 +105,7 @@ Tests live in each package's `_test.go` file. Golden files and `testdata/` dirs 
 
 - File-role classification drops findings in test fixtures and rule corpus (not just test files)
 - LLM verdict uses `--paranoia` level for context but only applies `high` threshold for `WARN` escalation in `strict`/`paranoid` mode
-- MCP-server mode requires `--rules-dir` to be passed via CLI for `--mcp-server`
+- MCP-server mode optionally accepts `--rules-dir` via CLI, else falls back to `HONEYBADGER_RULES_DIR` / default
 - YAML rule loading is the sole code path — hardcoded Go patterns were removed in v0.3.0
 - `RunAll` returns a channel of `Event` (Finding or RuntimeError) for concurrent fan-in
 - `isBinaryContent` skips binary files using null-byte detection
