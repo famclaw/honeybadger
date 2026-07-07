@@ -38,12 +38,12 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 
 | Package | Responsibility | Key types / entry points | Depends on (other internal/) |
 |---|---|---|---|
-| engine | Verdict logic, tier/sandbox detection, scanner list builder | `BuildScannerList`, `ComputeVerdict` | scan, report |
+| engine | Verdict logic, tier/sandbox detection, scanner list builder | `BuildScannerList`, `ComputeVerdict` | scan, report, fetch, scanner |
 | fetch | Repo routing and fetching | `Route`, `Fetcher`, `Repo` | — |
 | ignore | .honeybadgerignore parser and suppression | `Parse`, `Set.Match` | scan |
-| report | Output formatting (NDJSON, text, LLM) | `NewNDJSONEmitter`, `NewTextEmitter`, `CallLLM` | scan |
+| report | Output formatting (NDJSON, text, LLM) | `NewNDJSONEmitter`, `NewTextEmitter`, `CallLLM` | scan, fetch |
 | rules | Embedded + user YAML rule loading and compilation | `Load`, `RuleSet`, `Rule` | — |
-| scan | Core types, finding struct, severity constants | `Finding`, `ScanFunc`, `RunAll` | fetch |
+| scan | Core types, finding struct, severity constants | `Finding`, `ScanFunc`, `RunAll` | fetch, rules |
 | scanner | Individual scanners (8 total) | `Run` functions | scan, fetch, rules |
 | store | Audit trail writer | `WriteAudit` | — |
 | testfixture | In-memory repo builders for testing | `fixtures.go` | fetch |
