@@ -223,6 +223,18 @@ honeybadger/
 │   │   │   ├── bins.go          # Executable invocation detection
 │   │   │   ├── env.go           # Environment variable read detection
 │   │   │   └── capability_test.go
+│   │   ├── skillsafety/
+│   │   │   ├── scanner.go       # Skill-safety scanner entry point (extract → evaluate → findings)
+│   │   │   ├── signals.go       # Structured signal extraction from skill files
+│   │   │   ├── extract.go       # Prompt-injection override-phrase extraction
+│   │   │   ├── evaluate.go      # Safety-rule evaluation over extracted signals
+│   │   │   ├── language.go      # Primary-language / script-block detection
+│   │   │   ├── unicode.go       # Zero-width / homoglyph / RTL codepoint detection
+│   │   │   ├── evaluate_test.go
+│   │   │   ├── extract_test.go
+│   │   │   ├── language_test.go
+│   │   │   ├── scanner_test.go
+│   │   │   └── unicode_test.go
 │   │   ├── attestation/
 │   │   │   ├── attestation.go   # Attestation verification scanner
 │   │   │   └── attestation_test.go
