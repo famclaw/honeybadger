@@ -90,21 +90,17 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		dep := deps[i]
 		for _, vuln := range result.Vulns {
 			// If the batch response lacks CVSS data, fetch the full record.
-			var fullRecord *osvVuln
 			if !hasCVSS(&vuln) {
-				fullRecord = cacheOrFetchVuln(ctx, vuln.ID, recordCache, &cacheMu)
-				if fullRecord != nil {
+				if fullRecord := cacheOrFetchVuln(ctx, vuln.ID, recordCache, &cacheMu); fullRecord != nil {
 					// Use full record for severity mapping.
 					vuln = *fullRecord
 				}
 			}
 
-			// If still no CVSS data, fall back to MEDIUM with a reason flag.
+			// If still no CVSS data, fall back to MEDIUM.
 			severity := scan.SevMedium
 			if hasCVSS(&vuln) {
 				severity = mapOSVSeverity(vuln)
-			} else {
-				severity = scan.SevMedium
 			}
 
 			out <- scan.Finding{
@@ -121,15 +117,6 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 				References: []string{
 					fmt.Sprintf("https://osv.dev/vulnerability/%s", vuln.ID),
 				},
-			}
-
-			// Rate-limit individual fetches.
-			if osvFetchDelay > 0 {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(osvFetchDelay):
-				}
 			}
 		}
 	}
@@ -176,22 +163,26 @@ func queryOSV(ctx context.Context, deps []Dependency) (*osvBatchResponse, error)
 
 // mapOSVSeverity maps a CVSS score string to a severity level.
 func mapOSVSeverity(vuln osvVuln) string {
+	best := -1.0
 	for _, sev := range vuln.Severity {
-		if sev.Type == "CVSS_V3" {
-			score := extractCVSSScore(sev.Score)
-			switch {
-			case score >= 9.0:
-				return scan.SevCritical
-			case score >= 7.0:
-				return scan.SevHigh
-			case score >= 4.0:
-				return scan.SevMedium
-			case score > 0:
-				return scan.SevLow
+		if sev.Type == "CVSS_V3" || sev.Type == "CVSS_V4" {
+			if score := extractCVSSScore(sev.Score); score > best {
+				best = score
 			}
 		}
 	}
-	// Default if no CVSS score found
+
+	switch {
+	case best >= 9.0:
+		return scan.SevCritical
+	case best >= 7.0:
+		return scan.SevHigh
+	case best >= 4.0:
+		return scan.SevMedium
+	case best > 0:
+		return scan.SevLow
+	}
+	// Default if no usable CVSS score found
 	return scan.SevMedium
 }
 
@@ -278,6 +269,15 @@ func cacheOrFetchVuln(ctx context.Context, id string, cache map[string]*osvVuln,
 	mu.Lock()
 	cache[id] = rec
 	mu.Unlock()
+
+	// Rate-limit real follow-up fetches (cache hits and batch-supplied CVSS
+	// data skip this path entirely).
+	if osvFetchDelay > 0 {
+		select {
+		case <-ctx.Done():
+		case <-time.After(osvFetchDelay):
+		}
+	}
 	return rec
 }
 

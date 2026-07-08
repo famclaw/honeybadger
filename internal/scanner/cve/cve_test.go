@@ -451,6 +451,19 @@ func TestMapOSVSeverity(t *testing.T) {
 	}
 }
 
+func TestMapOSVSeverityCVSSV4(t *testing.T) {
+	vuln := osvVuln{}
+	vuln.Severity = []struct {
+		Type  string `json:"type"`
+		Score string `json:"score"`
+	}{
+		{Type: "CVSS_V4", Score: "9.8"},
+	}
+	if got := mapOSVSeverity(vuln); got != scan.SevCritical {
+		t.Errorf("mapOSVSeverity(CVSS_V4 9.8) = %q, want %q", got, scan.SevCritical)
+	}
+}
+
 func TestExtractFixedVersion(t *testing.T) {
 	vuln := osvVuln{
 		Affected: []struct {
