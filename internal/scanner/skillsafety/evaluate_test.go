@@ -198,15 +198,15 @@ func TestEvaluate_RuleMetadataPropagation(t *testing.T) {
 	t.Run("sensitive paths carries rule metadata", func(t *testing.T) {
 		s := &Signals{
 			SensitivePaths:       []string{"~/.ssh/"},
-			SensitivePathRuleID:  "ss-sensitive-paths",
+			SensitivePathRuleID:  SensitivePathRuleID,
 			SensitivePathInfoURL: "https://example.com/ss-sensitive-paths",
 		}
 		findings := Evaluate(s)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
-		if findings[0].RuleID != "ss-sensitive-paths" {
-			t.Errorf("RuleID = %q, want %q", findings[0].RuleID, "ss-sensitive-paths")
+		if findings[0].RuleID != SensitivePathRuleID {
+			t.Errorf("RuleID = %q, want %q", findings[0].RuleID, SensitivePathRuleID)
 		}
 		if findings[0].MoreInfoURL != "https://example.com/ss-sensitive-paths" {
 			t.Errorf("MoreInfoURL = %q, want %q", findings[0].MoreInfoURL, "https://example.com/ss-sensitive-paths")

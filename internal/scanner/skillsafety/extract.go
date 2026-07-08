@@ -13,6 +13,8 @@ var (
 	execRe = regexp.MustCompile(`curl\s+-.*\|\s*(ba)?sh|wget\s+.*\|\s*(ba)?sh`)
 )
 
+const SensitivePathRuleID = "ss-sensitive-paths"
+
 // overridePattern pairs a compiled regex with its source rule metadata.
 type overridePattern struct {
 	re          *regexp.Regexp
@@ -50,7 +52,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 					})
 				}
 			case r.Kind == "dictionary" && r.Category == "exfil_intent":
-				if r.ID == "ss-sensitive-paths" {
+				if r.ID == SensitivePathRuleID {
 					activeSensitivePaths = append(activeSensitivePaths, dictSource{
 						entries:     r.Packages,
 						ruleID:      r.ID,
