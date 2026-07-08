@@ -8,8 +8,8 @@ import (
 
 // osvVuln mirrors the OSV vulnerability structure used by osv.dev responses.
 type osvVuln struct {
-	ID      string `json:"id"`
-	Summary string `json:"summary"`
+	ID       string `json:"id"`
+	Summary  string `json:"summary"`
 	Severity []struct {
 		Type  string `json:"type"`
 		Score string `json:"score"`
@@ -99,8 +99,8 @@ func NewMockOSVServer(hasVulns bool) *httptest.Server {
 					{
 						Vulns: []osvVuln{
 							{
-								ID:      "GHSA-1234-5678-9abc",
-								Summary: "",
+								ID:       "GHSA-1234-5678-9abc",
+								Summary:  "",
 								Severity: nil,
 								Affected: nil,
 							},
