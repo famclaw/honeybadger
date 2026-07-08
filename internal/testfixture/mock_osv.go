@@ -34,8 +34,64 @@ type osvBatchResponse struct {
 // NewMockOSVServer returns a mock osv.dev server. If hasVulns is true, it
 // returns a CRITICAL vulnerability for any query. The caller must call
 // Close() on the returned server when done.
+//
+// The batch endpoint returns abbreviated records (id only); full CVSS data
+// is available at /v1/vulns/{id}.
 func NewMockOSVServer(hasVulns bool) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Handle /v1/vulns/{id} follow-up endpoint.
+		if r.Method == "GET" && len(r.URL.Path) > len("/v1/vulns/") {
+			id := r.URL.Path[len("/v1/vulns/"):]
+			if id == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if hasVulns {
+				rec := osvVuln{
+					ID:      "GHSA-1234-5678-9abc",
+					Summary: "Remote code injection in lodash",
+					Severity: []struct {
+						Type  string `json:"type"`
+						Score string `json:"score"`
+					}{
+						{Type: "CVSS_V3", Score: "9.8"},
+					},
+					Affected: []struct {
+						Ranges []struct {
+							Events []struct {
+								Fixed string `json:"fixed"`
+							} `json:"events"`
+						} `json:"ranges"`
+					}{
+						{
+							Ranges: []struct {
+								Events []struct {
+									Fixed string `json:"fixed"`
+								} `json:"events"`
+							}{
+								{
+									Events: []struct {
+										Fixed string `json:"fixed"`
+									}{
+										{Fixed: "4.17.21"},
+									},
+								},
+							},
+						},
+					},
+				}
+				json.NewEncoder(w).Encode(rec)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(`{"message":"Vulnerability not found"}`))
+			}
+			return
+		}
+
+		// Batch endpoint.
 		var resp osvBatchResponse
 		if hasVulns {
 			resp = osvBatchResponse{
@@ -44,36 +100,9 @@ func NewMockOSVServer(hasVulns bool) *httptest.Server {
 						Vulns: []osvVuln{
 							{
 								ID:      "GHSA-1234-5678-9abc",
-								Summary: "Remote code injection in lodash",
-								Severity: []struct {
-									Type  string `json:"type"`
-									Score string `json:"score"`
-								}{
-									{Type: "CVSS_V3", Score: "9.8"},
-								},
-								Affected: []struct {
-									Ranges []struct {
-										Events []struct {
-											Fixed string `json:"fixed"`
-										} `json:"events"`
-									} `json:"ranges"`
-								}{
-									{
-										Ranges: []struct {
-											Events []struct {
-												Fixed string `json:"fixed"`
-											} `json:"events"`
-										}{
-											{
-												Events: []struct {
-													Fixed string `json:"fixed"`
-												}{
-													{Fixed: "4.17.21"},
-												},
-											},
-										},
-									},
-								},
+								Summary: "",
+								Severity: nil,
+								Affected: nil,
 							},
 						},
 					},
@@ -87,7 +116,6 @@ func NewMockOSVServer(hasVulns bool) *httptest.Server {
 			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}))
 }
