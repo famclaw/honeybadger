@@ -47,6 +47,20 @@ func ComputeVerdict(findings []scan.Finding, paranoia scan.ParanoiaLevel, llmVer
 	reasoning := "No findings at or above threshold"
 	keyFinding := ""
 	maxSevRank := 0
+	coverageIncomplete := false
+
+	// Coverage-incomplete findings (truncated tree, oversized files) mean the
+	// repository was not fully scanned.  Never let PASS survive an incomplete scan.
+	for _, f := range findings {
+		if f.Type == "coverage-incomplete" {
+			verdict = "FAIL"
+			coverageIncomplete = true
+			reasoning = fmt.Sprintf("Incomplete scan coverage: %s", f.Message)
+			if f.Message != "" && (keyFinding == "" || scan.SeverityRank(f.Severity) > scan.SeverityRank(scan.SevLow)) {
+				keyFinding = f.Message
+			}
+		}
+	}
 
 	for _, f := range findings {
 		rank := scan.SeverityRank(f.Severity)
@@ -64,7 +78,9 @@ func ComputeVerdict(findings []scan.Finding, paranoia scan.ParanoiaLevel, llmVer
 
 		if rank >= thresholdRank {
 			verdict = "FAIL"
-			reasoning = fmt.Sprintf("Finding at %s severity meets or exceeds %s threshold", f.Severity, threshold)
+			if !coverageIncomplete {
+				reasoning = fmt.Sprintf("Finding at %s severity meets or exceeds %s threshold", f.Severity, threshold)
+			}
 		} else if rank >= warnRank && verdict != "FAIL" {
 			verdict = "WARN"
 			reasoning = fmt.Sprintf("Finding at %s severity is one level below %s threshold", f.Severity, threshold)

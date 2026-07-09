@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +20,9 @@ var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // maxRateLimitWait is the maximum time to wait for rate limit reset before returning an error.
 const maxRateLimitWait = 60 * time.Second
+
+// defaultMaxFileBytes is the default maximum file size to fetch (1 MB).
+const defaultMaxFileBytes = 1024 * 1024
 
 // GitHubFetcher fetches repository data via GitHub REST API.
 type GitHubFetcher struct {
@@ -60,14 +64,23 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 	sha, _ := repoData["sha"].(string) // may not be in repo endpoint
 
 	// 2. Recursive file tree
-	treePaths, err := g.fetchTree(ctx, owner, repoName, defaultBranch, token)
+	repo := &Repo{
+		URL:       url,
+		Owner:     owner,
+		Name:      repoName,
+		Platform:  "github",
+		SHA:       sha,
+		Branch:    defaultBranch,
+		Files:     make(map[string][]byte),
+	}
+	treePaths, err := g.fetchTree(ctx, owner, repoName, defaultBranch, token, repo)
 	if err != nil {
 		return nil, fmt.Errorf("github: fetching file tree: %w", err)
 	}
 
 	// 3. File contents
-	files := make(map[string][]byte)
 	hasSecurityMD := false
+	maxBytes := maxFileBytes()
 	for _, path := range treePaths {
 		if isBinaryExtension(path) {
 			continue
@@ -80,10 +93,30 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 		}
 		content, err := g.fetchFileContent(ctx, owner, repoName, path, token)
 		if err != nil {
-			// Skip files that fail to fetch (e.g., too large)
+			// Skip files that fail to fetch (e.g., too large, 403)
+			// Report oversized files as coverage-incomplete
+			if isOversizedErr(err, maxBytes) {
+				repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+					Type:     "coverage-incomplete",
+					Severity: "HIGH",
+					Check:    "github-tree",
+					File:     path,
+					Message:  fmt.Sprintf("File %s exceeds %d-byte size cap and was not fetched", path, maxBytes),
+				})
+			}
 			continue
 		}
-		files[path] = content
+		if len(content) > maxBytes {
+			repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+				Type:     "coverage-incomplete",
+				Severity: "HIGH",
+				Check:    "github-tree",
+				File:     path,
+				Message:  fmt.Sprintf("File %s exceeds %d-byte size cap (%d bytes) and was not scanned", path, maxBytes, len(content)),
+			})
+			continue
+		}
+		repo.Files[path] = content
 	}
 
 	// 4. Health signals
@@ -94,25 +127,16 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 	ageDays := int(now.Sub(createdAt).Hours() / 24)
 	lastCommitDays := int(now.Sub(pushedAt).Hours() / 24)
 
-	repo := &Repo{
-		URL:      url,
-		Owner:    owner,
-		Name:     repoName,
-		Platform: "github",
-		SHA:      sha,
-		Branch:   defaultBranch,
-		Files:    files,
-		Health: Health{
-			Stars:                stars,
-			Contributors:         contributors,
-			AgeDays:              ageDays,
-			LastCommitDays:       lastCommitDays,
-			HasLicense:           hasLicense,
-			HasSecurityMD:        hasSecurityMD,
-			IssuesMentioningRisk: riskIssues,
-		},
-		FetchedAt: now,
+	repo.Health = Health{
+		Stars:                stars,
+		Contributors:         contributors,
+		AgeDays:              ageDays,
+		LastCommitDays:       lastCommitDays,
+		HasLicense:           hasLicense,
+		HasSecurityMD:        hasSecurityMD,
+		IssuesMentioningRisk: riskIssues,
 	}
+	repo.FetchedAt = now
 
 	return repo, nil
 }
@@ -132,20 +156,30 @@ func (g *GitHubFetcher) fetchRepoMetadata(ctx context.Context, owner, repo, toke
 }
 
 // fetchTree retrieves the recursive file tree for a branch.
-func (g *GitHubFetcher) fetchTree(ctx context.Context, owner, repo, branch, token string) ([]string, error) {
-	path := fmt.Sprintf("/repos/%s/%s/git/trees/%s?recursive=1", owner, repo, branch)
+// Sets treeTruncated on the repo if the GitHub API truncated the tree response.
+func (g *GitHubFetcher) fetchTree(ctx context.Context, owner, repoName, branch, token string, repo *Repo) ([]string, error) {
+	path := fmt.Sprintf("/repos/%s/%s/git/trees/%s?recursive=1", owner, repoName, branch)
 	body, _, err := g.githubAPI(ctx, path, token)
 	if err != nil {
 		return nil, err
 	}
 	var data struct {
-		Tree []struct {
+		Truncated bool `json:"truncated"`
+		Tree      []struct {
 			Path string `json:"path"`
 			Type string `json:"type"`
 		} `json:"tree"`
 	}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, fmt.Errorf("decoding tree: %w", err)
+	}
+	if data.Truncated {
+		repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+			Type:     "coverage-incomplete",
+			Severity: "HIGH",
+			Check:    "github-tree",
+			Message:  fmt.Sprintf("GitHub tree API returned truncated: true — %s is too large to enumerate fully; some files were not scanned", repo.Name),
+		})
 	}
 	var paths []string
 	for _, entry := range data.Tree {
@@ -356,4 +390,34 @@ func jsonString(m map[string]any, key string) string {
 	}
 	s, _ := v.(string)
 	return s
+}
+
+// maxFileBytes returns the configured maximum file size in bytes.
+// Read from HONEYBADGER_MAX_FILE_BYTES env var; falls back to defaultMaxFileBytes (1 MB).
+func maxFileBytes() int {
+	if s := os.Getenv("HONEYBADGER_MAX_FILE_BYTES"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultMaxFileBytes
+}
+
+// isOversizedErr reports whether the error indicates a file that exceeds the size cap.
+// GitHub returns 403 for blobs larger than the configured max, but also returns
+// 403 for rate-limiting and other non-size issues. We match only on messages
+// that explicitly reference size limits to avoid false positives.
+func isOversizedErr(err error, maxBytes int) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// GitHub contents API returns 403 for files exceeding size limits.
+	// Only match size-specific messages, not generic 403s (rate limiting, etc.).
+	if strings.Contains(msg, "size limit") || strings.Contains(msg, "too large") {
+		return true
+	}
+	// GitHub API also returns 403 with a message like "resource protected by organization ...".
+	// Check the response body for size-limit context when available.
+	return false
 }
