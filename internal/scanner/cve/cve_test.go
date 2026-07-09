@@ -12,6 +12,11 @@ import (
 )
 
 func TestRunCVE_WithVulnerabilities(t *testing.T) {
+	// Disable rate-limiting in tests.
+	origDelay := osvFetchDelay
+	osvFetchDelay = 0
+	defer func() { osvFetchDelay = origDelay }()
+
 	// Set up mock osv.dev server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -107,7 +112,219 @@ func TestRunCVE_WithVulnerabilities(t *testing.T) {
 	}
 }
 
+func TestRunCVE_FollowUpFetch(t *testing.T) {
+	// Disable rate-limiting in tests.
+	origDelay := osvFetchDelay
+	osvFetchDelay = 0
+	defer func() { osvFetchDelay = origDelay }()
+
+	// Set up mock osv.dev server that returns abbreviated batch + full record on /v1/vulns/{id}.
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+
+		// Handle /v1/vulns/{id} follow-up endpoint.
+		if r.Method == "GET" && len(r.URL.Path) > len("/v1/vulns/") {
+			rec := osvVuln{
+				ID:      "GHSA-1234-5678-9abc",
+				Summary: "Remote code injection in lodash",
+				Severity: []struct {
+					Type  string `json:"type"`
+					Score string `json:"score"`
+				}{
+					{Type: "CVSS_V3", Score: "9.8"},
+				},
+				Affected: []struct {
+					Ranges []struct {
+						Events []struct {
+							Fixed string `json:"fixed"`
+						} `json:"events"`
+					} `json:"ranges"`
+				}{
+					{
+						Ranges: []struct {
+							Events []struct {
+								Fixed string `json:"fixed"`
+							} `json:"events"`
+						}{
+							{
+								Events: []struct {
+									Fixed string `json:"fixed"`
+								}{
+									{Fixed: "4.17.21"},
+								},
+							},
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(rec)
+			return
+		}
+
+		// Batch endpoint returns abbreviated record (no CVSS).
+		resp := osvBatchResponse{
+			Results: []osvResult{
+				{
+					Vulns: []osvVuln{
+						{
+							ID:       "GHSA-1234-5678-9abc",
+							Summary:  "",
+							Severity: nil,
+							Affected: nil,
+						},
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Configure mock server to serve both batch and /v1/vulns/{id}.
+	origEndpoint := osvEndpoint
+	osvEndpoint = server.URL
+	origAPIBase := osvAPIBase
+	osvAPIBase = server.URL
+	defer func() {
+		osvEndpoint = origEndpoint
+		osvAPIBase = origAPIBase
+	}()
+
+	repo := &fetch.Repo{
+		Files: map[string][]byte{
+			"requirements.txt": []byte("requests==2.25.0\n"),
+		},
+	}
+
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out, nil)
+	close(out)
+
+	var findings []scan.Finding
+	for f := range out {
+		findings = append(findings, f)
+	}
+
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d: %v", len(findings), findings)
+	}
+
+	f := findings[0]
+	if f.Type != "cve" {
+		t.Errorf("expected type 'cve', got %q", f.Type)
+	}
+	if f.ID != "GHSA-1234-5678-9abc" {
+		t.Errorf("expected ID 'GHSA-1234-5678-9abc', got %q", f.ID)
+	}
+	if f.Severity != scan.SevCritical {
+		t.Errorf("expected severity CRITICAL for score 9.8, got %q", f.Severity)
+	}
+	if f.FixedIn != "4.17.21" {
+		t.Errorf("expected fixed_in '4.17.21', got %q", f.FixedIn)
+	}
+	if f.Package != "requests" {
+		t.Errorf("expected package 'requests', got %q", f.Package)
+	}
+
+	// Verify follow-up fetch was called.
+	if requestCount != 2 {
+		t.Errorf("expected 2 HTTP requests (batch + follow-up), got %d", requestCount)
+	}
+}
+
+func TestRunCVE_FollowUpFetchFallback(t *testing.T) {
+	// Disable rate-limiting in tests.
+	origDelay := osvFetchDelay
+	osvFetchDelay = 0
+	defer func() { osvFetchDelay = origDelay }()
+
+	// Set up mock osv.dev server that returns abbreviated batch but fails on follow-up.
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+
+		// Handle /v1/vulns/{id} follow-up endpoint - return 404.
+		if r.Method == "GET" && len(r.URL.Path) > len("/v1/vulns/") {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"message":"Vulnerability not found"}`))
+			return
+		}
+
+		// Batch endpoint returns abbreviated record (no CVSS).
+		resp := osvBatchResponse{
+			Results: []osvResult{
+				{
+					Vulns: []osvVuln{
+						{
+							ID:       "GHSA-1234-5678-9abc",
+							Summary:  "",
+							Severity: nil,
+							Affected: nil,
+						},
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Configure mock server to serve both batch and /v1/vulns/{id}.
+	origEndpoint := osvEndpoint
+	osvEndpoint = server.URL
+	origAPIBase := osvAPIBase
+	osvAPIBase = server.URL
+	defer func() {
+		osvEndpoint = origEndpoint
+		osvAPIBase = origAPIBase
+	}()
+
+	repo := &fetch.Repo{
+		Files: map[string][]byte{
+			"requirements.txt": []byte("requests==2.25.0\n"),
+		},
+	}
+
+	out := make(chan scan.Finding, 100)
+	Run(context.Background(), repo, scan.Options{}, out, nil)
+	close(out)
+
+	var findings []scan.Finding
+	for f := range out {
+		findings = append(findings, f)
+	}
+
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d: %v", len(findings), findings)
+	}
+
+	f := findings[0]
+	if f.Type != "cve" {
+		t.Errorf("expected type 'cve', got %q", f.Type)
+	}
+	if f.Severity != scan.SevMedium {
+		t.Errorf("expected severity MEDIUM (fallback) when follow-up fails, got %q", f.Severity)
+	}
+	if f.Reason != "severity_unknown" {
+		t.Errorf("expected reason 'severity_unknown', got %q", f.Reason)
+	}
+
+	// Verify both requests were made.
+	if requestCount != 2 {
+		t.Errorf("expected 2 HTTP requests (batch + follow-up), got %d", requestCount)
+	}
+}
+
 func TestRunCVE_EmptyDeps(t *testing.T) {
+	// Disable rate-limiting in tests.
+	origDelay := osvFetchDelay
+	osvFetchDelay = 0
+	defer func() { osvFetchDelay = origDelay }()
+
 	repo := &fetch.Repo{
 		Files: map[string][]byte{
 			"main.go": []byte("package main\n"),
@@ -129,6 +346,11 @@ func TestRunCVE_EmptyDeps(t *testing.T) {
 }
 
 func TestRunCVE_OfflineMode(t *testing.T) {
+	// Disable rate-limiting in tests.
+	origDelay := osvFetchDelay
+	osvFetchDelay = 0
+	defer func() { osvFetchDelay = origDelay }()
+
 	// In offline mode, no HTTP call should be made at all
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("HTTP call should not be made in offline mode")
@@ -160,6 +382,11 @@ func TestRunCVE_OfflineMode(t *testing.T) {
 }
 
 func TestRunCVE_NoVulnerabilities(t *testing.T) {
+	// Disable rate-limiting in tests.
+	origDelay := osvFetchDelay
+	osvFetchDelay = 0
+	defer func() { osvFetchDelay = origDelay }()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := osvBatchResponse{
 			Results: []osvResult{
@@ -222,6 +449,48 @@ func TestMapOSVSeverity(t *testing.T) {
 			got := mapOSVSeverity(vuln)
 			if got != tt.expected {
 				t.Errorf("mapOSVSeverity(score=%q) = %q, want %q", tt.score, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMapOSVSeverityCVSSV4(t *testing.T) {
+	vuln := osvVuln{}
+	vuln.Severity = []struct {
+		Type  string `json:"type"`
+		Score string `json:"score"`
+	}{
+		{Type: "CVSS_V4", Score: "9.8"},
+	}
+	if got := mapOSVSeverity(vuln); got != scan.SevCritical {
+		t.Errorf("mapOSVSeverity(CVSS_V4 9.8) = %q, want %q", got, scan.SevCritical)
+	}
+}
+
+func TestExtractCVSSScore(t *testing.T) {
+	tests := []struct {
+		name   string
+		cvss   string
+		expect string // severity bucket derived from the score
+	}{
+		{"numeric", "9.8", scan.SevCritical},
+		{"v3_vector_critical", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", scan.SevCritical},
+		{"v4_vector_critical", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H", scan.SevCritical},
+		{"v4_vector_no_impact", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N", scan.SevMedium},
+		{"v3_vector_no_impact", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N", scan.SevMedium},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vuln := osvVuln{}
+			vuln.Severity = []struct {
+				Type  string `json:"type"`
+				Score string `json:"score"`
+			}{
+				{Type: "CVSS_V4", Score: tt.cvss},
+			}
+			if got := mapOSVSeverity(vuln); got != tt.expect {
+				t.Errorf("mapOSVSeverity(%q) = %q, want %q", tt.cvss, got, tt.expect)
 			}
 		})
 	}

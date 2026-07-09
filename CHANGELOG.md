@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- CVE severity preservation: when the osv.dev batch response lacks a CVSS
+  score, the CVE scanner fetches the full record from `/v1/vulns/{id}` (cached
+  per scan, rate-limited between fetches) and grades severity from it.
+- `CVSS_V4` vector strings are now scored alongside `CVSS_V3`, using the v4
+  impact metric names (`VC`/`VI`/`VA`). The highest score across all CVSS
+  entries wins.
+- `reason` field on findings (`severity_unknown`): when no CVSS score can be
+  found even after the follow-up fetch, severity falls back to `MEDIUM` and the
+  CVE finding is tagged `reason: severity_unknown`, so operators can tell a
+  fallback MEDIUM from a genuinely graded medium-severity vulnerability.
+- CVE findings now carry an osv.dev `references` link
+  (`https://osv.dev/vulnerability/{id}`).
+
 ## v0.5.1 -- 2026-05-16
 
 ### Fixed

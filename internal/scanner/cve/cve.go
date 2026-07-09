@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
@@ -55,6 +57,14 @@ type osvBatchResponse struct {
 // osvEndpoint can be overridden in tests.
 var osvEndpoint = osvBatchURL
 
+// osvAPIBase is the base URL for /v1/vulns/{id} follow-up requests.
+// Override to test endpoint in tests.
+var osvAPIBase = "https://api.osv.dev"
+
+// osvFetchDelay is the pause between individual vuln record fetches.
+// Override to 0 in tests to avoid artificial delays.
+var osvFetchDelay = 200 * time.Millisecond
+
 // Run queries osv.dev for known vulnerabilities in the repo's dependencies.
 func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding, errs chan<- scan.RuntimeError) {
 
@@ -69,15 +79,37 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		return
 	}
 
+	// Cache for full vuln records fetched via /v1/vulns/{id}.
+	recordCache := make(map[string]*osvVuln)
+	var cacheMu sync.Mutex
+
 	for i, result := range vulns.Results {
 		if i >= len(deps) {
 			break
 		}
 		dep := deps[i]
 		for _, vuln := range result.Vulns {
+			// If the batch response lacks CVSS data, fetch the full record.
+			if !hasCVSS(&vuln) {
+				if fullRecord := cacheOrFetchVuln(ctx, vuln.ID, recordCache, &cacheMu); fullRecord != nil {
+					// Use full record for severity mapping.
+					vuln = *fullRecord
+				}
+			}
+
+			// If still no CVSS data, fall back to MEDIUM.
+			severity := scan.SevMedium
+			reason := ""
+			if hasCVSS(&vuln) {
+				severity = mapOSVSeverity(vuln)
+			} else {
+				severity = scan.SevMedium
+				reason = "severity_unknown"
+			}
+
 			out <- scan.Finding{
 				Type:      "cve",
-				Severity:  mapOSVSeverity(vuln),
+				Severity:  severity,
 				Check:     "cve",
 				Package:   dep.Name,
 				Version:   dep.Version,
@@ -85,6 +117,11 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 				ID:        vuln.ID,
 				Summary:   vuln.Summary,
 				FixedIn:   extractFixedVersion(vuln),
+				Message:   vuln.Summary,
+				Reason:    reason,
+				References: []string{
+					fmt.Sprintf("https://osv.dev/vulnerability/%s", vuln.ID),
+				},
 			}
 		}
 	}
@@ -131,22 +168,26 @@ func queryOSV(ctx context.Context, deps []Dependency) (*osvBatchResponse, error)
 
 // mapOSVSeverity maps a CVSS score string to a severity level.
 func mapOSVSeverity(vuln osvVuln) string {
+	best := -1.0
 	for _, sev := range vuln.Severity {
-		if sev.Type == "CVSS_V3" {
-			score := extractCVSSScore(sev.Score)
-			switch {
-			case score >= 9.0:
-				return scan.SevCritical
-			case score >= 7.0:
-				return scan.SevHigh
-			case score >= 4.0:
-				return scan.SevMedium
-			case score > 0:
-				return scan.SevLow
+		if sev.Type == "CVSS_V3" || sev.Type == "CVSS_V4" {
+			if score := extractCVSSScore(sev.Score); score > best {
+				best = score
 			}
 		}
 	}
-	// Default if no CVSS score found
+
+	switch {
+	case best >= 9.0:
+		return scan.SevCritical
+	case best >= 7.0:
+		return scan.SevHigh
+	case best >= 4.0:
+		return scan.SevMedium
+	case best > 0:
+		return scan.SevLow
+	}
+	// Default if no usable CVSS score found
 	return scan.SevMedium
 }
 
@@ -168,21 +209,32 @@ func extractCVSSScore(cvss string) float64 {
 	parts := strings.Split(cvss, "/")
 	score := 5.0 // base
 
+	// CVSS v3 names impact metrics C/I/A; v4 renames them VC/VI/VA
+	// (vulnerable system confidentiality/integrity/availability).
+	v4 := strings.HasPrefix(cvss, "CVSS:4")
+
 	for _, part := range parts {
-		switch {
-		case part == "AV:N":
+		switch part {
+		case "AV:N":
 			score += 1.5
-		case part == "AC:L":
+		case "AC:L":
 			score += 0.5
-		case part == "C:H":
+		case "C:H", "VC:H":
 			score += 1.0
-		case part == "I:H":
+		case "I:H", "VI:H":
 			score += 1.0
-		case part == "A:H":
+		case "A:H", "VA:H":
 			score += 1.0
-		case part == "C:N" && strings.Contains(cvss, "I:N") && strings.Contains(cvss, "A:N"):
-			return 0 // no impact
 		}
+	}
+
+	// No impact on any of the three metrics means no real severity.
+	if v4 {
+		if strings.Contains(cvss, "VC:N") && strings.Contains(cvss, "VI:N") && strings.Contains(cvss, "VA:N") {
+			return 0
+		}
+	} else if strings.Contains(cvss, "C:N") && strings.Contains(cvss, "I:N") && strings.Contains(cvss, "A:N") {
+		return 0
 	}
 
 	if score > 10.0 {
@@ -203,6 +255,79 @@ func extractFixedVersion(vuln osvVuln) string {
 		}
 	}
 	return ""
+}
+
+// hasCVSS reports whether the vuln record contains CVSS severity data.
+func hasCVSS(v *osvVuln) bool {
+	for _, s := range v.Severity {
+		if s.Type == "CVSS_V3" || s.Type == "CVSS_V4" {
+			return true
+		}
+	}
+	return false
+}
+
+// cacheOrFetchVuln fetches the full vuln record via /v1/vulns/{id}, using a
+// session-level cache to avoid duplicate requests.
+func cacheOrFetchVuln(ctx context.Context, id string, cache map[string]*osvVuln, mu *sync.Mutex) *osvVuln {
+	mu.Lock()
+	if rec, ok := cache[id]; ok {
+		mu.Unlock()
+		return rec
+	}
+	mu.Unlock()
+
+	rec, err := fetchVulnRecord(ctx, id)
+	if err != nil {
+		return nil
+	}
+
+	mu.Lock()
+	cache[id] = rec
+	mu.Unlock()
+
+	// Rate-limit real follow-up fetches (cache hits and batch-supplied CVSS
+	// data skip this path entirely).
+	if osvFetchDelay > 0 {
+		select {
+		case <-ctx.Done():
+		case <-time.After(osvFetchDelay):
+		}
+	}
+	return rec
+}
+
+// fetchVulnRecord fetches the full vulnerability record from osv.dev.
+func fetchVulnRecord(ctx context.Context, id string) (*osvVuln, error) {
+	u := fmt.Sprintf("%s/v1/vulns/%s", osvAPIBase, id)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("osv.dev returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	var rec osvVuln
+	if err := json.Unmarshal(body, &rec); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &rec, nil
 }
 
 // TODO: Integrate golang.org/x/vuln/vulncheck for Go call-graph analysis.
