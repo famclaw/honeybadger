@@ -95,13 +95,14 @@ line is printed after the verdict.
 | Capability drift | capability | Declared `requires.*` vs actual code: network/filesystem/bins/env reads (family+) |
 | Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
-| Prompt injection | skillsafety | Override phrases in 11 languages (family+) |
+| Prompt injection | skillsafety | Override phrases in 11 languages, across SKILL.md and any referenced text files (family+) |
 | Homoglyphs | skillsafety | Mixed-script words (Latin+Cyrillic/Greek/Armenian) (family+) |
 | Zero-width chars | skillsafety | Hidden Unicode characters in skill content (family+) |
 | RTL override | skillsafety | Right-to-left text direction manipulation (family+) |
 | Data exfil intent | skillsafety | Sensitive paths + external/webhook URLs correlation (family+) |
 | Multi-language hiding | skillsafety | Unexpected script blocks in primary-language skills (family+) |
-| MCP tool injection | mcptool | Prompt injection in MCP tool/param descriptions, titles, defaults, enums (family+) |
+| MCP tool injection | mcptool | Prompt injection in MCP tool/param descriptions, titles, defaults, enums, and the SKILL.md body (family+) |
+| MCP read-from-other-file | mcptool | SKILL.md directing the agent to read/see/consult a separate instruction file (family+) |
 | MCP tool obfuscation | mcptool | Zero-width / homoglyph / RTL / Tags-block chars in tool definitions (family+) |
 | MCP cross-tool shadowing | mcptool | One tool's description redefining another tool's behavior (family+) |
 | MCP capability mismatch | mcptool | Tool declares readOnlyHint but params/source show writes (family+) |
