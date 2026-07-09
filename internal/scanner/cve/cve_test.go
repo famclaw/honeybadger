@@ -467,6 +467,35 @@ func TestMapOSVSeverityCVSSV4(t *testing.T) {
 	}
 }
 
+func TestExtractCVSSScore(t *testing.T) {
+	tests := []struct {
+		name   string
+		cvss   string
+		expect string // severity bucket derived from the score
+	}{
+		{"numeric", "9.8", scan.SevCritical},
+		{"v3_vector_critical", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", scan.SevCritical},
+		{"v4_vector_critical", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H", scan.SevCritical},
+		{"v4_vector_no_impact", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N", scan.SevMedium},
+		{"v3_vector_no_impact", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N", scan.SevMedium},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vuln := osvVuln{}
+			vuln.Severity = []struct {
+				Type  string `json:"type"`
+				Score string `json:"score"`
+			}{
+				{Type: "CVSS_V4", Score: tt.cvss},
+			}
+			if got := mapOSVSeverity(vuln); got != tt.expect {
+				t.Errorf("mapOSVSeverity(%q) = %q, want %q", tt.cvss, got, tt.expect)
+			}
+		})
+	}
+}
+
 func TestExtractFixedVersion(t *testing.T) {
 	vuln := osvVuln{
 		Affected: []struct {

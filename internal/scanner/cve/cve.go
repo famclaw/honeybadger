@@ -209,21 +209,32 @@ func extractCVSSScore(cvss string) float64 {
 	parts := strings.Split(cvss, "/")
 	score := 5.0 // base
 
+	// CVSS v3 names impact metrics C/I/A; v4 renames them VC/VI/VA
+	// (vulnerable system confidentiality/integrity/availability).
+	v4 := strings.HasPrefix(cvss, "CVSS:4")
+
 	for _, part := range parts {
-		switch {
-		case part == "AV:N":
+		switch part {
+		case "AV:N":
 			score += 1.5
-		case part == "AC:L":
+		case "AC:L":
 			score += 0.5
-		case part == "C:H":
+		case "C:H", "VC:H":
 			score += 1.0
-		case part == "I:H":
+		case "I:H", "VI:H":
 			score += 1.0
-		case part == "A:H":
+		case "A:H", "VA:H":
 			score += 1.0
-		case part == "C:N" && strings.Contains(cvss, "I:N") && strings.Contains(cvss, "A:N"):
-			return 0 // no impact
 		}
+	}
+
+	// No impact on any of the three metrics means no real severity.
+	if v4 {
+		if strings.Contains(cvss, "VC:N") && strings.Contains(cvss, "VI:N") && strings.Contains(cvss, "VA:N") {
+			return 0
+		}
+	} else if strings.Contains(cvss, "C:N") && strings.Contains(cvss, "I:N") && strings.Contains(cvss, "A:N") {
+		return 0
 	}
 
 	if score > 10.0 {
