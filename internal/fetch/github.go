@@ -404,19 +404,20 @@ func maxFileBytes() int {
 }
 
 // isOversizedErr reports whether the error indicates a file that exceeds the size cap.
-// GitHub returns 403 for blobs larger than 1 MB on the contents API.
+// GitHub returns 403 for blobs larger than the configured max, but also returns
+// 403 for rate-limiting and other non-size issues. We match only on messages
+// that explicitly reference size limits to avoid false positives.
 func isOversizedErr(err error, maxBytes int) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
-	// GitHub contents API returns 403 for files > 1MB
-	if strings.Contains(msg, "403") {
+	// GitHub contents API returns 403 for files exceeding size limits.
+	// Only match size-specific messages, not generic 403s (rate limiting, etc.).
+	if strings.Contains(msg, "size limit") || strings.Contains(msg, "too large") {
 		return true
 	}
-	// Also check for content too large errors
-	if strings.Contains(msg, "too large") || strings.Contains(msg, "size limit") {
-		return true
-	}
+	// GitHub API also returns 403 with a message like "resource protected by organization ...".
+	// Check the response body for size-limit context when available.
 	return false
 }

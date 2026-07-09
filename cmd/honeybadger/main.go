@@ -30,7 +30,7 @@ func main() {
 	llmModel := envOrDefault("HONEYBADGER_LLM_MODEL", "")
 	githubToken := envOrDefault("GITHUB_TOKEN", "")
 	gitlabToken := envOrDefault("GITLAB_TOKEN", "")
-	_ = os.Getenv("HONEYBADGER_MAX_FILE_BYTES") // honored by fetcher; see docs/coverage.md
+	// HONEYBADGER_MAX_FILE_BYTES is honored by the fetcher; see docs/coverage.md
 
 	// Define flags
 	paranoia := flag.String("paranoia", "family", "paranoia level: off|minimal|family|strict|paranoid")
@@ -310,18 +310,6 @@ func run(cfg runConfig) (int, error) {
 		}
 	}
 
-	// Merge coverage-incomplete findings from the fetcher.
-	// These indicate the repo was not fully scanned (truncated tree, oversized files).
-	for _, cw := range repo.CoverageWarnings {
-		allFindings = append(allFindings, scan.Finding{
-			Type:     cw.Type,
-			Severity: cw.Severity,
-			Check:    cw.Check,
-			File:     cw.File,
-			Message:  cw.Message,
-		})
-	}
-
 	// 13b. Update verification: --installed-tool-hash
 	if cfg.InstalledToolHash != "" {
 		toolFindings := engine.CheckToolHash(repo, cfg.InstalledToolHash)
@@ -344,6 +332,19 @@ func run(cfg runConfig) (int, error) {
 			allFindings, suppressed = ignoreSet.Filter(allFindings)
 			suppressedCount = len(suppressed)
 		}
+	}
+
+	// Merge coverage-incomplete findings after ApplyFileRoles and
+	// .honeybadgerignore filtering so they cannot be suppressed. These
+	// are meta-level guarantees about scan completeness, not per-file threats.
+	for _, cw := range repo.CoverageWarnings {
+		allFindings = append(allFindings, scan.Finding{
+			Type:     cw.Type,
+			Severity: cw.Severity,
+			Check:    cw.Check,
+			File:     cw.File,
+			Message:  cw.Message,
+		})
 	}
 
 	// Now emit the kept findings.
