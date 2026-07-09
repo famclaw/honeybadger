@@ -156,6 +156,8 @@ Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, healt
 Findings include rule metadata when available: `rule_id`, `more_info_url`, and `references` from the source YAML rule.
 In text mode, the severity tag shows `[SEVERITY rule_id]` and a `→ url` line links to further documentation.
 
+CVE severity is graded from the CVSS v3/v4 score, fetching the full osv.dev record when the batch response omits it. When no CVSS score is available, severity falls back to `MEDIUM` and the finding carries `reason: severity_unknown` so a fallback MEDIUM is distinguishable from a graded one.
+
 Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error.
 
 ## Project structure

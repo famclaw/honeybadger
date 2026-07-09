@@ -89,8 +89,19 @@ Each line is a self-contained JSON object:
 {"type":"progress","phase":"fetch","message":"Fetching repository..."}
 {"type":"progress","phase":"scan","message":"Running security scanners..."}
 {"type":"finding","severity":"HIGH","check":"secrets","file":"config.go","line":3,"message":"..."}
+{"type":"cve","severity":"HIGH","check":"cve","package":"lodash","version":"4.17.4","id":"GHSA-xxxx","summary":"...","fixed_in":"4.17.5","references":["https://osv.dev/vulnerability/GHSA-xxxx"]}
 {"type":"health","stars":42,"contributors":3,"age_days":365,"last_commit_days":7,...}
 {"type":"result","verdict":"FAIL","reasoning":"...","finding_counts":{...},...}
+```
+
+CVE events carry a `reason` field only when severity could not be graded from a
+CVSS v3/v4 score (neither the osv.dev batch response nor the follow-up
+`/v1/vulns/{id}` record supplied one). In that case `severity` falls back to
+`MEDIUM` and `reason` is set to `"severity_unknown"`, letting operators
+distinguish a graded MEDIUM from an ungraded fallback:
+
+```
+{"type":"cve","severity":"MEDIUM","check":"cve","package":"acme","version":"1.2.3","id":"GHSA-yyyy","reason":"severity_unknown","references":["https://osv.dev/vulnerability/GHSA-yyyy"]}
 ```
 
 ## Exit Codes (CLI)
