@@ -8,13 +8,13 @@ import (
 )
 
 var skipDirs = map[string]bool{
-	".git":        true,
+	".git":         true,
 	"node_modules": true,
-	"vendor":      true,
-	"__pycache__": true,
-	".venv":       true,
-	"dist":        true,
-	"build":       true,
+	"vendor":       true,
+	"__pycache__":  true,
+	".venv":        true,
+	"dist":         true,
+	"build":        true,
 }
 
 var binaryExts = map[string]bool{
@@ -33,19 +33,19 @@ var binaryExts = map[string]bool{
 // textFileExts are extensions considered text-based instruction files.
 // These are scanned for prompt injection patterns in addition to .md files.
 var textFileExts = map[string]bool{
-	".md":     true,
+	".md":       true,
 	".markdown": true,
-	".txt":    true,
-	".yml":    true,
-	".yaml":   true,
-	".json":   true,
-	".toml":   true,
-	".rst":    true,
-	".py":     true,
-	".js":     true,
-	".ts":     true,
-	".go":     true,
-	".sh":     true,
+	".txt":      true,
+	".yml":      true,
+	".yaml":     true,
+	".json":     true,
+	".toml":     true,
+	".rst":      true,
+	".py":       true,
+	".js":       true,
+	".ts":       true,
+	".go":       true,
+	".sh":       true,
 }
 
 // IsTextFile reports whether a file is text-like and should be scanned
@@ -208,5 +208,3 @@ func IsBinaryFile(path string) bool {
 	}
 	return false
 }
-
-

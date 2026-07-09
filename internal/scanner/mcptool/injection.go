@@ -92,7 +92,7 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 		raw := string(skillContent)
 		body := stripFrontmatter(raw)
 		bodyLines := strings.Split(body, "\n")
-		
+
 		// Compute line offset (number of lines in frontmatter)
 		offset := 0
 		if strings.HasPrefix(strings.TrimSpace(raw), "---") {
@@ -102,7 +102,7 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 				offset = frontmatterLines
 			}
 		}
-		
+
 		for i, line := range bodyLines {
 			// Skip empty lines at the start of body
 			if i == 0 && strings.TrimSpace(line) == "" && offset > 0 {
