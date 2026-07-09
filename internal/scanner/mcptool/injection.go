@@ -89,9 +89,26 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 
 	// Detection 1b: scan SKILL.md for override phrases (same patterns as tool fields)
 	if skillContent, skillPath := findFileIgnoreCase(repo.Files, "SKILL.md"); skillContent != nil {
-		body := stripFrontmatter(string(skillContent))
-		fileLines := strings.Split(body, "\n")
-		for i, line := range fileLines {
+		raw := string(skillContent)
+		body := stripFrontmatter(raw)
+		bodyLines := strings.Split(body, "\n")
+		
+		// Compute line offset (number of lines in frontmatter)
+		offset := 0
+		if strings.HasPrefix(strings.TrimSpace(raw), "---") {
+			parts := strings.SplitN(raw, "---", 3)
+			if len(parts) >= 3 {
+				frontmatterLines := strings.Count(parts[0]+parts[1], "\n") + 2
+				offset = frontmatterLines
+			}
+		}
+		
+		for i, line := range bodyLines {
+			// Skip empty lines at the start of body
+			if i == 0 && strings.TrimSpace(line) == "" && offset > 0 {
+				continue
+			}
+			lineNum := i + 1 + offset
 			for _, p := range pats {
 				if loc := p.re.FindString(line); loc != "" {
 					out = append(out, scan.Finding{
@@ -102,8 +119,9 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 						MoreInfoURL: p.moreInfoURL,
 						References:  p.references,
 						File:        skillPath,
+						Line:        lineNum,
 						Message: fmt.Sprintf("Prompt injection in SKILL.md line %d: %q",
-							i+1, scan.Redact(loc, 80)),
+							lineNum, scan.Redact(loc, 80)),
 						Snippet: scan.Redact(loc, 120),
 					})
 				}
@@ -114,9 +132,13 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 		readFromPatterns := []*regexp.Regexp{
 			regexp.MustCompile(`(?i)\b(read\s+(?:the\s+)?[^\s]+\.md)\b`),
 			regexp.MustCompile(`(?i)\b(see\s+(?:the\s+)?[^\s]+\.md)\b`),
-			regexp.MustCompile(`(?i)\b(consult\s+(?:the\s+)?[^\s]+)\b`),
+			regexp.MustCompile(`(?i)\b(consult\s+(?:the\s+)?[^\s]+\.md)\b`),
 		}
-		for i, line := range fileLines {
+		for i, line := range bodyLines {
+			if i == 0 && strings.TrimSpace(line) == "" && offset > 0 {
+				continue
+			}
+			lineNum := i + 1 + offset
 			for _, pat := range readFromPatterns {
 				if loc := pat.FindString(line); loc != "" {
 					out = append(out, scan.Finding{
@@ -127,8 +149,9 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 						MoreInfoURL: "https://github.com/famclaw/honeybadger/blob/main/docs/rules.md#mcp-read-from-other-file",
 						References:  []string{},
 						File:        skillPath,
+						Line:        lineNum,
 						Message: fmt.Sprintf("SKILL.md references external instruction file in line %d: %q",
-							i+1, scan.Redact(loc, 80)),
+							lineNum, scan.Redact(loc, 80)),
 						Snippet: scan.Redact(loc, 120),
 					})
 				}
