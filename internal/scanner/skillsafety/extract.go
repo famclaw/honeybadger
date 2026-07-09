@@ -8,6 +8,20 @@ import (
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
+// isBinaryContent checks for null bytes in the first 512 bytes of content.
+func isBinaryContent(data []byte) bool {
+	limit := 512
+	if len(data) < limit {
+		limit = len(data)
+	}
+	for i := 0; i < limit; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 var (
 	urlRe  = regexp.MustCompile(`https?://[^\s"'<>` + "`" + `\)]+`)
 	execRe = regexp.MustCompile(`curl\s+-.*\|\s*(ba)?sh|wget\s+.*\|\s*(ba)?sh`)
@@ -101,7 +115,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		}
 	}
 
-	// Scan body for override phrases.
+	// Scan body for override phrases in SKILL.md.
 	lines := strings.Split(body, "\n")
 	for i, line := range lines {
 		for _, pat := range activeOverridePatterns {
@@ -119,25 +133,57 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		}
 	}
 
-	// Scan all text files for sensitive paths, URLs, exec instructions.
+	// Scan all text-like files for override phrases and other signals.
 	// Test fixtures and honeybadger's own rule corpus define attack patterns
 	// by design, and Markdown prose merely describes them — none constitute a
 	// live threat, so the signal pass restricts itself to real code/config and
 	// to code blocks within documentation.
 	isAppRepo := scan.IsApplicationRepo(repo.Files)
 	for path, content := range repo.Files {
+		// Skip binary files (null-byte detection).
+		if isBinaryContent(content) {
+			continue
+		}
+
+		// Skip test files and rule corpus (fixtures, not threats).
 		role := scan.ClassifyFile(path, content)
 		switch role {
 		case scan.RoleTest, scan.RoleRules:
 			continue
 		}
-		// Blank Markdown prose in documentation only — SKILL.md is the skill
-		// manifest, where prose is the executable instruction surface.
-		if role == scan.RoleDoc && scan.IsMarkdown(path) {
-			content = scan.CodeBlockOnly(content)
+
+		// Skip non-text files (no known extension and not 90%+ printable).
+		if !scan.IsMarkdown(path) && !scan.IsTextFile(path, content) {
+			continue
 		}
+
+		// For injection detection (override phrases), scan ALL text including
+		// prose in any .md file, since an attacker can reference a .md file
+		// containing the actual malicious instructions. This is the security fix.
+		// For exfil-intent correlation, only code blocks are scanned (original behavior).
 		s := string(content)
+		codeOnly := s
+		if role == scan.RoleDoc && scan.IsMarkdown(path) {
+			codeOnly = string(scan.CodeBlockOnly(content))
+		}
 		fileLines := strings.Split(s, "\n")
+
+		// Scan for override phrases in all text files (not just SKILL.md body).
+		for i, line := range fileLines {
+			for _, pat := range activeOverridePatterns {
+				if loc := pat.re.FindString(line); loc != "" {
+					sig.OverridePhrases = append(sig.OverridePhrases, Match{
+						Pattern:     pat.re.String(),
+						Text:        loc,
+						File:        path,
+						Line:        i + 1,
+						RuleID:      pat.ruleID,
+						MoreInfoURL: pat.moreInfoURL,
+						References:  pat.references,
+					})
+				}
+			}
+		}
 
 		// The exfil-intent correlation (sensitive paths + URLs) is meaningful
 		// within a skill's small script bundle; across a compiled application's
@@ -147,7 +193,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		if !isAppRepo {
 			for _, ds := range activeSensitivePaths {
 				for _, sp := range ds.entries {
-					if strings.Contains(s, sp) {
+					if strings.Contains(codeOnly, sp) {
 						sig.SensitivePaths = append(sig.SensitivePaths, sp)
 						// Capture rule metadata from the first matching dictionary source.
 						if sig.SensitivePathRuleID == "" {
@@ -159,8 +205,8 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 				}
 			}
 
-			// External URLs.
-			for _, u := range urlRe.FindAllString(s, -1) {
+			// External URLs (scan only code blocks in docs).
+			for _, u := range urlRe.FindAllString(codeOnly, -1) {
 				sig.ExternalURLs = append(sig.ExternalURLs, u)
 				for _, ds := range activeWebhookDomains {
 					for _, wd := range ds.entries {
@@ -177,7 +223,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 			}
 		}
 
-		// Exec instructions.
+		// Exec instructions (scan all text for all files).
 		for i, line := range fileLines {
 			if loc := execRe.FindString(line); loc != "" {
 				sig.ExecInstructions = append(sig.ExecInstructions, Match{
