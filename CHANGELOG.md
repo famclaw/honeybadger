@@ -15,6 +15,19 @@
   fallback MEDIUM from a genuinely graded medium-severity vulnerability.
 - CVE findings now carry an osv.dev `references` link
   (`https://osv.dev/vulnerability/{id}`).
+- `scan.IsTextFile`: classifies a file as text-like (by known extension or a
+  90%-printable-ASCII heuristic over the first 512 bytes) so injection scanning
+  can extend past `.md` to referenced instruction files.
+- `mcp-read-from-other-file` finding (mcptool, MEDIUM): flags a SKILL.md that
+  directs the agent to read/see/consult a separate instruction file, even when
+  the referenced file is clean.
+
+### Fixed
+- Two-file injection blind spot: the skillsafety scanner now scans override
+  phrases across every text-like file, and the mcptool injection scanner also
+  scans the SKILL.md body — previously an attacker could hide the payload in a
+  referenced file (e.g. `REFERENCE.md`) that SKILL.md pointed to. Binary files
+  are skipped via null-byte detection.
 
 ## v0.5.1 -- 2026-05-16
 

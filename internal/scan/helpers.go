@@ -8,13 +8,13 @@ import (
 )
 
 var skipDirs = map[string]bool{
-	".git":        true,
+	".git":         true,
 	"node_modules": true,
-	"vendor":      true,
-	"__pycache__": true,
-	".venv":       true,
-	"dist":        true,
-	"build":       true,
+	"vendor":       true,
+	"__pycache__":  true,
+	".venv":        true,
+	"dist":         true,
+	"build":        true,
 }
 
 var binaryExts = map[string]bool{
@@ -28,6 +28,56 @@ var binaryExts = map[string]bool{
 	".wasm": true,
 	".bin":  true,
 	".exe":  true,
+}
+
+// textFileExts are extensions considered text-based instruction files.
+// These are scanned for prompt injection patterns in addition to .md files.
+var textFileExts = map[string]bool{
+	".md":       true,
+	".markdown": true,
+	".txt":      true,
+	".yml":      true,
+	".yaml":     true,
+	".json":     true,
+	".toml":     true,
+	".rst":      true,
+	".py":       true,
+	".js":       true,
+	".ts":       true,
+	".go":       true,
+	".sh":       true,
+}
+
+// IsTextFile reports whether a file is text-like and should be scanned
+// for prompt injection. A file is text-like if it has a known text extension
+// or if its first 512 bytes are 90%+ printable ASCII.
+func IsTextFile(relPath string, content []byte) bool {
+	ext := strings.ToLower(filepath.Ext(relPath))
+	if textFileExts[ext] {
+		return true
+	}
+	// Fallback: check if first 512 bytes are 90%+ printable ASCII
+	return is90PercentPrintable(content)
+}
+
+// is90PercentPrintable reports whether at least 90% of the first 512 bytes
+// are printable ASCII (including common whitespace).
+func is90PercentPrintable(data []byte) bool {
+	limit := 512
+	if len(data) < limit {
+		limit = len(data)
+	}
+	if limit == 0 {
+		return false
+	}
+	printable := 0
+	for i := 0; i < limit; i++ {
+		b := data[i]
+		if b >= 0x20 && b <= 0x7E || b == '\n' || b == '\r' || b == '\t' {
+			printable++
+		}
+	}
+	return float64(printable)/float64(limit) >= 0.9
 }
 
 // WalkCode walks a directory tree, skipping common non-source directories and
