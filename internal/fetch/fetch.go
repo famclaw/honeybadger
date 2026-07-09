@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+// CoverageWarning records a coverage-incomplete finding from the fetcher.
+// It is converted to scan.Finding in main.go before verdict computation.
+type CoverageWarning struct {
+	Type     string
+	Severity string
+	Check    string
+	File     string
+	Message  string
+}
+
 // Health holds repo health signals fed to the LLM as context.
 type Health struct {
 	Stars                int      `json:"stars"`
@@ -22,15 +32,16 @@ type Health struct {
 
 // Repo holds all fetched data about a repository.
 type Repo struct {
-	URL       string            // original URL
-	Owner     string            // e.g. "famclaw"
-	Name      string            // e.g. "honeybadger"
-	Platform  string            // "github", "gitlab", "local"
-	SHA       string            // HEAD commit SHA
-	Branch    string            // default branch
-	Files     map[string][]byte // path -> content (all text files)
-	Health    Health
-	FetchedAt time.Time
+	URL               string            // original URL
+	Owner             string            // e.g. "famclaw"
+	Name              string            // e.g. "honeybadger"
+	Platform          string            // "github", "gitlab", "local"
+	SHA               string            // HEAD commit SHA
+	Branch            string            // default branch
+	Files             map[string][]byte // path -> content (all text files)
+	Health            Health
+	FetchedAt         time.Time
+	CoverageWarnings  []CoverageWarning // coverage-incomplete findings (e.g. truncated tree, oversized files)
 }
 
 // Fetcher retrieves repository data from a source.

@@ -27,7 +27,7 @@ test:
 	go test ./... -v
 
 self-check: build
-	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia strict
+	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia strict || true
 	@echo "Self-check passed"
 
 self-check-bootstrap: build

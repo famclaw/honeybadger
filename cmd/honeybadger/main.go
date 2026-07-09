@@ -30,6 +30,7 @@ func main() {
 	llmModel := envOrDefault("HONEYBADGER_LLM_MODEL", "")
 	githubToken := envOrDefault("GITHUB_TOKEN", "")
 	gitlabToken := envOrDefault("GITLAB_TOKEN", "")
+	_ = os.Getenv("HONEYBADGER_MAX_FILE_BYTES") // honored by fetcher; see docs/coverage.md
 
 	// Define flags
 	paranoia := flag.String("paranoia", "family", "paranoia level: off|minimal|family|strict|paranoid")
@@ -307,6 +308,18 @@ func run(cfg runConfig) (int, error) {
 				fmt.Fprintf(os.Stderr, "warning: failed to write runtime error: %v\n", err)
 			}
 		}
+	}
+
+	// Merge coverage-incomplete findings from the fetcher.
+	// These indicate the repo was not fully scanned (truncated tree, oversized files).
+	for _, cw := range repo.CoverageWarnings {
+		allFindings = append(allFindings, scan.Finding{
+			Type:     cw.Type,
+			Severity: cw.Severity,
+			Check:    cw.Check,
+			File:     cw.File,
+			Message:  cw.Message,
+		})
 	}
 
 	// 13b. Update verification: --installed-tool-hash
