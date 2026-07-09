@@ -35,6 +35,7 @@ type Finding struct {
 	Summary     string   `json:"summary,omitempty"`
 	FixedIn     string   `json:"fixed_in,omitempty"`
 	Ecosystem   string   `json:"ecosystem,omitempty"`
+	Reason      string   `json:"reason,omitempty"` // e.g. "severity_unknown"
 }
 
 // ParanoiaLevel controls which scanners run and how aggressively.

@@ -99,8 +99,12 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 
 			// If still no CVSS data, fall back to MEDIUM.
 			severity := scan.SevMedium
+			reason := ""
 			if hasCVSS(&vuln) {
 				severity = mapOSVSeverity(vuln)
+			} else {
+				severity = scan.SevMedium
+				reason = "severity_unknown"
 			}
 
 			out <- scan.Finding{
@@ -114,6 +118,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 				Summary:   vuln.Summary,
 				FixedIn:   extractFixedVersion(vuln),
 				Message:   vuln.Summary,
+				Reason:    reason,
 				References: []string{
 					fmt.Sprintf("https://osv.dev/vulnerability/%s", vuln.ID),
 				},

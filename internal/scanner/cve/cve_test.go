@@ -309,6 +309,9 @@ func TestRunCVE_FollowUpFetchFallback(t *testing.T) {
 	if f.Severity != scan.SevMedium {
 		t.Errorf("expected severity MEDIUM (fallback) when follow-up fails, got %q", f.Severity)
 	}
+	if f.Reason != "severity_unknown" {
+		t.Errorf("expected reason 'severity_unknown', got %q", f.Reason)
+	}
 
 	// Verify both requests were made.
 	if requestCount != 2 {
