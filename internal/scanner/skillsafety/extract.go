@@ -90,11 +90,9 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 
 	// Find SKILL.md (case-insensitive).
 	var skillContent []byte
-	var skillPath string
 	for path, content := range repo.Files {
 		if strings.EqualFold(path, "SKILL.md") {
 			skillContent = content
-			skillPath = path
 			break
 		}
 	}
@@ -112,24 +110,6 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		if len(parts) >= 3 {
 			sig.HasFrontmatter = true
 			body = parts[2]
-		}
-	}
-
-	// Scan body for override phrases in SKILL.md.
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		for _, pat := range activeOverridePatterns {
-			if loc := pat.re.FindString(line); loc != "" {
-				sig.OverridePhrases = append(sig.OverridePhrases, Match{
-					Pattern:     pat.re.String(),
-					Text:        loc,
-					File:        skillPath,
-					Line:        i + 1,
-					RuleID:      pat.ruleID,
-					MoreInfoURL: pat.moreInfoURL,
-					References:  pat.references,
-				})
-			}
 		}
 	}
 

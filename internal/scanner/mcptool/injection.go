@@ -98,7 +98,7 @@ func detectInjectionWithHits(tools []ToolDef, repo *fetch.Repo, rs *rules.RuleSe
 		if strings.HasPrefix(strings.TrimSpace(raw), "---") {
 			parts := strings.SplitN(raw, "---", 3)
 			if len(parts) >= 3 {
-				frontmatterLines := strings.Count(parts[0]+parts[1], "\n") + 2
+				frontmatterLines := strings.Count(parts[0]+parts[1], "\n")
 				offset = frontmatterLines
 			}
 		}
