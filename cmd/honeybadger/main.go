@@ -182,6 +182,8 @@ func run(cfg runConfig) (int, error) {
 	switch cfg.Format {
 	case "text":
 		emitter = report.NewTextEmitter(os.Stdout)
+	case "sarif":
+		emitter = report.NewSarifEmitter(os.Stdout)
 	default:
 		emitter = report.NewNDJSONEmitter(os.Stdout)
 	}
