@@ -262,6 +262,28 @@ func (g *GitLabFetcher) gitlabAPI(ctx context.Context, path, token string) ([]by
 
 // parseGitLabURL extracts the project path from a GitLab URL.
 func parseGitLabURL(rawURL string) (string, error) {
+	// Handle SSH format: git@gitlab.com:owner/repo.git
+	if strings.HasPrefix(rawURL, "git@") {
+		// Remove the git@ prefix
+		u := strings.TrimPrefix(rawURL, "git@")
+		// Split on : to separate host from path
+		parts := strings.SplitN(u, ":", 2)
+		if len(parts) != 2 {
+			return "", fmt.Errorf("invalid GitLab SSH URL %q: expected git@gitlab.com:owner/repo", rawURL)
+		}
+		// Remove the host part (gitlab.com) and trailing .git
+		u = strings.TrimPrefix(parts[1], "gitlab.com/")
+		u = strings.TrimSuffix(u, ".git")
+		// Remove trailing slash
+		u = strings.TrimRight(u, "/")
+		
+		if u == "" || !strings.Contains(u, "/") {
+			return "", fmt.Errorf("invalid GitLab SSH URL %q: expected owner/repo", rawURL)
+		}
+		
+		return u, nil
+	}
+
 	u := rawURL
 	u = strings.TrimPrefix(u, "https://")
 	u = strings.TrimPrefix(u, "http://")
