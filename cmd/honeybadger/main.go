@@ -86,14 +86,28 @@ func main() {
 			}
 			break
 		}
+		if arg == "rules" && subcommand == "" {
+			subcommand = "rules"
+			// Process rules subcommands
+			if len(args) > i+1 {
+				// Check for subcommands like "list" or "explain"
+				if args[i+1] == "list" || args[i+1] == "explain" {
+					// Set up remaining args for further processing
+					remaining = args[i+2:]
+				}
+			}
+			break
+		}
 	}
 
-	if subcommand != "scan" {
+	if subcommand != "scan" && subcommand != "rules" {
 		fmt.Fprintln(os.Stderr, "usage: honeybadger scan <repo-url> [flags]")
+		fmt.Fprintln(os.Stderr, "       honeybadger rules list")
+		fmt.Fprintln(os.Stderr, "       honeybadger rules explain <rule-id>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	if repoURL == "" {
+	if subcommand == "scan" && repoURL == "" {
 		fmt.Fprintln(os.Stderr, "error: scan requires a <repo-url> argument")
 		os.Exit(1)
 	}
@@ -101,6 +115,22 @@ func main() {
 	// Parse remaining flags after extracting subcommand and URL
 	if err := flag.CommandLine.Parse(remaining); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Handle rules subcommands
+	if subcommand == "rules" {
+		// Handle rules list and rules explain
+		if len(remaining) > 0 {
+			if remaining[0] == "list" {
+				os.Exit(handleRulesList(*rulesDir))
+			} else if remaining[0] == "explain" && len(remaining) > 1 {
+				os.Exit(handleRulesExplain(remaining[1], *rulesDir))
+			}
+		}
+		// Default help for rules
+		fmt.Fprintln(os.Stderr, "usage: honeybadger rules list")
+		fmt.Fprintln(os.Stderr, "       honeybadger rules explain <rule-id>")
 		os.Exit(1)
 	}
 
@@ -490,4 +520,79 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func handleRulesList(rulesDir string) int {
+	// Load rules
+	rs, err := rules.Load(rulesDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading rules: %v\n", err)
+		return 1
+	}
+
+	// Print rules in a tabular format
+	fmt.Printf("%-20s %-10s %-50s\n", "ID", "SEVERITY", "TITLE")
+	fmt.Printf("%-20s %-10s %-50s\n", "-------------------", "----------", "--------------------------------------------------")
+
+	for _, rule := range rs.All() {
+		title := rule.Message
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+		fmt.Printf("%-20s %-10s %-50s\n", rule.ID, rule.Severity, title)
+	}
+
+	return 0
+}
+
+func handleRulesExplain(ruleID string, rulesDir string) int {
+	// Load rules
+	rs, err := rules.Load(rulesDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading rules: %v\n", err)
+		return 1
+	}
+
+	// Find the specific rule
+	var targetRule *rules.Rule
+	for _, rule := range rs.All() {
+		if rule.ID == ruleID {
+			targetRule = rule
+			break
+		}
+	}
+
+	if targetRule == nil {
+		fmt.Fprintf(os.Stderr, "rule with ID '%s' not found\n", ruleID)
+		return 1
+	}
+
+	// Print rule details
+	fmt.Printf("ID: %s\n", targetRule.ID)
+	fmt.Printf("Scanner: %s\n", targetRule.Scanner)
+	fmt.Printf("Category: %s\n", targetRule.Category)
+	fmt.Printf("Severity: %s\n", targetRule.Severity)
+	fmt.Printf("Message: %s\n", targetRule.Message)
+	if targetRule.MoreInfoURL != "" {
+		fmt.Printf("More Info: %s\n", targetRule.MoreInfoURL)
+	}
+	if len(targetRule.References) > 0 {
+		fmt.Printf("References:\n")
+		for _, ref := range targetRule.References {
+			fmt.Printf("  - %s\n", ref)
+		}
+	}
+
+	// Print patterns if available
+	if len(targetRule.Patterns) > 0 {
+		fmt.Printf("Patterns:\n")
+		for i, pattern := range targetRule.Patterns {
+			fmt.Printf("  %d. %s\n", i+1, pattern.Description)
+			if pattern.Regex != "" {
+				fmt.Printf("     Regex: %s\n", pattern.Regex)
+			}
+		}
+	}
+
+	return 0
 }
