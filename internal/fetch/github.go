@@ -342,6 +342,28 @@ func (g *GitHubFetcher) githubAPI(ctx context.Context, path, token string) ([]by
 
 // parseGitHubURL extracts owner and repo from a GitHub URL.
 func parseGitHubURL(url string) (owner, repo string, err error) {
+	// Handle SSH format: git@github.com:owner/repo.git
+	if strings.HasPrefix(url, "git@") {
+		// Remove the git@ prefix
+		u := strings.TrimPrefix(url, "git@")
+		// Split on : to separate host from path
+		parts := strings.SplitN(u, ":", 2)
+		if len(parts) != 2 {
+			return "", "", fmt.Errorf("invalid GitHub SSH URL %q: expected git@github.com:owner/repo", url)
+		}
+		// Remove the host part (github.com) and trailing .git
+		u = strings.TrimPrefix(parts[1], "github.com/")
+		u = strings.TrimSuffix(u, ".git")
+		// Remove trailing slash
+		u = strings.TrimRight(u, "/")
+		
+		parts = strings.SplitN(u, "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return "", "", fmt.Errorf("invalid GitHub SSH URL %q: expected owner/repo", url)
+		}
+		return parts[0], parts[1], nil
+	}
+
 	// Remove scheme
 	u := url
 	u = strings.TrimPrefix(u, "https://")

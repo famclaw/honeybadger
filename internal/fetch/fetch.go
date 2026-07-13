@@ -65,6 +65,13 @@ func Route(url string) (Fetcher, error) {
 		return &GitHubFetcher{}, nil
 	case strings.Contains(url, "gitlab.com"):
 		return &GitLabFetcher{}, nil
+	case strings.HasPrefix(url, "git@github.com:") || strings.HasPrefix(url, "git@gitlab.com:"):
+		// SSH URLs with git@ prefix
+		if strings.HasPrefix(url, "git@github.com:") {
+			return &GitHubFetcher{}, nil
+		} else if strings.HasPrefix(url, "git@gitlab.com:") {
+			return &GitLabFetcher{}, nil
+		}
 	case strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://"):
 		return &TarballFetcher{}, nil
 	case url == "":
@@ -75,4 +82,5 @@ func Route(url string) (Fetcher, error) {
 	default:
 		return nil, fmt.Errorf("routing: unsupported URL: %s", url)
 	}
+	return nil, fmt.Errorf("routing: unsupported URL: %s", url)
 }
