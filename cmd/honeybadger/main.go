@@ -183,7 +183,7 @@ func run(cfg runConfig) (int, error) {
 	case "text":
 		emitter = report.NewTextEmitter(os.Stdout)
 	case "sarif":
-		emitter = report.NewSarifEmitter(os.Stdout)
+		emitter = report.NewSarifEmitter(os.Stdout, Version, rs)
 	default:
 		emitter = report.NewNDJSONEmitter(os.Stdout)
 	}

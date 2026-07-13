@@ -6,16 +6,19 @@ import (
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/scan"
+	"github.com/famclaw/honeybadger/internal/rules"
 )
 
 // SarifEmitter implements the Emitter interface for SARIF 2.1.0 output.
 type SarifEmitter struct {
 	writer io.Writer
+	version string
+	rules   *rules.RuleSet
 }
 
 // NewSarifEmitter creates a new SARIF emitter.
-func NewSarifEmitter(w io.Writer) *SarifEmitter {
-	return &SarifEmitter{writer: w}
+func NewSarifEmitter(w io.Writer, version string, rules *rules.RuleSet) *SarifEmitter {
+	return &SarifEmitter{writer: w, version: version, rules: rules}
 }
 
 // Emit writes a SARIF log to the output.
@@ -39,25 +42,19 @@ func (se *SarifEmitter) Close() error {
 
 // emitFindings converts findings to SARIF format and writes them.
 func (se *SarifEmitter) emitFindings(findings []scan.Finding) error {
-	sarifLog := SarifLog{
-		Version: "2.1.0",
-		Schema:  "https://json.schemastore.org/sarif-2.1.0-rtm.5.json",
-		Runs: []Run{
-			{
-				Tool: Tool{
-					Driver: Driver{
-						Name:    "honeybadger",
-						Version: "0.0.0", // TODO: get actual version
-						Rules:   []ReportingDescriptor{}, // We'll populate this later
-					},
-				},
-				Results: []Result{},
-			},
-		},
+	// Build a map of rule ID to rule for quick lookup.
+	ruleMap := make(map[string]*rules.Rule)
+	for _, r := range se.rules.All() {
+		ruleMap[r.ID] = r
 	}
 
-	// Process findings and create SARIF results
+	// We'll collect results and build the list of reporting descriptors.
+	var results []Result
+	seenRules := make(map[string]bool)
+	var reportingDescriptors []ReportingDescriptor
+
 	for _, finding := range findings {
+		// Build the SARIF result for this finding.
 		result := Result{
 			RuleId: finding.RuleID,
 			Message: Message{
@@ -87,10 +84,48 @@ func (se *SarifEmitter) emitFindings(findings []scan.Finding) error {
 			},
 		}
 
-		// Set SARIF level based on severity
+		// Set SARIF level based on severity.
 		result.Level = se.severityToLevel(finding.Severity)
 
-		sarifLog.Runs[0].Results = append(sarifLog.Runs[0].Results, result)
+		results = append(results, result)
+
+		// If we have a rule ID and haven't processed this rule yet, add a reporting descriptor.
+		if finding.RuleID != "" && !seenRules[finding.RuleID] {
+			seenRules[finding.RuleID] = true
+			if rule, exists := ruleMap[finding.RuleID]; exists {
+				// We found the rule; use its ID and message.
+				reportingDescriptors = append(reportingDescriptors, ReportingDescriptor{
+					ID:           rule.ID,
+					Name:         rule.ID,
+					ShortDescription: Message{Text: rule.Message},
+				})
+			} else {
+				// Rule not found in rule set (should not happen, but be safe).
+				reportingDescriptors = append(reportingDescriptors, ReportingDescriptor{
+					ID:           finding.RuleID,
+					Name:         finding.RuleID,
+					ShortDescription: Message{Text: ""},
+				})
+			}
+		}
+	}
+
+	// Build the SARIF log.
+	sarifLog := SarifLog{
+		Version: "2.1.0",
+		Schema:  "https://json.schemastore.org/sarif-2.1.0-rtm.5.json",
+		Runs: []Run{
+			{
+				Tool: Tool{
+					Driver: Driver{
+						Name:    "honeybadger",
+						Version: se.version,
+						Rules:   reportingDescriptors,
+					},
+				},
+				Results: results,
+			},
+		},
 	}
 
 	encoder := json.NewEncoder(se.writer)
@@ -141,7 +176,9 @@ type Driver struct {
 
 // ReportingDescriptor represents a SARIF reporting descriptor.
 type ReportingDescriptor struct {
-	ID string `json:"id"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name,omitempty"`
+	ShortDescription Message `json:"shortDescription,omitempty"`
 }
 
 // Result represents a SARIF result.
