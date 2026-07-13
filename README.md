@@ -34,10 +34,11 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
 ### CLI
 
     honeybadger scan <repo-url> [flags]
+    where <repo-url> supports HTTPS, SSH/git@ (e.g., git@github.com:user/repo), and local paths.
 
     Flags:
       --paranoia string      off|minimal|family|strict|paranoid (default: family)
-      --format string        ndjson|text (default: ndjson)
+      --format string        ndjson|text|sarif (default: ndjson)
       --llm string           LLM endpoint override
       --db string            Path to audit trail file
       --installed-sha string SHA256 of installed version
@@ -47,6 +48,7 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
       --force                Skip scan, exit 0
       --offline              Skip network calls, scan local only
       --path string          Subdirectory within repo to scan
+        See [docs/sarif-output.md] for details on SARIF output.
 
 ### MCP Server
 
@@ -78,6 +80,11 @@ findings by rule ID, optionally constrained by a glob pattern or snippet SHA256:
 Suppressed findings are excluded from the verdict. A `suppression_summary`
 NDJSON event is emitted when findings are suppressed. In text mode, a summary
 line is printed after the verdict.
+
+### Rules CLI
+
+    honeybadger rules list
+    honeybadger rules explain <rule-id>
 
 ## What it checks
 
