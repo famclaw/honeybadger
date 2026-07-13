@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- SARIF 2.1.0 output emitter (`--format sarif`, #69)
+- rules CLI list/explain commands (#70)
+- SSH/git@ clone URL support (#71)
 - CVE severity preservation: when the osv.dev batch response lacks a CVSS
   score, the CVE scanner fetches the full record from `/v1/vulns/{id}` (cached
   per scan, rate-limited between fetches) and grades severity from it.

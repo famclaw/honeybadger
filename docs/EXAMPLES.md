@@ -29,6 +29,16 @@
 ### Write audit trail to SQLite
     honeybadger scan github.com/someone/some-skill --db ./audit.db
 
+### SARIF output
+    honeybadger scan github.com/someone/some-skill --format sarif
+
+### Rules CLI
+    honeybadger rules list
+    honeybadger rules explain <rule-id>
+
+### Scan via SSH URL
+    honeybadger scan git@github.com:someone/some-skill.git
+
 ## MCP Server
 
 ### Start as MCP server
