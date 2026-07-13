@@ -65,13 +65,13 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 
 	// 2. Recursive file tree
 	repo := &Repo{
-		URL:       url,
-		Owner:     owner,
-		Name:      repoName,
-		Platform:  "github",
-		SHA:       sha,
-		Branch:    defaultBranch,
-		Files:     make(map[string][]byte),
+		URL:      url,
+		Owner:    owner,
+		Name:     repoName,
+		Platform: "github",
+		SHA:      sha,
+		Branch:   defaultBranch,
+		Files:    make(map[string][]byte),
 	}
 	treePaths, err := g.fetchTree(ctx, owner, repoName, defaultBranch, token, repo)
 	if err != nil {

@@ -264,4 +264,3 @@ func containsNullByte(data []byte) bool {
 	}
 	return false
 }
-

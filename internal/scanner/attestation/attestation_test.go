@@ -37,7 +37,7 @@ func TestRunAttestation(t *testing.T) {
 		name         string
 		repo         *fetch.Repo
 		opts         scan.Options
-		wantCount    int    // -1 to skip count check
+		wantCount    int // -1 to skip count check
 		wantZero     bool
 		wantSeverity string
 		wantContains string
@@ -74,7 +74,7 @@ jobs:
 `),
 				},
 			},
-			opts: scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
+			opts:         scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
 			wantCount:    -1,
 			wantSeverity: scan.SevInfo,
 			wantContains: "Build attestation workflow configured",
@@ -156,7 +156,7 @@ jobs:
 					".github/workflows/release.yml": []byte("uses: actions/attest-build-provenance@v1"),
 				},
 			},
-			opts:  scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
+			opts:      scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true},
 			wantCount: 3, // workflow INFO + SHA256SUMS INFO + cosign INFO
 		},
 	}
