@@ -180,6 +180,24 @@ func isExecutableBinary(data []byte) bool {
 		return true
 	}
 	
+	// Additional support for other binary formats
+	// Check for Mach-O 64-bit magic bytes
+	if len(data) >= 4 {
+		if data[0] == 0xCF && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE {
+			return true
+		}
+	}
+	
+	// Check for 32-bit ARM binary format
+	if len(data) >= 4 {
+		if data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
+			// Check for 32-bit ARM architecture
+			if len(data) >= 16 && data[16] == 0x04 {
+				return true
+			}
+		}
+	}
+	
 	return false
 }
 

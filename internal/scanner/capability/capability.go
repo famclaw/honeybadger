@@ -109,6 +109,27 @@ func emitBoolDrift(out chan<- scan.Finding, dim, ruleID string, declared *bool, 
 	if isFamClawSkill(m) && (dim == "network" || dim == "filesystem") {
 		// Allow FamClaw skills to be checked for drift
 		// This enables proper vetting of FamClaw skills
+		// Actually enforce the check by removing the commented-out logic
+		if declared != nil && *declared {
+			return // declared true, no drift
+		}
+		sev := scan.SevMedium
+		state := "silent"
+		if declared != nil && !*declared {
+			sev = scan.SevHigh
+			state = "declared false"
+		}
+		out <- scan.Finding{
+			Type:     "finding",
+			Check:    "capability",
+			Severity: sev,
+			RuleID:   ruleID,
+			File:     ev[0].Path,
+			Line:     ev[0].Line,
+			Snippet:  scan.Redact(ev[0].Snippet, 120),
+			Message:  fmt.Sprintf("%s %s; %d evidence lines (first shown)", dim, state, len(ev)),
+		}
+		return
 	}
 	
 	if declared != nil && *declared {

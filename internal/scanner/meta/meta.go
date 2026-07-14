@@ -138,7 +138,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 
 	// Validate FamClaw-specific fields for secret-like env_allowlist entries
 	secretLikePatterns := []string{
-		`(?i)^[A-Z_]+_KEY$`, `(?i)^[A-Z_]+_SECRET$`, `(?i)^[A-Z_]+_TOKEN$`, `(?i)^[A-Z_]+_PASSWORD$`, `(?i)^[A-Z_]+_API_KEY$`,
+		`(?i)^[A-Z_]+_KEY$`, `(?i)^[A-Z_]+_SECRET$`, `(?i)^[A-Z_]+_TOKEN$`, `(?i)^[A-Z_]+_PASSWORD$`, `(?i)^[A-Z_]+_API_KEY$`, `(?i)^[A-Z_]+_PRIVATE_KEY$`, `(?i)^[A-Z_]+_CERT$`, `(?i)^[A-Z_]+_DB_PASSWORD$`,
 	}
 	for _, envVar := range meta.EnvAllowlist {
 		for _, pattern := range secretLikePatterns {
