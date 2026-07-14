@@ -275,12 +275,12 @@ func parseGitLabURL(rawURL string) (string, error) {
 		u = strings.TrimPrefix(parts[1], "gitlab.com/")
 		u = strings.TrimSuffix(u, ".git")
 		// Remove trailing slash
-		u = strings.TrimRight(u, "/")
-		
+u = strings.TrimRight(u, "/")
+	
 		if u == "" || !strings.Contains(u, "/") {
 			return "", fmt.Errorf("invalid GitLab SSH URL %q: expected owner/repo", rawURL)
 		}
-		
+	
 		return u, nil
 	}
 
