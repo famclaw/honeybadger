@@ -9,3 +9,6 @@ docs/superpowers/
 *.dylib
 Thumbs.db
 .DS_Store
+honeybadger-test
+honeybadger
+honeybadger

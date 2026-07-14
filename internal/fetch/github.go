@@ -356,7 +356,7 @@ func parseGitHubURL(url string) (owner, repo string, err error) {
 		u = strings.TrimSuffix(u, ".git")
 		// Remove trailing slash
 		u = strings.TrimRight(u, "/")
-
+		
 		parts = strings.SplitN(u, "/", 2)
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 			return "", "", fmt.Errorf("invalid GitHub SSH URL %q: expected owner/repo", url)

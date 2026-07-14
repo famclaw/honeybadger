@@ -5,13 +5,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
+	"github.com/famclaw/honeybadger/internal/rules"
 )
 
 // SarifEmitter implements the Emitter interface for SARIF 2.1.0 output.
 type SarifEmitter struct {
-	writer  io.Writer
+	writer io.Writer
 	version string
 	rules   *rules.RuleSet
 }
@@ -73,14 +73,14 @@ func (se *SarifEmitter) emitFindings(findings []scan.Finding) error {
 				},
 			},
 			Properties: map[string]interface{}{
-				"rule_id":       finding.RuleID,
-				"more_info_url": finding.MoreInfoURL,
-				"references":    finding.References,
-				"package":       finding.Package,
-				"version":       finding.Version,
-				"ecosystem":     finding.Ecosystem,
-				"cve_id":        finding.ID,
-				"fixed_in":      finding.FixedIn,
+				"rule_id":           finding.RuleID,
+				"more_info_url":     finding.MoreInfoURL,
+				"references":        finding.References,
+				"package":           finding.Package,
+				"version":           finding.Version,
+				"ecosystem":         finding.Ecosystem,
+				"cve_id":            finding.ID,
+				"fixed_in":          finding.FixedIn,
 			},
 		}
 
@@ -95,15 +95,15 @@ func (se *SarifEmitter) emitFindings(findings []scan.Finding) error {
 			if rule, exists := ruleMap[finding.RuleID]; exists {
 				// We found the rule; use its ID and message.
 				reportingDescriptors = append(reportingDescriptors, ReportingDescriptor{
-					ID:               rule.ID,
-					Name:             rule.ID,
+					ID:           rule.ID,
+					Name:         rule.ID,
 					ShortDescription: Message{Text: rule.Message},
 				})
 			} else {
 				// Rule not found in rule set (should not happen, but be safe).
 				reportingDescriptors = append(reportingDescriptors, ReportingDescriptor{
-					ID:               finding.RuleID,
-					Name:             finding.RuleID,
+					ID:           finding.RuleID,
+					Name:         finding.RuleID,
 					ShortDescription: Message{Text: ""},
 				})
 			}
@@ -158,7 +158,7 @@ type SarifLog struct {
 
 // Run represents a SARIF run.
 type Run struct {
-	Tool    Tool     `json:"tool"`
+	Tool    Tool   `json:"tool"`
 	Results []Result `json:"results"`
 }
 
@@ -169,24 +169,24 @@ type Tool struct {
 
 // Driver represents a SARIF driver.
 type Driver struct {
-	Name    string                `json:"name"`
-	Version string                `json:"version"`
+	Name    string               `json:"name"`
+	Version string               `json:"version"`
 	Rules   []ReportingDescriptor `json:"rules,omitempty"`
 }
 
 // ReportingDescriptor represents a SARIF reporting descriptor.
 type ReportingDescriptor struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name,omitempty"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name,omitempty"`
 	ShortDescription Message `json:"shortDescription,omitempty"`
 }
 
 // Result represents a SARIF result.
 type Result struct {
-	RuleId     string                 `json:"ruleId,omitempty"`
-	Level      string                 `json:"level"`
-	Message    Message                `json:"message"`
-	Locations  []Location             `json:"locations,omitempty"`
+	RuleId     string            `json:"ruleId,omitempty"`
+	Level      string            `json:"level"`
+	Message    Message           `json:"message"`
+	Locations  []Location        `json:"locations,omitempty"`
 	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
