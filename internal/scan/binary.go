@@ -34,7 +34,7 @@ func IsExecutable(data []byte) bool {
 	}
 	// MH_MAGIC_64: 0xFEEDFACF, MH_CIGAM_64: 0xCFFFAEDF
 	if (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCF) ||
-		(data[0] == 0xCF && data[1] == 0xFF && data[3] == 0xED) {
+		(data[0] == 0xCF && data[1] == 0xFF && data[2] == 0xED && data[3] == 0xDF) {
 		return true
 	}
 

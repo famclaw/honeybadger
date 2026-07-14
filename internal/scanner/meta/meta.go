@@ -167,8 +167,8 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		}
 	} else if meta.Trigger.Mode == "keyword" {
 		// Check for over-broad keywords (common words that would match almost everything)
-// Keywords that are genuinely risky for trigger keywords because they are commonly used
-	// in prompt injection attacks (e.g., "ignore previous instructions").
+		// Keywords that are genuinely risky for trigger keywords because they are commonly used
+		// in prompt injection attacks (e.g., "ignore previous instructions").
 	overbroadKeywords := map[string]struct{}{
 		"ignore": {}, "forget": {}, "override": {}, "bypass": {}, "jailbreak": {},
 		"system": {}, "admin": {}, "root": {}, "sudo": {},
