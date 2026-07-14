@@ -103,10 +103,14 @@ func emitBoolDrift(out chan<- scan.Finding, dim, ruleID string, declared *bool, 
 	if len(ev) == 0 {
 		return
 	}
-	// For FamClaw skills, skip network/filesystem drift checks as they don't use these fields
+	// For FamClaw skills, we now check network/filesystem drift
+	// Previously, this was skipped to avoid masking legitimate capability drift
+	// However, we should allow FamClaw skills to be properly vetted for drift
 	if isFamClawSkill(m) && (dim == "network" || dim == "filesystem") {
-		return
+		// Allow FamClaw skills to be checked for drift
+		// This enables proper vetting of FamClaw skills
 	}
+	
 	if declared != nil && *declared {
 		return // declared true, no drift
 	}

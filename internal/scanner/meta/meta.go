@@ -138,7 +138,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 
 	// Validate FamClaw-specific fields for secret-like env_allowlist entries
 	secretLikePatterns := []string{
-		"(?i)_KEY$", "(?i)_SECRET$", "(?i)_TOKEN$", "(?i)PASSWORD", "(?i)API_KEY",
+		`(?i)^[A-Z_]+_KEY$`, `(?i)^[A-Z_]+_SECRET$`, `(?i)^[A-Z_]+_TOKEN$`, `(?i)^[A-Z_]+_PASSWORD$`, `(?i)^[A-Z_]+_API_KEY$`,
 	}
 	for _, envVar := range meta.EnvAllowlist {
 		for _, pattern := range secretLikePatterns {
@@ -170,7 +170,12 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		overbroadKeywords := map[string]struct{}{
 			"the": {}, "a": {}, "an": {}, "to": {}, "and": {}, "or": {},
 			"is": {}, "it": {}, "in": {}, "on": {}, "for": {}, "with": {},
-			"as": {}, "at": {}, "by": {},
+			"as": {}, "at": {}, "by": {}, "from": {}, "of": {}, "up": {}, "down": {},
+			"into": {}, "out": {}, "over": {}, "under": {}, "about": {}, "before": {}, "after": {},
+			"between": {}, "among": {}, "through": {}, "across": {}, "along": {}, "around": {},
+			"behind": {}, "beside": {}, "beyond": {}, "inside": {}, "outside": {}, "within": {},
+			"without": {}, "toward": {}, "upon": {}, "since": {}, "until": {}, "while": {},
+			"where": {}, "when": {}, "why": {}, "how": {}, "who": {}, "what": {}, "which": {},
 		}
 		for _, keyword := range meta.Trigger.Keywords {
 			if _, ok := overbroadKeywords[strings.ToLower(keyword)]; ok {

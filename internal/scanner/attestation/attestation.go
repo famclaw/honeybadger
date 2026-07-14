@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -262,6 +263,13 @@ func checkCosignArtifacts(repo *fetch.Repo, opts scan.Options, out chan<- scan.F
 func checkCommittedBinaries(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path, content := range repo.Files {
 		if strings.HasPrefix(path, "bin/") && isExecutableBinary(content) {
+			// Skip common pre-built binary extensions that are typically legitimate
+			// and don't need provenance checks (e.g., .so for shared libraries)
+			ext := filepath.Ext(path)
+			if ext == ".so" || ext == ".dylib" || ext == ".dll" {
+				continue
+			}
+			
 			sev := scan.SevMedium
 			if opts.Paranoia == scan.ParanoiaParanoid {
 				sev = scan.SevHigh
