@@ -3,6 +3,7 @@ package capability
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -91,14 +92,19 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 	envEv := detectEnv(repo.Files)
 
 	// 5. Compare declared vs evidence per dimension, emit at most one finding each.
-	emitBoolDrift(out, "network", "cap-net-drift", m.Requires.Network, netEv)
-	emitBoolDrift(out, "filesystem", "cap-fs-drift", m.Requires.Filesystem, fsEv)
+	emitBoolDrift(out, "network", "cap-net-drift", m.Requires.Network, netEv, m)
+	emitBoolDrift(out, "filesystem", "cap-fs-drift", m.Requires.Filesystem, fsEv, m)
 	emitBinDrift(out, m, binEv)
-	emitEnvDrift(out, m, envEv)
+	emitEnvDrift(out, m.EnvAllowlist, envEv)
+	emitMissingBins(out, m, repo)
 }
 
-func emitBoolDrift(out chan<- scan.Finding, dim, ruleID string, declared *bool, ev []evidence) {
+func emitBoolDrift(out chan<- scan.Finding, dim, ruleID string, declared *bool, ev []evidence, m *meta.SkillMeta) {
 	if len(ev) == 0 {
+		return
+	}
+	// For FamClaw skills, skip network/filesystem drift checks as they don't use these fields
+	if isFamClawSkill(m) && (dim == "network" || dim == "filesystem") {
 		return
 	}
 	if declared != nil && *declared {
@@ -168,13 +174,13 @@ var envWhitelist = map[string]struct{}{
 	"LANG": {}, "PWD": {}, "TMPDIR": {}, "LOGNAME": {},
 }
 
-func emitEnvDrift(out chan<- scan.Finding, m *meta.SkillMeta, ev []envEvidence) {
+func emitEnvDrift(out chan<- scan.Finding, declaredEnv []string, ev []envEvidence) {
 	if len(ev) == 0 {
 		return
 	}
 	declared := map[string]struct{}{}
-	for k := range m.Requires.EnvOptional {
-		declared[k] = struct{}{}
+	for _, v := range declaredEnv {
+		declared[v] = struct{}{}
 	}
 	undeclared := map[string]envEvidence{}
 	total := 0
@@ -226,6 +232,36 @@ func isBinary(data []byte) bool {
 		}
 	}
 	return false
+}
+
+// isFamClawSkill returns true if the skill appears to be a FamClaw skill
+// based on the presence of FamClaw-specific fields.
+func isFamClawSkill(m *meta.SkillMeta) bool {
+	// FamClaw skills typically have env_allowlist or trigger defined
+	return len(m.EnvAllowlist) > 0 || m.Trigger.Mode != "" || len(m.Trigger.Keywords) > 0
+}
+
+// emitMissingBins checks that all declared bins actually exist in the bin/ directory
+func emitMissingBins(out chan<- scan.Finding, m *meta.SkillMeta, repo *fetch.Repo) {
+	for _, bin := range m.Requires.Bins {
+		found := false
+		for path := range repo.Files {
+			if strings.HasPrefix(path, "bin/") && filepath.Base(path) == bin {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out <- scan.Finding{
+				Type:     "finding",
+				Check:    "capability",
+				Severity: scan.SevMedium,
+				RuleID:   "cap-bin-missing",
+				File:     "SKILL.md",
+				Message:  fmt.Sprintf("declared bin %q not found in bin/", bin),
+			}
+		}
+	}
 }
 
 // shouldSkipFile returns true for binary blobs, the SKILL.md, and test fixtures.

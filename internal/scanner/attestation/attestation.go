@@ -36,10 +36,13 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		checkAttestationWorkflow(repo, opts, out)
 	}
 
-	// 3. SHA256SUMS check
+	// 3. Check for committed binaries in bin/ directory
+	checkCommittedBinaries(repo, opts, out)
+
+	// 4. SHA256SUMS check
 	checkSHA256SUMS(repo, opts, out)
 
-	// 4. Cosign artifacts check
+	// 5. Cosign artifacts check
 	checkCosignArtifacts(repo, opts, out)
 }
 
@@ -145,6 +148,40 @@ func isReleaseArtifactScan(repo *fetch.Repo) bool {
 	return repo.Platform == "tarball"
 }
 
+// isExecutableBinary checks if the content appears to be an executable binary
+// by checking for common executable file signatures (magic bytes)
+func isExecutableBinary(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	
+	// Check for ELF magic bytes: 0x7f 'E' 'L' 'F'
+	if data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
+		return true
+	}
+	
+	// Check for Mach-O magic bytes
+	// MH_MAGIC: 0xFEEDFACE, MH_CIGAM: 0xCEFAEDFE (big/little endian)
+	if len(data) >= 4 {
+		if (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCE) ||
+			(data[0] == 0xCE && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE) {
+			return true
+		}
+		// MH_MAGIC_64: 0xFEEDFACF, MH_CIGAM_64: 0xCFFFAEDF
+		if (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCF) ||
+			(data[0] == 0xCF && data[1] == 0xFF && data[2] == 0xFF && data[3] == 0xED) {
+			return true
+		}
+	}
+	
+	// Check for PE (Windows executable) magic bytes: 'M' 'Z'
+	if data[0] == 'M' && data[1] == 'Z' {
+		return true
+	}
+	
+	return false
+}
+
 func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path := range repo.Files {
 		base := strings.ToLower(path)
@@ -217,5 +254,25 @@ func checkCosignArtifacts(repo *fetch.Repo, opts scan.Options, out chan<- scan.F
 		Severity: scan.SevInfo,
 		Check:    "attestation",
 		Message:  "No cosign signature artifacts in scanned source; signature verification requires scanning a published release",
+	}
+}
+
+// checkCommittedBinaries checks for committed binaries in the bin/ directory and flags them
+// as lacking build provenance at strict/paranoid levels
+func checkCommittedBinaries(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+	for path, content := range repo.Files {
+		if strings.HasPrefix(path, "bin/") && isExecutableBinary(content) {
+			sev := scan.SevMedium
+			if opts.Paranoia == scan.ParanoiaParanoid {
+				sev = scan.SevHigh
+			}
+			out <- scan.Finding{
+				Type:     "finding",
+				Severity: sev,
+				Check:    "attestation",
+				RuleID:   "att-bin-no-provenance",
+				Message:  fmt.Sprintf("Binary %s has no build provenance (no SHA256SUMS/cosign)", path),
+			}
+		}
 	}
 }
