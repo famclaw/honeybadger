@@ -245,18 +245,10 @@ func emitEnvDrift(out chan<- scan.Finding, declaredEnv []string, ev []envEvidenc
 	}
 }
 
-// isBinary returns true if the first 512 bytes contain a null byte.
+// isBinary returns true if the data appears to be binary (non-text).
+// It uses the shared scan.IsBinary function.
 func isBinary(data []byte) bool {
-	n := 512
-	if len(data) < n {
-		n = len(data)
-	}
-	for i := 0; i < n; i++ {
-		if data[i] == 0 {
-			return true
-		}
-	}
-	return false
+	return scan.IsBinary(data)
 }
 
 // isFamClawSkill returns true if the skill appears to be a FamClaw skill

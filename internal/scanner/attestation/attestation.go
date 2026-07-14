@@ -151,54 +151,11 @@ func isReleaseArtifactScan(repo *fetch.Repo) bool {
 
 // isExecutableBinary checks if the content appears to be an executable binary
 // by checking for common executable file signatures (magic bytes)
+// isExecutableBinary checks if the content appears to be an executable binary
+// by checking for common executable file signatures (magic bytes) or shebang.
+// It uses the shared scan.IsExecutable function.
 func isExecutableBinary(data []byte) bool {
-	if len(data) < 4 {
-		return false
-	}
-
-	// Check for ELF magic bytes: 0x7f 'E' 'L' 'F'
-	if data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
-		return true
-	}
-
-	// Check for Mach-O magic bytes
-	// MH_MAGIC: 0xFEEDFACE, MH_CIGAM: 0xCEFAEDFE (big/little endian)
-	if len(data) >= 4 {
-		if (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCE) ||
-			(data[0] == 0xCE && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE) {
-			return true
-		}
-		// MH_MAGIC_64: 0xFEEDFACF, MH_CIGAM_64: 0xCFFFAEDF
-		if (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCF) ||
-			(data[0] == 0xCF && data[1] == 0xFF && data[2] == 0xFF && data[3] == 0xED) {
-			return true
-		}
-	}
-
-	// Check for PE (Windows executable) magic bytes: 'M' 'Z'
-	if data[0] == 'M' && data[1] == 'Z' {
-		return true
-	}
-
-	// Additional support for other binary formats
-	// Check for Mach-O 64-bit magic bytes
-	if len(data) >= 4 {
-		if data[0] == 0xCF && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE {
-			return true
-		}
-	}
-
-	// Check for 32-bit ARM binary format
-	if len(data) >= 4 {
-		if data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
-			// Check for 32-bit ARM architecture
-			if len(data) >= 16 && data[16] == 0x04 {
-				return true
-			}
-		}
-	}
-
-	return false
+	return scan.IsExecutable(data)
 }
 
 func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
