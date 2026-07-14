@@ -54,12 +54,12 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 |---|---|---|---|
 | secrets | Hardcoded credentials (gitleaks v8) | YAML (800+ patterns) | High to Critical |
 | cve | Known vulnerabilities in dependencies | osv.dev API (8 lockfile formats) | Low to Critical |
-| supplychain | Remote script execution, typosquatting, reverse shells | YAML (patterns/dictionaries) | Low to Critical |
+| supplychain | Remote script execution, typosquatting, reverse shells, committed binary detection | YAML (patterns/dictionaries) + new binary detection | Low to Critical |
 | meta | SKILL.md frontmatter validation | Code (YAML parsing) | Low to High |
 | capability | Drift between declared permissions and code usage | Code (frontmatter vs source) | Info to High |
 | skillsafety | Prompt injection, Unicode obfuscation, data exfiltration intent | YAML + code (7 scripts, 8 checks) | Medium to Critical |
 | mcptool | MCP tool injection (tool fields + SKILL.md body), read-from-other-file references, shadowing, capability mismatch, rug-pull | YAML (concealment, threat-framing, silent-redirect) + code (`mcp-read-from-other-file`) | Info to High |
-| attestation | Build provenance, Cosign signatures, SHA256SUMS | Code (GitHub API, file checks) | Info to High |
+| attestation | Build provenance, Cosign signatures, SHA256SUMS, committed binary detection | Code (GitHub API, file checks) + new binary detection | Info to High |
 
 ### Entry points
 
@@ -116,3 +116,4 @@ Tests live in each package's `_test.go` file. `internal/testfixture` provides in
 - `buildSourceBlock` prioritizes dependency files, build scripts, and files with findings
 - `extractDependencyNames` parses `package.json` and `requirements.txt` for typosquatting
 - `detectShadowing` uses the injection hit set from `detectInjectionWithHits` for cross-tool analysis
+- `isBinaryContent` uses magic byte detection to identify committed binaries in `bin/` directories

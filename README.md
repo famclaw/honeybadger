@@ -114,6 +114,7 @@ line is printed after the verdict.
 | MCP cross-tool shadowing | mcptool | One tool's description redefining another tool's behavior (family+) |
 | MCP capability mismatch | mcptool | Tool declares readOnlyHint but params/source show writes (family+) |
 | MCP rug pull | mcptool | Tool definitions changed since the approved baseline (family+) |
+| Committed binary | supplychain | Detects committed binary files in bin/ directory (family+) |
 
 ## Why HoneyBadger
 

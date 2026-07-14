@@ -63,6 +63,16 @@ You: Check for updates to my installed skills
 Agent: [runs honeybadger with --installed-sha for each installed skill]
 ```
 
+## FamClaw Skill Vetting
+
+HoneyBadger now includes enhanced vetting for FamClaw skills, including:
+- Detection of committed binary files in bin/ directories
+- Validation of environment variables for secret-like names
+- Validation of trigger fields for over-broad keywords
+
+These enhancements are part of the new `family` paranoia level and are enforced
+by default for FamClaw skills.
+
 ## Usage with FamClaw
 
 FamClaw calls HoneyBadger automatically before installing skills:

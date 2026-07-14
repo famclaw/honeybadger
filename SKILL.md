@@ -89,6 +89,25 @@ Always show the verdict and reasoning to the user.
 If verdict is WARN or FAIL, quote the `key_finding` field.
 If verdict is FAIL, tell the user not to install.
 
+## FamClaw Skill Vetting Enhancements
+
+HoneyBadger now includes enhanced vetting for FamClaw skills. These enhancements
+include:
+
+1. **Environment Variable Secret Validation** - Skills must not declare
+   environment variables that look like secrets (names containing "secret",
+   "token", "key", "pass", etc.)
+
+2. **Over-Broad Trigger Keyword Validation** - Skills must not use overly
+   broad keywords in their `trigger` fields that could indicate
+   suspicious intent.
+
+3. **Committed Binary Detection** - Skills must not include binary files
+   in their `bin/` directory that could be malicious executables.
+
+These validations are part of the new `family` paranoia level and are enforced
+by default for FamClaw skills.
+
 ## Example
 
 User: "Is github.com/some-user/some-skill safe to install?"
