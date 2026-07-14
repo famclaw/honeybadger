@@ -131,7 +131,7 @@ func emitBoolDrift(out chan<- scan.Finding, dim, ruleID string, declared *bool, 
 		}
 		return
 	}
-	
+
 	if declared != nil && *declared {
 		return // declared true, no drift
 	}

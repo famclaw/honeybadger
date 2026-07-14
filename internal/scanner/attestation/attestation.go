@@ -155,12 +155,12 @@ func isExecutableBinary(data []byte) bool {
 	if len(data) < 4 {
 		return false
 	}
-	
+
 	// Check for ELF magic bytes: 0x7f 'E' 'L' 'F'
 	if data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
 		return true
 	}
-	
+
 	// Check for Mach-O magic bytes
 	// MH_MAGIC: 0xFEEDFACE, MH_CIGAM: 0xCEFAEDFE (big/little endian)
 	if len(data) >= 4 {
@@ -174,12 +174,12 @@ func isExecutableBinary(data []byte) bool {
 			return true
 		}
 	}
-	
+
 	// Check for PE (Windows executable) magic bytes: 'M' 'Z'
 	if data[0] == 'M' && data[1] == 'Z' {
 		return true
 	}
-	
+
 	// Additional support for other binary formats
 	// Check for Mach-O 64-bit magic bytes
 	if len(data) >= 4 {
@@ -187,7 +187,7 @@ func isExecutableBinary(data []byte) bool {
 			return true
 		}
 	}
-	
+
 	// Check for 32-bit ARM binary format
 	if len(data) >= 4 {
 		if data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
@@ -197,7 +197,7 @@ func isExecutableBinary(data []byte) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -287,7 +287,7 @@ func checkCommittedBinaries(repo *fetch.Repo, opts scan.Options, out chan<- scan
 			if ext == ".so" || ext == ".dylib" || ext == ".dll" {
 				continue
 			}
-			
+
 			sev := scan.SevMedium
 			if opts.Paranoia == scan.ParanoiaParanoid {
 				sev = scan.SevHigh
