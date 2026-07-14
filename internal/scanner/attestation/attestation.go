@@ -150,8 +150,6 @@ func isReleaseArtifactScan(repo *fetch.Repo) bool {
 }
 
 // isExecutableBinary checks if the content appears to be an executable binary
-// by checking for common executable file signatures (magic bytes)
-// isExecutableBinary checks if the content appears to be an executable binary
 // by checking for common executable file signatures (magic bytes) or shebang.
 // It uses the shared scan.IsExecutable function.
 func isExecutableBinary(data []byte) bool {
