@@ -169,23 +169,23 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		// Check for over-broad keywords (common words that would match almost everything)
 		// Keywords that are genuinely risky for trigger keywords because they are commonly used
 		// in prompt injection attacks (e.g., "ignore previous instructions").
-	overbroadKeywords := map[string]struct{}{
-		"ignore": {}, "forget": {}, "override": {}, "bypass": {}, "jailbreak": {},
-		"system": {}, "admin": {}, "root": {}, "sudo": {},
-		"execute": {}, "run": {}, "command": {}, "shell": {},
-	}
-	for _, keyword := range meta.Trigger.Keywords {
-		if _, ok := overbroadKeywords[strings.ToLower(keyword)]; ok {
-			out <- scan.Finding{
-				Type:     "finding",
-				Severity: scan.SevHigh,
-				Check:    "meta",
-				File:     "SKILL.md",
-				Message:  fmt.Sprintf("trigger.keywords contains over-broad keyword %q — creates persistent prompt injection surface", keyword),
-			}
-			break
+		overbroadKeywords := map[string]struct{}{
+			"ignore": {}, "forget": {}, "override": {}, "bypass": {}, "jailbreak": {},
+			"system": {}, "admin": {}, "root": {}, "sudo": {},
+			"execute": {}, "run": {}, "command": {}, "shell": {},
 		}
-	}
+		for _, keyword := range meta.Trigger.Keywords {
+			if _, ok := overbroadKeywords[strings.ToLower(keyword)]; ok {
+				out <- scan.Finding{
+					Type:     "finding",
+					Severity: scan.SevHigh,
+					Check:    "meta",
+					File:     "SKILL.md",
+					Message:  fmt.Sprintf("trigger.keywords contains over-broad keyword %q — creates persistent prompt injection surface", keyword),
+				}
+				break
+			}
+		}
 	}
 
 }
