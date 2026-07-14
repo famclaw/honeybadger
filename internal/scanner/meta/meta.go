@@ -3,6 +3,7 @@ package meta
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
@@ -19,12 +20,19 @@ type SkillMeta struct {
 	Tags        []string `yaml:"tags"`
 	Platforms   []string `yaml:"platforms"`
 	Requires    struct {
-		Network      *bool             `yaml:"network"`
-		Filesystem   *bool             `yaml:"filesystem"`
+		Network      *bool             `yaml:"network,omitempty"`
+		Filesystem   *bool             `yaml:"filesystem,omitempty"`
 		Bins         []string          `yaml:"bins"`
 		BinsOptional map[string]string `yaml:"bins_optional"`
 		EnvOptional  map[string]string `yaml:"env_optional"`
 	} `yaml:"requires"`
+	// FamClaw-specific top-level fields
+	EnvAllowlist []string `yaml:"env_allowlist"`
+	Trigger      struct {
+		Mode     string   `yaml:"mode"`
+		Keywords []string `yaml:"keywords"`
+	} `yaml:"trigger"`
+	License string `yaml:"license"`
 }
 
 // ParseFrontmatter extracts YAML frontmatter between the first pair of --- lines.
@@ -125,6 +133,61 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 			Check:    "meta",
 			File:     "SKILL.md",
 			Message:  "SKILL.md missing required field: version",
+		}
+	}
+
+	// Validate FamClaw-specific fields for secret-like env_allowlist entries
+	secretLikePatterns := []string{
+		`(?i)^[A-Z_]+_KEY$`, `(?i)^[A-Z_]+_SECRET$`, `(?i)^[A-Z_]+_TOKEN$`, `(?i)^[A-Z_]+_PASSWORD$`, `(?i)^[A-Z_]+_API_KEY$`, `(?i)^[A-Z_]+_PRIVATE_KEY$`, `(?i)^[A-Z_]+_CERT$`, `(?i)^[A-Z_]+_DB_PASSWORD$`,
+	}
+	for _, envVar := range meta.EnvAllowlist {
+		for _, pattern := range secretLikePatterns {
+			match, _ := regexp.MatchString(pattern, envVar)
+			if match {
+				out <- scan.Finding{
+					Type:     "finding",
+					Severity: scan.SevHigh,
+					Check:    "meta",
+					File:     "SKILL.md",
+					Message:  fmt.Sprintf("env_allowlist contains secret-like variable name %q — potential exfiltration channel", envVar),
+				}
+				break
+			}
+		}
+	}
+
+	// Validate FamClaw-specific trigger fields for over-broad injection
+	if meta.Trigger.Mode == "always" {
+		out <- scan.Finding{
+			Type:     "finding",
+			Severity: scan.SevMedium,
+			Check:    "meta",
+			File:     "SKILL.md",
+			Message:  "trigger.mode: always creates persistent prompt injection surface",
+		}
+	} else if meta.Trigger.Mode == "keyword" {
+		// Check for over-broad keywords (common words that would match almost everything)
+		overbroadKeywords := map[string]struct{}{
+			"the": {}, "a": {}, "an": {}, "to": {}, "and": {}, "or": {},
+			"is": {}, "it": {}, "in": {}, "on": {}, "for": {}, "with": {},
+			"as": {}, "at": {}, "by": {}, "from": {}, "of": {}, "up": {}, "down": {},
+			"into": {}, "out": {}, "over": {}, "under": {}, "about": {}, "before": {}, "after": {},
+			"between": {}, "among": {}, "through": {}, "across": {}, "along": {}, "around": {},
+			"behind": {}, "beside": {}, "beyond": {}, "inside": {}, "outside": {}, "within": {},
+			"without": {}, "toward": {}, "upon": {}, "since": {}, "until": {}, "while": {},
+			"where": {}, "when": {}, "why": {}, "how": {}, "who": {}, "what": {}, "which": {},
+		}
+		for _, keyword := range meta.Trigger.Keywords {
+			if _, ok := overbroadKeywords[strings.ToLower(keyword)]; ok {
+				out <- scan.Finding{
+					Type:     "finding",
+					Severity: scan.SevHigh,
+					Check:    "meta",
+					File:     "SKILL.md",
+					Message:  fmt.Sprintf("trigger.keywords contains over-broad keyword %q — creates persistent prompt injection surface", keyword),
+				}
+				break
+			}
 		}
 	}
 
