@@ -110,11 +110,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COSIGN_YES: "true"
 
-      # Attest build provenance for all binaries
+# Attest build provenance for all binaries
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: dist/honeybadger-*
+          subject-path: dist/SHA256SUMS
 
       # Attest SBOM files
       - name: Attest SBOMs
