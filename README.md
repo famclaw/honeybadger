@@ -115,6 +115,15 @@ line is printed after the verdict.
 | MCP capability mismatch | mcptool | Tool declares readOnlyHint but params/source show writes (family+) |
 | MCP rug pull | mcptool | Tool definitions changed since the approved baseline (family+) |
 
+## Binary Detection
+
+HoneyBadger implements robust binary file detection to prevent scanning of non-text content. Two approaches are used:
+
+1. **Null-byte detection** - Checks for null bytes (0x00) in the first 512 bytes of file content
+2. **UTF-8 validation** - Ensures content is valid UTF-8 encoded text
+
+Binary files are automatically skipped during scanning to avoid processing executables, libraries, or compiled code that wouldn't benefit from security scanning rules.
+
 ## Why HoneyBadger
 
 HoneyBadger analyzes MCP tool definitions from a caller-supplied manifest and never executes the server, unlike scanners that call `tools/list` on a live server.
@@ -211,6 +220,7 @@ honeybadger/
 │   │   ├── fileclass_test.go
 │   │   ├── markdown.go      # Markdown code-block vs prose discrimination
 │   │   └── markdown_test.go
+│   │   ├── binary.go        # Shared binary detection functions
 │   ├── scanner/
 │   │   ├── secrets/
 │   │   │   ├── secrets.go       # Secrets scanner (gitleaks-powered)
