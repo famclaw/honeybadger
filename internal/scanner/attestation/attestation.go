@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -36,10 +37,13 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		checkAttestationWorkflow(repo, opts, out)
 	}
 
-	// 3. SHA256SUMS check
+	// 3. Check for committed binaries in bin/ directory
+	checkCommittedBinaries(repo, opts, out)
+
+	// 4. SHA256SUMS check
 	checkSHA256SUMS(repo, opts, out)
 
-	// 4. Cosign artifacts check
+	// 5. Cosign artifacts check
 	checkCosignArtifacts(repo, opts, out)
 }
 
@@ -145,6 +149,13 @@ func isReleaseArtifactScan(repo *fetch.Repo) bool {
 	return repo.Platform == "tarball"
 }
 
+// isExecutableBinary checks if the content appears to be an executable binary
+// by checking for common executable file signatures (magic bytes) or shebang.
+// It uses the shared scan.IsExecutable function.
+func isExecutableBinary(data []byte) bool {
+	return scan.IsExecutable(data)
+}
+
 func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path := range repo.Files {
 		base := strings.ToLower(path)
@@ -217,5 +228,32 @@ func checkCosignArtifacts(repo *fetch.Repo, opts scan.Options, out chan<- scan.F
 		Severity: scan.SevInfo,
 		Check:    "attestation",
 		Message:  "No cosign signature artifacts in scanned source; signature verification requires scanning a published release",
+	}
+}
+
+// checkCommittedBinaries checks for committed binaries in the bin/ directory and flags them
+// as lacking build provenance at strict/paranoid levels
+func checkCommittedBinaries(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+	for path, content := range repo.Files {
+		if strings.HasPrefix(path, "bin/") && isExecutableBinary(content) {
+			// Skip common pre-built binary extensions that are typically legitimate
+			// and don't need provenance checks (e.g., .so for shared libraries)
+			ext := filepath.Ext(path)
+			if ext == ".so" || ext == ".dylib" || ext == ".dll" {
+				continue
+			}
+
+			sev := scan.SevMedium
+			if opts.Paranoia == scan.ParanoiaParanoid {
+				sev = scan.SevHigh
+			}
+			out <- scan.Finding{
+				Type:     "finding",
+				Severity: sev,
+				Check:    "attestation",
+				RuleID:   "att-bin-no-provenance",
+				Message:  fmt.Sprintf("Binary %s has no build provenance (no SHA256SUMS/cosign)", path),
+			}
+		}
 	}
 }
