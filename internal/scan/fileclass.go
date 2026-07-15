@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"bytes"
 	"path"
 	"strings"
 
@@ -53,6 +54,45 @@ var knownScanners = map[string]bool{
 	"supplychain": true, "skillsafety": true, "secrets": true,
 	"capability": true, "cve": true, "meta": true,
 	"mcptool": true, "attestation": true,
+}
+// commentPrefixes maps file extensions to a list of comment prefixes that,
+// when at the start of a line (after whitespace), indicate the line is a comment.
+var commentPrefixes = map[string][]string{
+	".go": {"//"},
+	".sh": {"#"},
+	".bash": {"#"},
+	".zsh": {"#"},
+	".fish": {"#"},
+	// Add more as needed
+}
+
+// IsCommentLine reports whether the line at the given lineNumber (1-based) in
+// the given content is a comment line. It uses a simple heuristic: trims
+// leading whitespace and checks if the line starts with any known comment
+// prefix for the file's extension.
+func IsCommentLine(content []byte, lineNumber int, fileName string) bool {
+	if lineNumber < 1 {
+		return false
+	}
+	lines := bytes.Split(content, []byte{'\n'})
+	if lineNumber > len(lines) {
+		return false
+	}
+	line := lines[lineNumber-1]
+	// Trim leading whitespace
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return false
+	}
+	ext := path.Ext(fileName)
+	if prefixes, ok := commentPrefixes[ext]; ok {
+		for _, prefix := range prefixes {
+			if bytes.HasPrefix(line, []byte(prefix)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // testDirSegments are path segments that mark a file as test material.
@@ -270,6 +310,12 @@ func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 			f.Severity = SevInfo // code-block example — informational only
 			kept = append(kept, f)
 			continue
+		}
+
+		if role == RoleCode && f.Line > 0 {
+			if IsCommentLine(content, f.Line, f.File) {
+				continue // comment in code — described, not present
+			}
 		}
 
 		sev, ok := AdjustSeverity(f.Severity, role)

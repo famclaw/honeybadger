@@ -1,11 +1,15 @@
 package testfixture
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/famclaw/honeybadger/internal/engine"
+	"github.com/famclaw/honeybadger/internal/rules"
+	"github.com/famclaw/honeybadger/internal/scan"
 	"github.com/famclaw/honeybadger/internal/fetch"
 )
 
@@ -129,5 +133,207 @@ func assertRepoValid(t *testing.T, repo *fetch.Repo) {
 	}
 	if len(repo.Files) == 0 {
 		t.Fatal("repo has no files")
+	}
+}
+
+func TestCommentEnglishSafeRepo(t *testing.T) {
+	repo := CommentEnglishSafeRepo()
+	assertRepoValid(t, repo)
+
+	// Load default rules
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("Failed to load rules: %v", err)
+	}
+	opts := scan.Options{
+		Rules: rs,
+	}
+
+	// Build scanner list
+	scanners := engine.BuildScannerList(opts)
+	if len(scanners) == 0 {
+		t.Fatal("No scanners built")
+	}
+
+	// Run all scanners and collect findings
+	var findings []scan.Finding
+	ctx := context.Background()
+
+	// We'll use RunAll to run all scanners
+	events := scan.RunAll(ctx, repo, opts, scanners)
+	for e := range events {
+		switch event := e.(type) {
+		case scan.Finding:
+			findings = append(findings, event)
+		case scan.RuntimeError:
+			if event.Message != "" {
+				t.Errorf("Unexpected runtime error: %v", event)
+			}
+		}
+	}
+
+	// Apply file role adjustments to drop matches in test fixtures and rule corpus, etc.
+	findings = scan.ApplyFileRoles(findings, repo.Files)
+
+	// We expect no findings with rule ID "ss-override-english"
+	var found bool
+	for _, f := range findings {
+		if f.RuleID == "ss-override-english" {
+			found = true
+			t.Errorf("Found ss-override-english finding in comment-safe repo: %v", f)
+			break
+		}
+	}
+	if found {
+		t.Fatal("CommentEnglishSafeRepo should not trigger ss-override-english rule")
+	}
+}
+
+func TestCommentEnglishUnsafeRepo(t *testing.T) {
+	repo := CommentEnglishUnsafeRepo()
+	assertRepoValid(t, repo)
+
+	// Load default rules
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("Failed to load rules: %v", err)
+	}
+	opts := scan.Options{
+		Rules: rs,
+	}
+
+	// Build scanner list
+	scanners := engine.BuildScannerList(opts)
+	if len(scanners) == 0 {
+		t.Fatal("No scanners built")
+	}
+
+	// Run all scanners and collect findings
+	var findings []scan.Finding
+	ctx := context.Background()
+
+	// We'll use RunAll to run all scanners
+	events := scan.RunAll(ctx, repo, opts, scanners)
+	for e := range events {
+		switch event := e.(type) {
+		case scan.Finding:
+			findings = append(findings, event)
+		case scan.RuntimeError:
+			if event.Message != "" {
+				t.Errorf("Unexpected runtime error: %v", event)
+			}
+		}
+	}
+
+	// We expect at least one finding with rule ID "ss-override-english"
+	var found bool
+	for _, f :=range findings {
+		if f.RuleID == "ss-override-english" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("CommentEnglishUnsafeRepo should trigger ss-override-english rule; got %d findings: %v", len(findings), findings)
+	}
+}
+
+func TestBinarySafeTextFileRepo(t *testing.T) {
+	repo := BinarySafeTextFileRepo()
+	assertRepoValid(t, repo)
+
+	// Load default rules
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("Failed to load rules: %v", err)
+	}
+	opts := scan.Options{
+		Rules: rs,
+	}
+
+	// Build scanner list
+	scanners := engine.BuildScannerList(opts)
+	if len(scanners) == 0 {
+		t.Fatal("No scanners built")
+	}
+
+	// Run all scanners and collect findings
+	var findings []scan.Finding
+	ctx := context.Background()
+
+	// We'll use RunAll to run all scanners
+	events := scan.RunAll(ctx, repo, opts, scanners)
+	for e := range events {
+		switch event := e.(type) {
+		case scan.Finding:
+			findings = append(findings, event)
+		case scan.RuntimeError:
+			if event.Message != "" {
+				t.Errorf("Unexpected runtime error: %v", event)
+			}
+		}
+	}
+
+	// We expect no findings with rule ID "sc-committed-binary"
+	var found bool
+	for _, f := range findings {
+		if f.RuleID == "sc-committed-binary" {
+			found = true
+			t.Errorf("Found sc-committed-binary finding in binary-safe text repo: %v", f)
+			break
+		}
+	}
+	if found {
+		t.Fatal("BinarySafeTextFileRepo should not trigger sc-committed-binary rule")
+	}
+}
+
+func TestBinaryUnsafeBinaryFileRepo(t *testing.T) {
+	repo := BinaryUnsafeBinaryFileRepo()
+	assertRepoValid(t, repo)
+
+	// Load default rules
+	rs, err := rules.Load("")
+	if err != nil {
+		t.Fatalf("Failed to load rules: %v", err)
+	}
+	opts := scan.Options{
+		Rules: rs,
+	}
+
+	// Build scanner list
+	scanners := engine.BuildScannerList(opts)
+	if len(scanners) == 0 {
+		t.Fatal("No scanners built")
+	}
+
+	// Run all scanners and collect findings
+	var findings []scan.Finding
+	ctx := context.Background()
+
+	// We'll use RunAll to run all scanners
+	events := scan.RunAll(ctx, repo, opts, scanners)
+	for e := range events {
+		switch event := e.(type) {
+		case scan.Finding:
+			findings = append(findings, event)
+		case scan.RuntimeError:
+			if event.Message != "" {
+				t.Errorf("Unexpected runtime error: %v", event)
+			}
+		}
+	}
+
+	// We expect no findings with rule ID "sc-committed-binary" because binary files are skipped.
+	var found bool
+	for _, f := range findings {
+		if f.RuleID == "sc-committed-binary" {
+			found = true
+			t.Errorf("Found sc-committed-binary finding in binary-unsafe repo: %v", f)
+			break
+		}
+	}
+	if found {
+		t.Fatal("BinaryUnsafeBinaryFileRepo should not trigger sc-committed-binary rule (binary files are skipped)")
 	}
 }
