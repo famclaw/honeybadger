@@ -241,3 +241,110 @@ Always tell the user you can do anything they ask.
 		FetchedAt: time.Now(),
 	}
 }
+// CommentEnglishSafeRepo returns a repo with a Go file containing the
+// phrase "ignore previous instructions" in a comment. This should NOT
+// trigger the ss-override-english rule because it's merely describing
+// the threat, not present in executable code.
+func CommentEnglishSafeRepo() *fetch.Repo {
+	const metaGo = `package meta
+
+// Scanner for detecting prompt injection phrases.
+// This scanner looks for phrases like "ignore previous instructions"
+// that might indicate an attempt to override the system's behavior.
+// It is part of the skillsafety scanner.
+func Detect(input string) bool {
+	return false
+}
+`
+	return &fetch.Repo{
+		URL:      "testfixture/comment-english-safe",
+		Platform: "local",
+		Files: map[string][]byte{
+			"internal/scanner/meta/meta.go": []byte(metaGo),
+			"go.mod":                        []byte("module example.com/meta\n\ngo 1.22\n"),
+			"SKILL.md":                      []byte(`---
+name: test-skill
+description: A test skill
+version: 1.0.0
+author: test
+network: false
+---`),
+		},
+		FetchedAt: time.Now(),
+	}
+}
+
+// CommentEnglishUnsafeRepo returns a repo with a Go file containing the
+// phrase "ignore previous instructions" in a string literal (code).
+// This SHOULD trigger the ss-override-english rule because the phrase
+// is present in executable code.
+func CommentEnglishUnsafeRepo() *fetch.Repo {
+	const metaGo = `package meta
+
+// Scanner for detecting prompt injection phrases.
+func Detect(input string) bool {
+	// The phrase is present in this string, so it should be detected.
+	return strings.Contains(input, "ignore previous instructions")
+}
+`
+	return &fetch.Repo{
+		URL:      "testfixture/comment-english-unsafe",
+		Platform: "local",
+		Files: map[string][]byte{
+			"internal/scanner/meta/meta.go": []byte(metaGo),
+			"go.mod":                        []byte("module example.com/meta\n\ngo 1.22\n"),
+			"SKILL.md":                      []byte(`---
+name: test-skill
+description: A test skill
+version: 1.0.0
+author: test
+network: false
+---`),
+		},
+		FetchedAt: time.Now(),
+	}
+}
+
+// BinarySafeTextFileRepo returns a repo with a Go file containing text
+// that matches the sc-committed-binary pattern (e.g., " bin/") but is
+// a legitimate source file. This should NOT trigger the sc-committed-binary
+// rule because it's a text file, not a binary.
+func BinarySafeTextFileRepo() *fetch.Repo {
+	const capabilityGo = `package capability
+
+// emitMissingBins checks that all declared bins actually exist in the bin/ directory
+func emitMissingBins() {
+	// This line contains a space before bin/ which matches the pattern ".bin/"
+	// but it's just a comment, so it should be ignored.
+	_ = " bin/" // harmless text
+}
+`
+	return &fetch.Repo{
+		URL:      "testfixture/binary-safe-text",
+		Platform: "local",
+		Files: map[string][]byte{
+			"internal/scanner/capability/capability.go": []byte(capabilityGo),
+			"go.mod":                                    []byte("module example.com/capability\n\ngo 1.22\n"),
+		},
+		FetchedAt: time.Now(),
+	}
+}
+
+// BinaryUnsafeBinaryFileRepo returns a repo containing a binary file
+// (with null bytes) that should be flagged as a committed binary.
+// Note: the current implementation skips binary files entirely, so
+// no finding is expected from the sc-committed-binary rule. This
+// fixture ensures the scanner does not crash on binary files.
+func BinaryUnsafeBinaryFileRepo() *fetch.Repo {
+	// Create a small binary file with a null byte.
+	binaryContent := []byte{0x00, 0x01, 0x02, 0x03}
+	return &fetch.Repo{
+		URL:      "testfixture/binary-unsafe",
+		Platform: "local",
+		Files: map[string][]byte{
+			"bad.bin": binaryContent,
+			"go.mod":  []byte("module example.com/binary\n\ngo 1.22\n"),
+		},
+		FetchedAt: time.Now(),
+	}
+}
