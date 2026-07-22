@@ -39,6 +39,16 @@
 ### Scan via SSH URL
     honeybadger scan git@github.com:someone/some-skill.git
 
+### SARIF output example
+    honeybadger scan github.com/someone/some-skill --format sarif
+
+### Rules CLI example
+    honeybadger rules list
+    honeybadger rules explain SECRET_IN_CODE
+
+### SSH URL scan example
+    honeybadger scan git@github.com:someone/some-skill.git
+
 ## MCP Server
 
 ### Start as MCP server
