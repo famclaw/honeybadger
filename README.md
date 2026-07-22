@@ -63,6 +63,25 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 Reads from stdin and scans it as a single file (`SKILL.md` by default).
 Input is capped at 10 MB.
 
+#### SARIF Output
+
+HoneyBadger now supports generating SARIF (Static Analysis Results Interchange Format) 2.1.0 output for integration with security tools and CI/CD pipelines:
+
+    honeybadger scan <repo-url> --format sarif
+
+#### Rules CLI
+
+HoneyBadger now supports listing and explaining detection rules:
+
+    honeybadger rules list
+    honeybadger rules explain <rule-id>
+
+#### SSH/git@ Clone URLs
+
+HoneyBadger now supports scanning repositories using SSH/git@ clone URLs:
+
+    honeybadger scan git@github.com:user/repo.git
+
 ### Suppressing findings
 
 Place a `.honeybadgerignore` file in your repository root. Each line suppresses
