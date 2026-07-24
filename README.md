@@ -69,6 +69,38 @@ HoneyBadger now supports generating SARIF (Static Analysis Results Interchange F
 
     honeybadger scan <repo-url> --format sarif
 
+This format is compatible with various security platforms and CI/CD systems. The SARIF output includes detailed information about each finding, including rule IDs, severity levels, file locations, and additional metadata.
+
+##### Example Usage
+
+```bash
+honeybadger scan https://github.com/example/repo --format sarif
+```
+
+##### SARIF Output Structure
+
+The SARIF output includes:
+- **Version**: "2.1.0" 
+- **Schema**: "https://json.schemastore.org/sarif-2.1.0-rtm.5.json"
+- **Tool**: honeybadger driver with name and version
+- **Results**: Each finding becomes a SARIF result with:
+  - `ruleId`: The rule identifier
+  - `level`: Severity mapping (error, warning, note)
+  - `message.text`: Finding message
+  - `locations.physicalLocation.artifactLocation.uri`: File path
+  - `locations.physicalLocation.region.startLine`: Line number
+  - `properties`: Additional metadata including rule_id, more_info_url, references, package, version, ecosystem, cve_id, fixed_in
+
+##### Severity Mapping
+
+| HoneyBadger Severity | SARIF Level |
+|---------------------|-------------|
+| CRITICAL            | error       |
+| HIGH                | error       |
+| MEDIUM              | warning     |
+| LOW                 | note        |
+| INFO                | note        |
+
 #### Rules CLI
 
 HoneyBadger now supports listing and explaining detection rules:
@@ -76,11 +108,31 @@ HoneyBadger now supports listing and explaining detection rules:
     honeybadger rules list
     honeybadger rules explain <rule-id>
 
+This feature allows users to inspect the available detection rules, see their details, and understand what threats they are designed to catch.
+
+##### Example Usage
+
+```bash
+# List all available rules
+honeybadger rules list
+
+# Explain a specific rule
+honeybadger rules explain SECRET_IN_CODE
+```
+
 #### SSH/git@ Clone URLs
 
 HoneyBadger now supports scanning repositories using SSH/git@ clone URLs:
 
     honeybadger scan git@github.com:user/repo.git
+
+This enables scanning private repositories or repositories that are only accessible via SSH without requiring token authentication.
+
+##### Example Usage
+
+```bash
+honeybadger scan git@github.com:user/repo.git
+```
 
 ### Suppressing findings
 
