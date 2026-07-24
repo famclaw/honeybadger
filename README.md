@@ -25,6 +25,21 @@ HoneyBadger performs static analysis only -- it reads source code and metadata b
     # Docker
     docker pull ghcr.io/famclaw/honeybadger:latest
 
+## Secure Installation Note
+
+For secure installation, we recommend downloading the binary first, inspecting it, and then executing it:
+
+```bash
+# Download the binary
+curl -fsSL https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 -o honeybadger
+
+# Inspect the downloaded file (optional but recommended)
+ls -la honeybadger
+
+# Make it executable
+chmod +x honeybadger
+```
+
 All platforms: [Releases](https://github.com/famclaw/honeybadger/releases/latest) —
 Linux (amd64, arm64, armv7), macOS (arm64, amd64).
 Verify downloads: see [SECURITY.md](SECURITY.md).
