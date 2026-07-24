@@ -33,18 +33,20 @@
     honeybadger scan github.com/someone/some-skill --format sarif
 
 ### Rules CLI
-    honeybadger rules list
-    honeybadger rules explain <rule-id>
+    honeybadger rules list          # List all available rules
+    honeybadger rules explain <rule-id>  # Show detailed information about a specific rule
 
 ### Scan via SSH URL
     honeybadger scan git@github.com:someone/some-skill.git
+
+Note: When scanning private repositories via SSH URL, you must have SSH keys properly configured and added to your SSH agent. The repository must be accessible using your default SSH key or the key specified in your SSH configuration.
 
 ### SARIF output example
     honeybadger scan github.com/someone/some-skill --format sarif
 
 ### Rules CLI example
-    honeybadger rules list
-    honeybadger rules explain SECRET_IN_CODE
+    honeybadger rules list          # List all available rules
+    honeybadger rules explain SECRET_IN_CODE  # Show detailed information about a specific rule
 
 ### SSH URL scan example
     honeybadger scan git@github.com:someone/some-skill.git

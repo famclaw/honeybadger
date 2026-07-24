@@ -21,7 +21,15 @@ The SARIF output includes:
   - `message.text`: Finding message
   - `locations.physicalLocation.artifactLocation.uri`: File path
   - `locations.physicalLocation.region.startLine`: Line number
-  - `properties`: Additional metadata including rule_id, more_info_url, references, package, version, ecosystem, cve_id, fixed_in
+  - `properties`: Additional metadata including:
+    - `rule_id`: The rule identifier
+    - `more_info_url`: Link to more information about the rule
+    - `references`: List of reference URLs
+    - `package`: Package name (for CVE findings)
+    - `version`: Package version (for CVE findings)
+    - `ecosystem`: Package ecosystem (for CVE findings)
+    - `cve_id`: CVE identifier (for CVE findings)
+    - `fixed_in`: Fixed version (for CVE findings)
 
 ## Severity Mapping
 
