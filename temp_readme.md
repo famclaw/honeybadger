@@ -25,21 +25,6 @@ HoneyBadger performs static analysis only -- it reads source code and metadata b
     # Docker
     docker pull ghcr.io/famclaw/honeybadger:latest
 
-## Secure Installation Note
-
-For secure installation, we recommend downloading the binary first, inspecting it, and then executing it:
-
-```bash
-# Download the binary
-curl -fsSL https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 -o honeybadger
-
-# Inspect the downloaded file (optional but recommended)
-ls -la honeybadger
-
-# Make it executable
-chmod +x honeybadger
-```
-
 All platforms: [Releases](https://github.com/famclaw/honeybadger/releases/latest) —
 Linux (amd64, arm64, armv7), macOS (arm64, amd64).
 Verify downloads: see [SECURITY.md](SECURITY.md).
@@ -84,38 +69,6 @@ HoneyBadger now supports generating SARIF (Static Analysis Results Interchange F
 
     honeybadger scan <repo-url> --format sarif
 
-This format is compatible with various security platforms and CI/CD systems. The SARIF output includes detailed information about each finding, including rule IDs, severity levels, file locations, and additional metadata.
-
-##### Example Usage
-
-```bash
-honeybadger scan https://github.com/example/repo --format sarif
-```
-
-##### SARIF Output Structure
-
-The SARIF output includes:
-- **Version**: "2.1.0" 
-- **Schema**: "https://json.schemastore.org/sarif-2.1.0-rtm.5.json"
-- **Tool**: honeybadger driver with name and version
-- **Results**: Each finding becomes a SARIF result with:
-  - `ruleId`: The rule identifier
-  - `level`: Severity mapping (error, warning, note)
-  - `message.text`: Finding message
-  - `locations.physicalLocation.artifactLocation.uri`: File path
-  - `locations.physicalLocation.region.startLine`: Line number
-  - `properties`: Additional metadata including rule_id, more_info_url, references, package, version, ecosystem, cve_id, fixed_in
-
-##### Severity Mapping
-
-| HoneyBadger Severity | SARIF Level |
-|---------------------|-------------|
-| CRITICAL            | error       |
-| HIGH                | error       |
-| MEDIUM              | warning     |
-| LOW                 | note        |
-| INFO                | note        |
-
 #### Rules CLI
 
 HoneyBadger now supports listing and explaining detection rules:
@@ -123,31 +76,11 @@ HoneyBadger now supports listing and explaining detection rules:
     honeybadger rules list
     honeybadger rules explain <rule-id>
 
-This feature allows users to inspect the available detection rules, see their details, and understand what threats they are designed to catch.
-
-##### Example Usage
-
-```bash
-# List all available rules
-honeybadger rules list
-
-# Explain a specific rule
-honeybadger rules explain SECRET_IN_CODE
-```
-
 #### SSH/git@ Clone URLs
 
 HoneyBadger now supports scanning repositories using SSH/git@ clone URLs:
 
     honeybadger scan git@github.com:user/repo.git
-
-This enables scanning private repositories or repositories that are only accessible via SSH without requiring token authentication.
-
-##### Example Usage
-
-```bash
-honeybadger scan git@github.com:user/repo.git
-```
 
 ### Suppressing findings
 
@@ -220,7 +153,7 @@ HoneyBadger analyzes MCP tool definitions from a caller-supplied manifest and ne
 | **Offline mode** | yes | partial (static) | no | partial (local Ollama) |
 | **MCP server mode** | yes (JSON-RPC) | scans MCP servers | scans MCP servers | scans MCP servers |
 | **Paranoia levels** | 5 tiers | no | no | no |
-| **SKILL.md scanning** | yes | no | yes | yes |
+| **SKILL.md scanning** | yes | no | yes (skills mode) | yes |
 | **CVE scanning** | 8 lockfile formats | no | no | no |
 | **Secrets detection** | gitleaks 800+ | Yara | yes (skills mode) | yes (skill scanning) |
 | **Supply chain** | yes | no | no | no |
@@ -402,64 +335,3 @@ honeybadger/
 ├── README.md
 ├── SECURITY.md
 └── SKILL.md                  # AgentSkills manifest for skill registries
-```
-
-## Status
-
-**v0.5.1 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.5.1)
-
-Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
-attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
-poisoning, cross-tool shadowing, capability mismatch, and rug-pull drift.
-Detection rules are YAML-defined and runtime-extensible. Binaries signed with
-Sigstore cosign, SPDX SBOMs attached to every release.
-
-File-role classification distinguishes a threat *described* in documentation
-or defined in a rule corpus from one *present* in executable code, so
-HoneyBadger passes its own scan cleanly at every paranoia tier.
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## Building
-
-    make build              # current platform
-    make cross              # all 5 targets (linux arm64/armv7/amd64, darwin arm64/amd64)
-    make test               # run all tests
-    make self-check         # scan ourselves at strict paranoia (requires prior release)
-    make self-check-bootstrap  # scan at minimal paranoia (for initial releases only)
-    make release-dry        # test GoReleaser locally (snapshot, no publish)
-
-## Extending with custom rules
-
-Detection rules are YAML files embedded in the binary. Add custom rules at
-runtime by dropping `.yaml` files into `~/.honeybadger/rules/` (or set
-`HONEYBADGER_RULES_DIR`):
-
-    mkdir -p ~/.honeybadger/rules/custom
-    cat > ~/.honeybadger/rules/custom/my-rule.yaml << 'EOF'
-    id: my_custom_check
-    kind: pattern
-    scanner: supplychain
-    category: custom
-    severity: HIGH
-    signal: file_content
-    patterns:
-      - regex: 'SOME_DANGEROUS_PATTERN'
-        description: "My custom detection"
-    message: "Custom rule matched"
-    EOF
-    honeybadger scan ./my-project  # custom rule will fire
-
-See [rules/README.md](rules/README.md) for the full format spec.
-
-## Release Checklist
-
-1. `make self-check` passes at strict paranoia (or `self-check-bootstrap` for first release)
-2. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
-3. GoReleaser builds, signs, and publishes via `.github/workflows/release.yml`
-4. Verify release: see [SECURITY.md](SECURITY.md#verifying-release-artifacts)
-5. Set GitHub topics: `security`, `mcp`, `supply-chain`, `scanner`, `agentskills`, `golang`
-
-## License
-
-[MIT](./LICENSE)
