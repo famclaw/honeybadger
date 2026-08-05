@@ -110,7 +110,10 @@ func TestCLI_ScanVerdicts(t *testing.T) {
 			dir := testfixture.WriteToDir(t, tt.repo)
 
 			cmd := exec.Command(testBinary, "scan", dir, "--paranoia", tt.paranoia, "--format", "ndjson", "--offline")
-			out, _ := cmd.CombinedOutput()
+			out, err := cmd.CombinedOutput()
+			if cmd.ProcessState == nil {
+				t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+			}
 			exitCode := cmd.ProcessState.ExitCode()
 
 			result := findResultEvent(t, out)
@@ -150,7 +153,10 @@ func TestCLI_ForceFlagRunsAnalysis(t *testing.T) {
 
 	cmd := exec.Command(testBinary, "scan", dir,
 		"--force", "--paranoia", "family", "--format", "ndjson", "--offline")
-	out, _ := cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
+	if cmd.ProcessState == nil {
+		t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+	}
 	result := findResultEvent(t, out)
 
 	verdict, _ := result["verdict"].(string)
