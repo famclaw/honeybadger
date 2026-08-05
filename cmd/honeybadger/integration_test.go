@@ -174,9 +174,14 @@ func TestCLI_ForceFlagRunsAnalysis(t *testing.T) {
 			result["duration_ms"], out)
 	}
 
-	// Exit code must reflect the real verdict, never a silent 0 pass.
-	if exit := cmd.ProcessState.ExitCode(); exit == 0 && verdict != "PASS" {
-		t.Errorf("--force exited 0 despite verdict %q\n%s", verdict, out)
+	// Exit code must reflect the real verdict, never a silent 0 pass. Since this
+	// repo contains a hardcoded secret, the scan must FAIL and the exit code must
+	// be non-zero. The check is on the exit code directly — not gated on
+	// `verdict != "PASS"` — because the --force bypass bug is itself what
+	// produces verdict "PASS"; gating on that clause would make this assertion
+	// dead (false exactly when the bug re-emerges).
+	if exit := cmd.ProcessState.ExitCode(); exit == 0 {
+		t.Errorf("--force exited 0 despite a repo containing secrets; expected non-zero\n%s", out)
 	}
 }
 
