@@ -219,22 +219,10 @@ func run(cfg runConfig) (int, error) {
 	}
 	defer emitter.Close()
 
-	// 3. Handle --force
-	if cfg.Force {
-		if err := emitter.Emit(engine.ResultEarlyEvent{
-			Type:      "result",
-			Verdict:   "PASS",
-			Reasoning: "Scan bypassed via --force flag",
-		}); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
-		}
-		return 0, nil
-	}
-
-	// 4. Tier detection
+	// 3. Tier detection
 	tier := engine.DetectTier(cfg.Offline)
 
-	// 5. Sandbox detection and event
+	// 4. Sandbox detection and event
 	sandboxAvailable, sandboxType, reason := engine.DetectSandbox()
 	effectiveParanoia := string(paranoia)
 
@@ -256,7 +244,7 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// 6. Fetch repo
+	// 5. Fetch repo
 	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
@@ -283,7 +271,9 @@ func run(cfg runConfig) (int, error) {
 	}
 
 	// 13a. Update verification: --installed-sha
-	if cfg.InstalledSHA != "" {
+	// --force bypasses this audit cache so the scan always runs
+	// ("force scan even if already audited").
+	if cfg.InstalledSHA != "" && !cfg.Force {
 		archiveHash := engine.ComputeRepoHash(repo)
 		if archiveHash == cfg.InstalledSHA {
 			if err := emitter.Emit(engine.ResultEarlyEvent{

@@ -17,6 +17,7 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/testfixture"
 )
@@ -109,7 +110,10 @@ func TestCLI_ScanVerdicts(t *testing.T) {
 			dir := testfixture.WriteToDir(t, tt.repo)
 
 			cmd := exec.Command(testBinary, "scan", dir, "--paranoia", tt.paranoia, "--format", "ndjson", "--offline")
-			out, _ := cmd.CombinedOutput()
+			out, err := cmd.CombinedOutput()
+			if cmd.ProcessState == nil {
+				t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+			}
 			exitCode := cmd.ProcessState.ExitCode()
 
 			result := findResultEvent(t, out)
@@ -134,15 +138,88 @@ func TestCLI_ScanVerdicts(t *testing.T) {
 // CLI special mode tests
 // ---------------------------------------------------------------------------
 
-func TestCLI_ForceFlag(t *testing.T) {
-	cmd := exec.Command(testBinary, "scan", "anything", "--force", "--format", "ndjson")
+// Regression for issue #82: `honeybadger scan --force` must NOT bypass
+// analysis and report VERDICT: PASS.
+//
+// Previously the --force short-circuit emitted a bare PASS result with zero
+// findings and zero duration after performing no work at all -- indistinguishable
+// from a clean scan and strictly wrong for a security gate. The flag's own help
+// text reads "force scan even if already audited", so --force must run the
+// scanners. This test scans a repo containing a hardcoded secret: with --force
+// the scan must still run and FAIL. It FAILS against the buggy code (PASS, 0
+// findings, 0ms) and PASSES once the short-circuit is removed.
+func TestCLI_ForceFlagRunsAnalysis(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.SecretsRepo())
+
+	cmd := exec.Command(testBinary, "scan", dir,
+		"--force", "--paranoia", "family", "--format", "ndjson", "--offline")
+	out, err := cmd.CombinedOutput()
+	if cmd.ProcessState == nil {
+		t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+	}
+	result := findResultEvent(t, out)
+
+	verdict, _ := result["verdict"].(string)
+
+	// A repo with a hardcoded secret must never report PASS -- especially via
+	// --force, which is required to run the analysis.
+	if verdict == "PASS" {
+		t.Errorf("--force reported PASS for a repo containing secrets; "+
+			"analysis was bypassed\n%s", out)
+	}
+
+	// Real findings must be present -- the scan actually executed.
+	if findings := countFindings(t, out); findings == 0 {
+		t.Errorf("--force produced 0 findings; analysis did not run\n%s", out)
+	}
+
+	// A real scan takes a measurable amount of time. The buggy short-circuit
+	// emitted no duration_ms at all (Duration: 0ms).
+	if dur, ok := result["duration_ms"].(float64); !ok || dur == 0 {
+		t.Errorf("--force duration_ms = %v, expected > 0 (analysis did not run)\n%s",
+			result["duration_ms"], out)
+	}
+
+	// Exit code must reflect the real verdict, never a silent 0 pass. Since this
+	// repo contains a hardcoded secret, the scan must FAIL and the exit code must
+	// be non-zero. The check is on the exit code directly — not gated on
+	// `verdict != "PASS"` — because the --force bypass bug is itself what
+	// produces verdict "PASS"; gating on that clause would make this assertion
+	// dead (false exactly when the bug re-emerges).
+	if exit := cmd.ProcessState.ExitCode(); exit == 0 {
+		t.Errorf("--force exited 0 despite a repo containing secrets; expected non-zero\n%s", out)
+	}
+}
+
+// Regression companion: --force must also bypass the --installed-sha audit
+// cache so it truly "forces a scan even if already audited". This test proves
+// the cache is real (matching SHA without --force short-circuits to PASS) and
+// that --force defeats it (scan runs against a repo with a secret => FAIL).
+func TestCLI_ForceFlagBYPASSSSHACache(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.SecretsRepo())
+	installedSHA := engine.ComputeRepoHash(testfixture.SecretsRepo())
+
+	// Without --force, a matching installed SHA short-circuits to PASS (audit
+	// cache is real and performs hash-comparison work).
+	cmd := exec.Command(testBinary, "scan", dir,
+		"--installed-sha", installedSHA,
+		"--paranoia", "family", "--format", "ndjson", "--offline")
 	out, _ := cmd.CombinedOutput()
 	result := findResultEvent(t, out)
-	if result["verdict"] != "PASS" {
-		t.Errorf("--force verdict = %q, want PASS", result["verdict"])
+	if verdict, _ := result["verdict"].(string); verdict != "PASS" {
+		t.Errorf("matching --installed-sha without --force verdict = %q, want PASS "+
+			"(proves the audit cache hash matches)\n%s", verdict, out)
 	}
-	if cmd.ProcessState.ExitCode() != 0 {
-		t.Errorf("--force exit code = %d, want 0", cmd.ProcessState.ExitCode())
+
+	// With --force the cache is bypassed: the scan must run and FAIL.
+	cmdForced := exec.Command(testBinary, "scan", dir,
+		"--force", "--installed-sha", installedSHA,
+		"--paranoia", "family", "--format", "ndjson", "--offline")
+	outF, _ := cmdForced.CombinedOutput()
+	resultF := findResultEvent(t, outF)
+	if verdict, _ := resultF["verdict"].(string); verdict == "PASS" {
+		t.Errorf("--force with matching --installed-sha reported PASS; "+
+			"the audit cache should have been bypassed\n%s", outF)
 	}
 }
 
