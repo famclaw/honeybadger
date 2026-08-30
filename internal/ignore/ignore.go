@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -76,8 +77,7 @@ func (s *Set) Match(f *scan.Finding) *Rule {
 			continue
 		}
 		if r.PathGlob != "" {
-			matched, err := filepath.Match(r.PathGlob, f.File)
-			if err != nil || !matched {
+			if !matchPathGlob(r.PathGlob, f.File) {
 				continue
 			}
 		}
@@ -110,4 +110,49 @@ func (s *Set) Filter(findings []scan.Finding) ([]scan.Finding, []SuppressedFindi
 		}
 	}
 	return kept, suppressed
+}
+
+func matchPathGlob(pattern, file string) bool {
+	pattern = normalizePathGlobPattern(pattern)
+	file = normalizePathGlobFile(file)
+	if matched, err := path.Match(pattern, file); err == nil && matched {
+		return true
+	}
+	if strings.Contains(pattern, "/") {
+		return false
+	}
+	matched, err := path.Match(pattern, path.Base(file))
+	return err == nil && matched
+}
+
+func normalizePathGlobFile(s string) string {
+	return strings.ReplaceAll(filepath.ToSlash(s), `\`, "/")
+}
+
+func normalizePathGlobPattern(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' {
+			b.WriteByte(s[i])
+			continue
+		}
+		if i+1 < len(s) && isGlobEscapeTarget(s[i+1]) {
+			b.WriteByte(s[i])
+			i++
+			b.WriteByte(s[i])
+			continue
+		}
+		b.WriteByte('/')
+	}
+	return b.String()
+}
+
+func isGlobEscapeTarget(c byte) bool {
+	switch c {
+	case '*', '?', '[', ']', '\\':
+		return true
+	default:
+		return false
+	}
 }
