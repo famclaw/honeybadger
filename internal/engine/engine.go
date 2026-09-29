@@ -116,8 +116,10 @@ func VerdictRank(v string) int {
 		return 0
 	case "WARN":
 		return 1
-	case "FAIL":
+	case "INCOMPLETE":
 		return 2
+	case "FAIL":
+		return 3
 	default:
 		return -1
 	}
@@ -130,6 +132,8 @@ func ExitCodeForVerdict(verdict string) int {
 		return 0
 	case "WARN":
 		return 1
+	case "INCOMPLETE":
+		return 3
 	case "FAIL":
 		return 2
 	default:
