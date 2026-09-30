@@ -102,17 +102,9 @@ func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.Parano
 // BuildScannerNames returns the list of all scanner names
 // NOTE: must stay in sync with BuildScannerList (engine.go).
 func BuildScannerNames(scanOpts scan.Options) []string {
-	switch scanOpts.Paranoia {
-	case scan.ParanoiaOff:
-		return nil
-	case scan.ParanoiaMinimal:
-		return []string{"secrets", "cve"}
-	case scan.ParanoiaFamily:
-		return []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "mcptool"}
-	case scan.ParanoiaStrict, scan.ParanoiaParanoid:
-		return []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "attestation", "mcptool"}
-	default:
-		// Default to family
-		return []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "mcptool"}
+	out := make([]string, 0)
+	for _, s := range scannersFor(scanOpts) {
+		out = append(out, s.Name)
 	}
+	return out
 }
