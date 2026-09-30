@@ -189,11 +189,12 @@ func TestIsTermux(t *testing.T) {
 
 func TestExitCodeForVerdict(t *testing.T) {
 	tests := []struct {
-		verdict  string
-		wantCode int
+		verdict   string
+		wantCode  int
 	}{
 		{"PASS", 0},
 		{"WARN", 1},
+		{"INCOMPLETE", 3},
 		{"FAIL", 2},
 		{"UNKNOWN", 3},
 		{"", 3},
@@ -216,7 +217,8 @@ func TestVerdictRank(t *testing.T) {
 	}{
 		{"PASS", 0},
 		{"WARN", 1},
-		{"FAIL", 2},
+		{"INCOMPLETE", 2},
+		{"FAIL", 3},
 		{"OTHER", -1},
 	}
 

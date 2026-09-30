@@ -196,7 +196,9 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	}
 
 	// 7. Compute final verdict
-	verdict, reasoning, keyFinding := engine.ComputeVerdict(allFindings, paranoia, llmVerdict)
+	scannerNames := engine.BuildScannerNames(scanOpts)
+	checkResults := engine.NewCheckResultsFromErrors(scannerNames, runtimeErrors)
+	verdict, reasoning, keyFinding := engine.ComputeVerdictWithCheckStatus(allFindings, paranoia, llmVerdict, checkResults)
 
 	// 8. Count findings by severity
 	findingCounts := map[string]int{

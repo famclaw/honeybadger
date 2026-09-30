@@ -321,11 +321,13 @@ func run(cfg runConfig) (int, error) {
 	// Collect findings before emitting (suppression must happen first).
 	// Runtime errors are emitted directly and never enter verdict computation.
 	var allFindings []scan.Finding
+	var runtimeErrors []scan.RuntimeError
 	for ev := range events {
 		switch v := ev.(type) {
 		case scan.Finding:
 			allFindings = append(allFindings, v)
 		case scan.RuntimeError:
+			runtimeErrors = append(runtimeErrors, v)
 			if err := emitter.Emit(v); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to write runtime error: %v\n", err)
 			}
@@ -425,7 +427,9 @@ func run(cfg runConfig) (int, error) {
 	}
 
 	// 10. Compute final verdict
-	verdict, reasoning, keyFinding := engine.ComputeVerdict(allFindings, paranoia, llmVerdict)
+	scannerNames := engine.BuildScannerNames(scanOpts)
+	checkResults := engine.NewCheckResultsFromErrors(scannerNames, runtimeErrors)
+	verdict, reasoning, keyFinding := engine.ComputeVerdictWithCheckStatus(allFindings, paranoia, llmVerdict, checkResults)
 
 	// Count findings by severity
 	findingCounts := map[string]int{
