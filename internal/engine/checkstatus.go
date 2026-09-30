@@ -73,6 +73,8 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 // ComputeVerdictWithCheckStatus computes the verdict considering both findings and check status
 func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.ParanoiaLevel, llmVerdict *report.LLMVerdict, checkResults CheckResults) (string, string, string) {
 	// First compute the base verdict from findings
+	// ComputeVerdict already applies the LLM worse-of escalation internally;
+	// do not re-apply it here (see engine.go ComputeVerdict, "Combine with LLM verdict").
 	baseVerdict, reasoning, keyFinding := ComputeVerdict(findings, paranoia, llmVerdict)
 	
 	// If we have check results, and any required check failed, downgrade PASS/WARN to INCOMPLETE
@@ -91,19 +93,6 @@ func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.Parano
 		if hasFailedRequiredCheck && (baseVerdict == "PASS" || baseVerdict == "WARN") {
 			baseVerdict = "INCOMPLETE"
 			reasoning = reasoning + " (downgraded due to failed required check)"
-		}
-	}
-	
-	// Apply LLM worse-of logic
-	if llmVerdict != nil {
-		llmRank := VerdictRank(llmVerdict.Verdict)
-		rulesRank := VerdictRank(baseVerdict)
-		if llmRank > rulesRank {
-			baseVerdict = llmVerdict.Verdict
-			reasoning = "LLM verdict: " + llmVerdict.Reasoning
-			if llmVerdict.KeyFinding != "" {
-				keyFinding = llmVerdict.KeyFinding
-			}
 		}
 	}
 	
