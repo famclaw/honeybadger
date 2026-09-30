@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"log"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
@@ -57,6 +58,11 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 		
 		// If no existing entry, add new entry
 		if !found {
+			// unknown scanner names (e.g. "runner", which is how scanner panics are tagged by scan.RunAll)
+			// MUST produce a FAIL entry so a panicked/misrouted scanner can never yield an unqualified PASS;
+			// a misrouted or spurious error degrading the verdict to INCOMPLETE is the desired fail-safe direction
+			// for a security scanner.
+			log.Printf("honeybadger: runtime error from unrecognized scanner %q: %s — counting as failed check (fail-safe)", err.Scanner, err.Message)
 			results = append(results, CheckResult{
 				Name: err.Scanner,
 				Verdict: "FAIL",
