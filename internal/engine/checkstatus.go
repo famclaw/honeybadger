@@ -19,9 +19,19 @@ type CheckResults struct {
 
 // NewCheckResultsFromErrors creates a CheckResults from runtime errors
 func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.RuntimeError) CheckResults {
-	results := make([]CheckResult, 0, len(scannerNames))
-	
+	// Deduplicate scannerNames while preserving order
+	seen := make(map[string]bool)
+	uniqueNames := make([]string, 0)
 	for _, name := range scannerNames {
+		if !seen[name] {
+			seen[name] = true
+			uniqueNames = append(uniqueNames, name)
+		}
+	}
+	
+	// Seed results with PASS for each scanner name
+	results := make([]CheckResult, 0, len(uniqueNames))
+	for _, name := range uniqueNames {
 		results = append(results, CheckResult{
 			Name: name,
 			Verdict: "PASS",
@@ -29,8 +39,10 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 		})
 	}
 	
-	// Mark any failed checks as FAIL
+	// Process runtime errors
 	for _, err := range runtimeErrors {
+		// Look for existing entry with matching name
+		found := false
 		for i, result := range results {
 			if result.Name == err.Scanner {
 				results[i] = CheckResult{
@@ -38,8 +50,18 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 					Verdict: "FAIL",
 					Error: err.Message,
 				}
+				found = true
 				break
 			}
+		}
+		
+		// If no existing entry, add new entry
+		if !found {
+			results = append(results, CheckResult{
+				Name: err.Scanner,
+				Verdict: "FAIL",
+				Error: err.Message,
+			})
 		}
 	}
 	
@@ -89,6 +111,19 @@ func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.Parano
 }
 
 // BuildScannerNames returns the list of all scanner names
+// NOTE: must stay in sync with BuildScannerList (engine.go).
 func BuildScannerNames(scanOpts scan.Options) []string {
-	return []string{"secrets", "cve", "capability", "mcptool", "attestation", "supplychain", "meta", "skillsafety"}
+	switch scanOpts.Paranoia {
+	case scan.ParanoiaOff:
+		return nil
+	case scan.ParanoiaMinimal:
+		return []string{"secrets", "cve"}
+	case scan.ParanoiaFamily:
+		return []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "mcptool"}
+	case scan.ParanoiaStrict, scan.ParanoiaParanoid:
+		return []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "attestation", "mcptool"}
+	default:
+		// Default to family
+		return []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "mcptool"}
+	}
 }

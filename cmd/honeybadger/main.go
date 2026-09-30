@@ -319,7 +319,7 @@ func run(cfg runConfig) (int, error) {
 	events := scan.RunAll(ctx, repo, scanOpts, scanners)
 
 	// Collect findings before emitting (suppression must happen first).
-	// Runtime errors are emitted directly and never enter verdict computation.
+	// Runtime errors are emitted and feed into verdict computation.
 	var allFindings []scan.Finding
 	var runtimeErrors []scan.RuntimeError
 	for ev := range events {
