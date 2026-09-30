@@ -194,7 +194,7 @@ func TestExitCodeForVerdict(t *testing.T) {
 	}{
 		{"PASS", 0},
 		{"WARN", 1},
-		{"INCOMPLETE", 3},
+		{"INCOMPLETE", 4},
 		{"FAIL", 2},
 		{"UNKNOWN", 3},
 		{"", 3},

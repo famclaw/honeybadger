@@ -125,7 +125,7 @@ func ExitCodeForVerdict(verdict string) int {
 	case "WARN":
 		return 1
 	case "INCOMPLETE":
-		return 3
+		return 4
 	case "FAIL":
 		return 2
 	default:
