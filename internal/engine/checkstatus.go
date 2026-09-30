@@ -14,6 +14,11 @@ type CheckResult struct {
 }
 
 // CheckResults represents the collection of all check results
+//
+// Note: CheckResults must be constructed via NewCheckResultsFromErrors as the sole constructor.
+// A zero-value CheckResults{} means "no checks tracked" and will NOT downgrade the verdict.
+// Callers with runtime errors that were NOT passed through NewCheckResultsFromErrors
+// get no protection from this mechanism.
 type CheckResults struct {
 	Results []CheckResult
 }
@@ -85,6 +90,8 @@ func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.Parano
 	
 	// If we have check results, and any required check failed, downgrade PASS/WARN to INCOMPLETE
 	// For simplicity, we assume all checks are required for now
+	// Check if checkResults is nil (which means no checks were performed) or if it's an empty slice
+	// In both cases, we skip the downgrade logic to avoid silently ignoring runtime errors
 	if checkResults.Results != nil {
 		// Check if any required check failed
 		hasFailedRequiredCheck := false

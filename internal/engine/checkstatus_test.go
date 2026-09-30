@@ -15,13 +15,13 @@ func TestCheckStatus(t *testing.T) {
 			Message: "failed to run cve scanner",
 		},
 	}
-	
+
 	checkResults := NewCheckResultsFromErrors(scannerNames, runtimeErrors)
-	
+
 	if len(checkResults.Results) != 3 {
 		t.Errorf("Expected 3 results, got %d", len(checkResults.Results))
 	}
-	
+
 	// Check that cve is marked as failed
 	foundFailed := false
 	for _, result := range checkResults.Results {
@@ -30,20 +30,20 @@ func TestCheckStatus(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !foundFailed {
 		t.Error("Expected cve scanner to be marked as failed")
 	}
-	
+
 	// Test ComputeVerdictWithCheckStatus
 	findings := []scan.Finding{}
-	
-	// Test with no errors
+
+	// Test with no errors (zero-value CheckResults{})
 	verdict, _, _ := ComputeVerdictWithCheckStatus(findings, scan.ParanoiaFamily, nil, CheckResults{})
 	if verdict != "PASS" {
 		t.Errorf("Expected PASS verdict, got %s", verdict)
 	}
-	
+
 	// Test with failed check
 	checkResultsWithFail := CheckResults{
 		Results: []CheckResult{
@@ -51,10 +51,19 @@ func TestCheckStatus(t *testing.T) {
 			{Name: "cve", Verdict: "FAIL"},
 		},
 	}
-	
+
 	verdict, _, _ = ComputeVerdictWithCheckStatus(findings, scan.ParanoiaFamily, nil, checkResultsWithFail)
 	if verdict != "INCOMPLETE" {
 		t.Errorf("Expected INCOMPLETE verdict, got %s", verdict)
+	}
+
+	// Test nil-safe behavior with empty slice
+	emptyResults := CheckResults{
+		Results: []CheckResult{},
+	}
+	verdict, _, _ = ComputeVerdictWithCheckStatus(findings, scan.ParanoiaFamily, nil, emptyResults)
+	if verdict != "PASS" {
+		t.Errorf("Expected PASS verdict with empty slice, got %s", verdict)
 	}
 }
 
@@ -67,19 +76,19 @@ func TestNewCheckResultsFromErrors(t *testing.T) {
 			Message: "boom",
 		},
 	}
-	
+
 	checkResults := NewCheckResultsFromErrors(scannerNames, runtimeErrors)
-	
+
 	// Should have 3 entries: secrets PASS, cve PASS, runner FAIL
 	if len(checkResults.Results) != 3 {
 		t.Errorf("Expected 3 results, got %d", len(checkResults.Results))
 	}
-	
+
 	// Check that secrets and cve are PASS
 	secretsPass := false
 	cvePass := false
 	runnerFail := false
-	
+
 	for _, result := range checkResults.Results {
 		if result.Name == "secrets" && result.Verdict == "PASS" {
 			secretsPass = true
@@ -91,7 +100,7 @@ func TestNewCheckResultsFromErrors(t *testing.T) {
 			runnerFail = true
 		}
 	}
-	
+
 	if !secretsPass {
 		t.Error("Expected secrets scanner to be PASS")
 	}
@@ -101,7 +110,7 @@ func TestNewCheckResultsFromErrors(t *testing.T) {
 	if !runnerFail {
 		t.Error("Expected runner scanner to be FAIL with correct error")
 	}
-	
+
 	// Test case 2: Known scanner error should update existing entry
 	scannerNames = []string{"secrets", "cve"}
 	runtimeErrors = []scan.RuntimeError{
@@ -110,14 +119,14 @@ func TestNewCheckResultsFromErrors(t *testing.T) {
 			Message: "db down",
 		},
 	}
-	
+
 	checkResults = NewCheckResultsFromErrors(scannerNames, runtimeErrors)
-	
+
 	// Should have 2 entries: secrets PASS, cve FAIL
 	if len(checkResults.Results) != 2 {
 		t.Errorf("Expected 2 results, got %d", len(checkResults.Results))
 	}
-	
+
 	// Check that cve is FAIL with correct error
 	cveFail := false
 	for _, result := range checkResults.Results {
@@ -125,7 +134,7 @@ func TestNewCheckResultsFromErrors(t *testing.T) {
 			cveFail = true
 		}
 	}
-	
+
 	if !cveFail {
 		t.Error("Expected cve scanner to be FAIL with correct error")
 	}
@@ -143,16 +152,16 @@ func TestBuildScannerNames(t *testing.T) {
 		{scan.ParanoiaStrict, []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "attestation", "mcptool"}},
 		{scan.ParanoiaParanoid, []string{"secrets", "cve", "supplychain", "meta", "capability", "skillsafety", "attestation", "mcptool"}},
 	}
-	
+
 	for _, tc := range tests {
 		opts := scan.Options{Paranoia: tc.paranoia}
 		result := BuildScannerNames(opts)
-		
+
 		// Check length
 		if len(result) != len(tc.expected) {
 			t.Errorf("For paranoia %v: expected length %d, got %d", tc.paranoia, len(tc.expected), len(result))
 		}
-		
+
 		// Check elements
 		for i, expected := range tc.expected {
 			if result[i] != expected {
