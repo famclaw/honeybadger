@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"sync"
+
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 // NDJSONEmitter writes newline-delimited JSON to the given writer.
-// Each call to Emit writes one JSON line immediately (no buffering).
+// Each call to Emit writes one JSON line per finding immediately (no buffering).
+// A []scan.Finding argument writes one line per element.
 type NDJSONEmitter struct {
 	w   io.Writer
 	enc *json.Encoder
@@ -23,6 +26,16 @@ func NewNDJSONEmitter(w io.Writer) *NDJSONEmitter {
 func (e *NDJSONEmitter) Emit(v any) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	if fs, ok := v.([]scan.Finding); ok {
+		for _, f := range fs {
+			if err := e.enc.Encode(f); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	return e.enc.Encode(v) // json.Encoder.Encode appends \n automatically
 }
 

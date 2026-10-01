@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 // TextEmitter writes human-readable output with severity markers.
@@ -21,6 +23,22 @@ func NewTextEmitter(w io.Writer) *TextEmitter {
 func (e *TextEmitter) Emit(v any) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	if fs, ok := v.([]scan.Finding); ok {
+		for _, f := range fs {
+			if err := e.emitOne(f); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return e.emitOne(v)
+}
+
+// emitOne is a helper that processes a single finding or event.
+// It assumes the mutex is already held.
+func (e *TextEmitter) emitOne(v any) error {
 	// Marshal to map to inspect the "type" field generically.
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -134,7 +152,7 @@ func (e *TextEmitter) writeVerdict(m map[string]any) error {
 	)
 }
 
-// writef is called only from Emit (directly or via writeVerdict). Emit holds
+// writef is called only from emitOne (directly or via writeVerdict). emitOne holds
 // e.mu for the entire call, so this helper does not lock.
 func (e *TextEmitter) writef(format string, args ...any) error {
 	_, err := fmt.Fprintf(e.w, format, args...)

@@ -31,6 +31,10 @@ The SARIF output includes:
     - `cve_id`: CVE identifier (for CVE findings)
     - `fixed_in`: Fixed version (for CVE findings)
 
+## Output Notes
+
+Output is always a single SARIF 2.1.0 document. When a scan has zero findings, the document still emits with `"results":[]` (never `null` and never multiple documents).
+
 ## Severity Mapping
 
 | HoneyBadger Severity | SARIF Level |
