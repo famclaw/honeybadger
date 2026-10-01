@@ -353,9 +353,16 @@ func run(cfg runConfig) (int, error) {
 	var suppressedCount int
 
 	// Load suppression policy
-	// For the target ignore file, we need to determine the directory where the repo files are located
-	// Since we don't have direct access to repo path, we'll use a workaround
-	policy, err := ignore.LoadPolicy(".", cfg.IgnoreFile, cfg.TrustTargetIgnore)
+	// First try to get the target ignore file content from repo.Files
+	var targetIgnoreContent []byte
+	if repo.Files != nil {
+		if content, exists := repo.Files[".honeybadgerignore"]; exists {
+			targetIgnoreContent = content
+		}
+	}
+
+	// Load policy with either content from repo or fall back to filesystem
+	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, cfg.TrustTargetIgnore)
 	if err != nil {
 		return 1, fmt.Errorf("loading ignore policy: %w", err)
 	}

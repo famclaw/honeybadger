@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/engine"
+	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
-	"github.com/famclaw/honeybadger/internal/fetch"
 )
 
 func TestCleanRepo(t *testing.T) {
@@ -227,7 +227,7 @@ func TestCommentEnglishUnsafeRepo(t *testing.T) {
 
 	// We expect at least one finding with rule ID "ss-override-english"
 	var found bool
-	for _, f :=range findings {
+	for _, f := range findings {
 		if f.RuleID == "ss-override-english" {
 			found = true
 			break

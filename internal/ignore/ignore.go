@@ -174,6 +174,37 @@ func LoadPolicy(targetDir, operatorPolicyFile string, trustTarget bool) (*Policy
 	return p, nil
 }
 
+// LoadPolicyFromContent loads a suppression policy using explicit content from repo files.
+// This allows passing the actual content from repo.Files instead of reading from filesystem.
+func LoadPolicyFromContent(targetContent []byte, operatorPolicyFile string, trustTarget bool) (*Policy, error) {
+	p := &Policy{
+		TrustTarget: trustTarget,
+	}
+
+	// Load target ignore rules from provided content
+	if len(targetContent) > 0 {
+		var err error
+		p.Target, err = Parse(targetContent, ".honeybadgerignore")
+		if err != nil {
+			return nil, fmt.Errorf("parsing target ignore file: %w", err)
+		}
+	}
+
+	// Load operator ignore rules from operator policy file if provided
+	if operatorPolicyFile != "" {
+		content, err := os.ReadFile(operatorPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading operator policy file: %w", err)
+		}
+		p.Operator, err = Parse(content, operatorPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("parsing operator policy file: %w", err)
+		}
+	}
+
+	return p, nil
+}
+
 // Apply applies a suppression policy to findings.
 func Apply(policy *Policy, findings []scan.Finding) *Outcome {
 	outcome := &Outcome{
