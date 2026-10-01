@@ -40,7 +40,7 @@ func TestSarifZeroFindings(t *testing.T) {
 		t.Error("Expected at least one run")
 		return
 	}
-	
+
 	// Ensure results is an empty slice, not null
 	if result.Runs[0].Results == nil {
 		t.Error("Expected results to be an empty slice, not nil")
@@ -197,7 +197,7 @@ func TestSarifSingleDocument(t *testing.T) {
 		File:      "test.go",
 		Line:      10,
 	}
-	
+
 	finding2 := scan.Finding{
 		Type:       "cve",
 		Severity:   scan.SevMedium,
@@ -222,7 +222,7 @@ func TestSarifSingleDocument(t *testing.T) {
 
 	// Verify we get exactly one JSON document by trying to decode it
 	decoder := json.NewDecoder(&buf)
-	
+
 	// Decode first document
 	var firstDoc SarifLog
 	if err := decoder.Decode(&firstDoc); err != nil {
