@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/ignore"
 	"github.com/famclaw/honeybadger/internal/scan"
-	"github.com/famclaw/honeybadger/internal/engine"
 )
 
 func TestIgnorePolicyBehavior(t *testing.T) {
@@ -24,7 +24,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 		description        string
 	}{
 		{
-			name: "Attacker ignore, trust OFF, no operator",
+			name:           "Attacker ignore, trust OFF, no operator",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
@@ -47,7 +47,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Should still have findings because target ignore is not trusted",
 		},
 		{
-			name: "Attacker ignore, trust OFF, operator suppresses rule-1",
+			name:           "Attacker ignore, trust OFF, operator suppresses rule-1",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "SECRET_IN_CODE\n",
@@ -70,7 +70,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Operator suppression works (1 suppressed) but the remaining HIGH finding still fails at family tier; attacker target ignore is not trusted",
 		},
 		{
-			name: "Attacker ignore, trust ON",
+			name:           "Attacker ignore, trust ON",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    true,
 			operatorIgnore: "",
@@ -93,7 +93,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Target ignore is trusted (1 suppressed) but the remaining HIGH finding still fails at family tier",
 		},
 		{
-			name: "Attacker ignore, trust OFF, unrelated operator policy",
+			name:           "Attacker ignore, trust OFF, unrelated operator policy",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "UNRELATED_RULE\n",
@@ -116,7 +116,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Unrelated operator policy should not affect suppression",
 		},
 		{
-			name: "Multiple findings + attacker ignore, trust OFF",
+			name:           "Multiple findings + attacker ignore, trust OFF",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
@@ -136,10 +136,10 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			},
 			expectedVerdict:    "FAIL",
 			expectedSuppressed: 0,
-			description:          "Should have 2 findings when target ignore is not trusted",
+			description:        "Should have 2 findings when target ignore is not trusted",
 		},
 		{
-			name: "High severity findings, attacker ignore, trust OFF",
+			name:           "High severity findings, attacker ignore, trust OFF",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
@@ -162,7 +162,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Should still FAIL because attacker ignore is not trusted and findings are HIGH severity",
 		},
 		{
-			name: "High severity findings, attacker ignore, trust ON",
+			name:           "High severity findings, attacker ignore, trust ON",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    true,
 			operatorIgnore: "",
@@ -185,7 +185,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Target ignore is trusted (1 suppressed) but the remaining HIGH finding still fails at family tier",
 		},
 		{
-			name: "Medium severity findings, attacker ignore, trust OFF",
+			name:           "Medium severity findings, attacker ignore, trust OFF",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
@@ -208,7 +208,7 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			description:        "Should still WARN because attacker ignore is not trusted and findings are MEDIUM severity",
 		},
 		{
-			name: "Medium severity findings, attacker ignore, trust ON",
+			name:           "Medium severity findings, attacker ignore, trust ON",
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    true,
 			operatorIgnore: "",

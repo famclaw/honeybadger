@@ -308,7 +308,8 @@ honeybadger/
 │   │   └── tarball.go       # Tarball fetcher
 │   ├── ignore/
 │   │   ├── ignore.go        # .honeybadgerignore parser and finding filter
-│   │   └── ignore_test.go
+│   │   ├── ignore_test.go
+│   │   └── ignore_integration_test.go
 │   ├── report/
 │   │   ├── types.go         # Emitter interface
 │   │   ├── ndjson.go        # NDJSON streaming emitter
