@@ -45,7 +45,7 @@ func TestSarifZeroFindings(t *testing.T) {
 	if result.Runs[0].Results == nil {
 		t.Error("Expected results to be an empty slice, not nil")
 	}
-	
+
 	// Validate that results is an empty slice
 	if len(result.Runs[0].Results) != 0 {
 		t.Errorf("Expected 0 results, got %d", len(result.Runs[0].Results))
@@ -100,7 +100,6 @@ func TestSarifSingleFinding(t *testing.T) {
 	if res.Level != "error" {
 		t.Errorf("Expected level 'error', got '%s'", res.Level)
 	}
-	
 	if res.RuleId != "test-rule-123" {
 		t.Errorf("Expected ruleId 'test-rule-123', got '%s'", res.RuleId)
 	}
@@ -229,7 +228,6 @@ func TestSarifSingleDocument(t *testing.T) {
 	if err := decoder.Decode(&firstDoc); err != nil {
 		t.Fatalf("Failed to decode first document: %v", err)
 	}
-	
 	// Try to decode a second document - should get EOF
 	if err := decoder.Decode(&firstDoc); err != io.EOF {
 		t.Errorf("Expected EOF after first document, got: %v", err)
