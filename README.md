@@ -60,6 +60,8 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
       --installed-tool-hash  SHA256 of installed MCP tool definitions
       --tool-manifest string  Path to MCP tools/list JSON for tool-definition analysis
       --tool-baseline string  Path to approved tools/list JSON for rug-pull diffing
+      --trust-target-ignore  Honor target .honeybadgerignore (default: off; target file is untrusted)
+      --ignore-file string   Operator-supplied suppression policy file (always applied; read failure aborts scan)
       --force                Skip scan, exit 0
       --offline              Skip network calls, scan local only
       --path string          Subdirectory within repo to scan
@@ -166,6 +168,25 @@ findings by rule ID, optionally constrained by a glob pattern or snippet SHA256:
 Suppressed findings are excluded from the verdict. A `suppression_summary`
 NDJSON event is emitted when findings are suppressed. In text mode, a summary
 line is printed after the verdict.
+
+#### Trust Boundary
+
+HoneyBadger implements a trust boundary for `.honeybadgerignore` files:
+
+- By default, scanning an untrusted target repository cannot let its own
+  `.honeybadgerignore` suppress security findings or turn FAIL/WARN into an
+  unqualified PASS.
+
+- To enable suppression from target `.honeybadgerignore` files, operators
+  must explicitly configure this via `--trust-target-ignore` flag or
+  `HONEYBADGER_TRUST_TARGET_IGNORE=1` environment variable.
+
+- Operators can provide an explicit operator-supplied policy via
+  `--ignore-file` flag, which is always applied regardless of target trust
+  settings.
+
+This prevents malicious packages from approving themselves by placing
+suppressions in their own files.
 
 ### Rules CLI
 

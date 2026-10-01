@@ -31,11 +31,11 @@ self-check: build
 	# coverage-incomplete findings (this repo's own tree is never fully scanned).
 	# The || true suppresses only this expected failure; real build/scan crashes
 	# will surface via the build target or non-strict self-check-bootstrap.
-	@./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia strict || true
+	@./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia strict --trust-target-ignore || true
 	@echo "Self-check passed"
 
 self-check-bootstrap: build
-	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia minimal
+	./$(BUILD_DIR)/$(BINARY) scan github.com/famclaw/honeybadger --paranoia minimal --trust-target-ignore
 	@echo "Self-check (bootstrap) passed"
 
 docker:

@@ -81,7 +81,29 @@ func (e *TextEmitter) Emit(v any) error {
 
 	case "suppression_summary":
 		count, _ := m["suppressed_count"].(float64)
-		return e.writef("[suppressed] %d finding(s) suppressed by .honeybadgerignore\n", int(count))
+		appliedSources, _ := m["applied_sources"].([]any)
+		ignoredSources, _ := m["ignored_sources"].([]any)
+
+		// Display applied sources
+		if len(appliedSources) > 0 {
+			fmt.Fprintf(e.w, "[suppressed] %d finding(s) via: ", int(count))
+			for i, src := range appliedSources {
+				if i > 0 {
+					fmt.Fprintf(e.w, ", ")
+				}
+				fmt.Fprintf(e.w, "%s", src)
+			}
+			fmt.Fprintf(e.w, "\n")
+		}
+
+		// Display ignored sources
+		if len(ignoredSources) > 0 {
+			for _, src := range ignoredSources {
+				fmt.Fprintf(e.w, "[suppression-ignored] %s: untrusted target\n", src)
+			}
+		}
+
+		return nil
 
 	case "runtime_error":
 		scanner, _ := m["scanner"].(string)

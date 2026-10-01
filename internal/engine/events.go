@@ -67,6 +67,8 @@ type ResultEvent struct {
 // SuppressionEvent reports the count of findings suppressed by
 // .honeybadgerignore.
 type SuppressionEvent struct {
-	Type            string `json:"type"` // always "suppression_summary"
-	SuppressedCount int    `json:"suppressed_count"`
+	Type            string   `json:"type"` // always "suppression_summary"
+	SuppressedCount int      `json:"suppressed_count"`
+	AppliedSources  []string `json:"applied_sources,omitempty"`
+	IgnoredSources  []string `json:"ignored_sources,omitempty"`
 }
