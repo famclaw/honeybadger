@@ -370,10 +370,8 @@ func run(cfg runConfig) (int, error) {
 	}
 
 	// Now emit the kept findings.
-	for _, f := range allFindings {
-		if err := emitter.Emit(f); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
-		}
+	if err := emitter.Emit(allFindings); err != nil {
+		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
 	// 8. Emit health event

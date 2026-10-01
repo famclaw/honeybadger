@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -14,21 +15,27 @@ type SarifEmitter struct {
 	writer  io.Writer
 	version string
 	rules   *rules.RuleSet
+	findings []scan.Finding
+	mu      sync.Mutex
 }
 
 // NewSarifEmitter creates a new SARIF emitter.
 func NewSarifEmitter(w io.Writer, version string, rules *rules.RuleSet) *SarifEmitter {
-	return &SarifEmitter{writer: w, version: version, rules: rules}
+	return &SarifEmitter{writer: w, version: version, rules: rules, findings: []scan.Finding{}}
 }
 
 // Emit writes a SARIF log to the output.
 func (se *SarifEmitter) Emit(v any) error {
+	se.mu.Lock()
+	defer se.mu.Unlock()
+
 	switch val := v.(type) {
 	case []scan.Finding:
-		return se.emitFindings(val)
+		se.findings = append(se.findings, val...)
+		return nil
 	case scan.Finding:
-		// For single findings, we'll treat them as a slice of one
-		return se.emitFindings([]scan.Finding{val})
+		se.findings = append(se.findings, val)
+		return nil
 	default:
 		// For other types (like engine events), we ignore them for SARIF output
 		return nil
@@ -37,7 +44,9 @@ func (se *SarifEmitter) Emit(v any) error {
 
 // Close closes the emitter.
 func (se *SarifEmitter) Close() error {
-	return nil
+	se.mu.Lock()
+	defer se.mu.Unlock()
+	return se.emitFindings(se.findings)
 }
 
 // emitFindings converts findings to SARIF format and writes them.
@@ -49,7 +58,8 @@ func (se *SarifEmitter) emitFindings(findings []scan.Finding) error {
 	}
 
 	// We'll collect results and build the list of reporting descriptors.
-	var results []Result
+	// Initialize as empty slice to ensure results:[] is emitted for zero findings
+	results := []Result{}
 	seenRules := make(map[string]bool)
 	var reportingDescriptors []ReportingDescriptor
 
