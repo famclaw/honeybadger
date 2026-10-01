@@ -9,7 +9,8 @@ import (
 )
 
 // NDJSONEmitter writes newline-delimited JSON to the given writer.
-// Each call to Emit writes one JSON line immediately (no buffering).
+// Each call to Emit writes one JSON line per finding immediately (no buffering).
+// A []scan.Finding argument writes one line per element.
 type NDJSONEmitter struct {
 	w   io.Writer
 	enc *json.Encoder

@@ -12,11 +12,11 @@ import (
 
 // SarifEmitter implements the Emitter interface for SARIF 2.1.0 output.
 type SarifEmitter struct {
-	writer  io.Writer
-	version string
-	rules   *rules.RuleSet
+	writer   io.Writer
+	version  string
+	rules    *rules.RuleSet
 	findings []scan.Finding
-	mu      sync.Mutex
+	mu       sync.Mutex
 }
 
 // NewSarifEmitter creates a new SARIF emitter.
@@ -24,7 +24,7 @@ func NewSarifEmitter(w io.Writer, version string, rules *rules.RuleSet) *SarifEm
 	return &SarifEmitter{writer: w, version: version, rules: rules, findings: []scan.Finding{}}
 }
 
-// Emit writes a SARIF log to the output.
+// Emit accumulates findings in memory; the SARIF log is written by Close.
 func (se *SarifEmitter) Emit(v any) error {
 	se.mu.Lock()
 	defer se.mu.Unlock()
@@ -42,7 +42,7 @@ func (se *SarifEmitter) Emit(v any) error {
 	}
 }
 
-// Close closes the emitter.
+// Close writes a single SARIF 2.1.0 document containing all accumulated findings.
 func (se *SarifEmitter) Close() error {
 	se.mu.Lock()
 	defer se.mu.Unlock()

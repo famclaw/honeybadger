@@ -62,12 +62,12 @@ func TestSarifSingleFinding(t *testing.T) {
 
 	// Create a single finding
 	finding := scan.Finding{
-		Type:       "secret",
-		Severity:   scan.SevHigh,
-		RuleID:     "test-rule-123",
-		Message:   "Test finding",
-		File:      "test.go",
-		Line:      10,
+		Type:     "secret",
+		Severity: scan.SevHigh,
+		RuleID:   "test-rule-123",
+		Message:  "Test finding",
+		File:     "test.go",
+		Line:     10,
 	}
 
 	// Emit the finding
@@ -116,28 +116,28 @@ func TestSarifMultipleFindings(t *testing.T) {
 	// Create multiple findings with different severities
 	findings := []scan.Finding{
 		{
-			Type:       "secret",
-			Severity:   scan.SevHigh,
-			RuleID:     "test-rule-123",
-			Message:   "High severity finding",
-			File:      "test.go",
-			Line:      10,
+			Type:     "secret",
+			Severity: scan.SevHigh,
+			RuleID:   "test-rule-123",
+			Message:  "High severity finding",
+			File:     "test.go",
+			Line:     10,
 		},
 		{
-			Type:       "cve",
-			Severity:   scan.SevMedium,
-			RuleID:     "test-rule-456",
-			Message:   "Medium severity finding",
-			File:      "main.go",
-			Line:      20,
+			Type:     "cve",
+			Severity: scan.SevMedium,
+			RuleID:   "test-rule-456",
+			Message:  "Medium severity finding",
+			File:     "main.go",
+			Line:     20,
 		},
 		{
-			Type:       "supplychain",
-			Severity:   scan.SevLow,
-			RuleID:     "test-rule-789",
-			Message:   "Low severity finding",
-			File:      "utils.go",
-			Line:      30,
+			Type:     "supplychain",
+			Severity: scan.SevLow,
+			RuleID:   "test-rule-789",
+			Message:  "Low severity finding",
+			File:     "utils.go",
+			Line:     30,
 		},
 	}
 
@@ -190,21 +190,21 @@ func TestSarifSingleDocument(t *testing.T) {
 
 	// Emit findings one by one
 	finding1 := scan.Finding{
-		Type:       "secret",
-		Severity:   scan.SevHigh,
-		RuleID:     "test-rule-123",
-		Message:   "First finding",
-		File:      "test.go",
-		Line:      10,
+		Type:     "secret",
+		Severity: scan.SevHigh,
+		RuleID:   "test-rule-123",
+		Message:  "First finding",
+		File:     "test.go",
+		Line:     10,
 	}
 
 	finding2 := scan.Finding{
-		Type:       "cve",
-		Severity:   scan.SevMedium,
-		RuleID:     "test-rule-456",
-		Message:   "Second finding",
-		File:      "main.go",
-		Line:      20,
+		Type:     "cve",
+		Severity: scan.SevMedium,
+		RuleID:   "test-rule-456",
+		Message:  "Second finding",
+		File:     "main.go",
+		Line:     20,
 	}
 
 	// Emit each individually
@@ -245,28 +245,28 @@ func TestSarifSliceInput(t *testing.T) {
 	// Create multiple findings
 	findings := []scan.Finding{
 		{
-			Type:       "secret",
-			Severity:   scan.SevHigh,
-			RuleID:     "test-rule-123",
-			Message:   "First finding",
-			File:      "test.go",
-			Line:      10,
+			Type:     "secret",
+			Severity: scan.SevHigh,
+			RuleID:   "test-rule-123",
+			Message:  "First finding",
+			File:     "test.go",
+			Line:     10,
 		},
 		{
-			Type:       "cve",
-			Severity:   scan.SevMedium,
-			RuleID:     "test-rule-456",
-			Message:   "Second finding",
-			File:      "main.go",
-			Line:      20,
+			Type:     "cve",
+			Severity: scan.SevMedium,
+			RuleID:   "test-rule-456",
+			Message:  "Second finding",
+			File:     "main.go",
+			Line:     20,
 		},
 		{
-			Type:       "supplychain",
-			Severity:   scan.SevLow,
-			RuleID:     "test-rule-789",
-			Message:   "Third finding",
-			File:      "utils.go",
-			Line:      30,
+			Type:     "supplychain",
+			Severity: scan.SevLow,
+			RuleID:   "test-rule-789",
+			Message:  "Third finding",
+			File:     "utils.go",
+			Line:     30,
 		},
 	}
 
