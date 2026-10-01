@@ -230,6 +230,29 @@ func TestIgnorePolicyBehavior(t *testing.T) {
 			expectedSuppressed: 1,
 			description:        "Should allow suppression when target is trusted",
 		},
+		{
+			name:           "Trusted operator policy suppresses all findings -> PASS",
+			attackerIgnore: "SECRET_IN_CODE\n",
+			trustTarget:    false,
+			operatorIgnore: "SECRET_IN_CODE\nHARDCODED_KEY\n",
+			findings: []scan.Finding{
+				{
+					RuleID:   "SECRET_IN_CODE",
+					Severity: "HIGH",
+					File:     "test.go",
+					Message:  "Hardcoded secret found",
+				},
+				{
+					RuleID:   "HARDCODED_KEY",
+					Severity: "HIGH",
+					File:     "test.go",
+					Message:  "Hardcoded API key found",
+				},
+			},
+			expectedVerdict:    "PASS",
+			expectedSuppressed: 2,
+			description:        "Attacker ignore not trusted, but the trusted operator policy suppresses every finding so the verdict resolves to PASS",
+		},
 	}
 
 	for _, tc := range tests {

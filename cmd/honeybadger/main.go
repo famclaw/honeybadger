@@ -516,16 +516,6 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// Emit suppression summary if any findings were suppressed
-	if suppressedCount > 0 {
-		if err := emitter.Emit(engine.SuppressionEvent{
-			Type:            "suppression_summary",
-			SuppressedCount: suppressedCount,
-		}); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
-		}
-	}
-
 	// Write audit if --db provided
 	if cfg.DBPath != "" {
 		if err := store.WriteAudit(cfg.DBPath, result); err != nil {

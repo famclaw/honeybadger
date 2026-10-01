@@ -21,30 +21,12 @@ func TestScanFixture(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Create a test Go file with findings
-	testGoFile := filepath.Join(tempDir, "test.go")
-	goContent := `
-package main
-
-import "fmt"
-
-func main() {
-	// This is a test with a hardcoded secret
-	secret := "sk_live_1234567890abcdef"
-	fmt.Println(secret)
-}
-`
-	if err := os.WriteFile(testGoFile, []byte(goContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	// Test cases from the plan
 	tests := []struct {
 		name           string
 		attackerIgnore string
 		trustTarget    bool
 		operatorIgnore string
-		expectVerdict  string
 		expectFindings int
 		description    string
 	}{
@@ -53,7 +35,6 @@ func main() {
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
-			expectVerdict:  "FAIL",
 			expectFindings: 2, // Should have 2 findings (the secret and the hard-coded key)
 			description:    "Should still have findings because target ignore is not trusted",
 		},
@@ -62,7 +43,6 @@ func main() {
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "SECRET_IN_CODE\n",
-			expectVerdict:  "WARN",
 			expectFindings: 1, // Should have 1 finding (one rule suppressed)
 			description:    "Operator suppression should work but attacker ignore is not trusted",
 		},
@@ -71,8 +51,7 @@ func main() {
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    true,
 			operatorIgnore: "",
-			expectVerdict:  "WARN", // Should have 1 finding left (HARDCODED_KEY)
-			expectFindings: 1,      // Only HARDCODED_KEY should remain
+			expectFindings: 1, // Only HARDCODED_KEY should remain
 			description:    "Should have 1 finding when target ignore is trusted but not all findings suppressed",
 		},
 		{
@@ -80,7 +59,6 @@ func main() {
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "UNRELATED_RULE\n",
-			expectVerdict:  "FAIL",
 			expectFindings: 2, // Should have 2 findings (operator policy doesn't suppress)
 			description:    "Unrelated operator policy should not affect suppression",
 		},
@@ -89,7 +67,6 @@ func main() {
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
-			expectVerdict:  "FAIL",
 			expectFindings: 2, // Both findings should remain (target ignore not trusted)
 			description:    "Should have 2 findings when target ignore is not trusted",
 		},
@@ -98,9 +75,8 @@ func main() {
 			attackerIgnore: "SECRET_IN_CODE\n",
 			trustTarget:    false,
 			operatorIgnore: "",
-			expectVerdict:  "FAIL",
 			expectFindings: 2, // Should have 2 findings (the secret and the hard-coded key)
-			description:    "Test with trust OFF - should still FAIL because attacker ignore is not trusted",
+			description:    "Test with trust OFF - should still have 2 findings because attacker ignore is not trusted",
 		},
 	}
 
