@@ -361,8 +361,13 @@ func run(cfg runConfig) (int, error) {
 		}
 	}
 
+	// Determine if we should trust target ignore rules based on either:
+	// 1. Explicit --trust-target-ignore flag
+	// 2. HONEYBADGER_TRUST_TARGET_IGNORE=1 environment variable
+	trustTargetIgnore := cfg.TrustTargetIgnore || os.Getenv("HONEYBADGER_TRUST_TARGET_IGNORE") == "1"
+
 	// Load policy with either content from repo or fall back to filesystem
-	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, cfg.TrustTargetIgnore)
+	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, trustTargetIgnore)
 	if err != nil {
 		return 1, fmt.Errorf("loading ignore policy: %w", err)
 	}
