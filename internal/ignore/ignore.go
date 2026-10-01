@@ -183,10 +183,11 @@ func LoadPolicyFromContent(targetContent []byte, operatorPolicyFile string, trus
 
 	// Load target ignore rules from provided content
 	if len(targetContent) > 0 {
-		var err error
-		p.Target, err = Parse(targetContent, ".honeybadgerignore")
-		if err != nil {
-			return nil, fmt.Errorf("parsing target ignore file: %w", err)
+		set, parseErr := Parse(targetContent, ".honeybadgerignore")
+		if parseErr != nil {
+			p.Target = nil
+		} else {
+			p.Target = set
 		}
 	}
 

@@ -7,6 +7,68 @@ import (
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
+// TestMalformedTargetIgnoreDoesNotAbort reproduces the DoS regression: an
+// attacker-controlled target .honeybadgerignore with a malformed line
+// (more than two tokens) must not abort the scan. LoadPolicyFromContent must
+// return a policy with Target==nil so the scan continues without target
+// suppressions, while operator policy behavior is preserved.
+func TestMalformedTargetIgnoreDoesNotAbort(t *testing.T) {
+	findings := []scan.Finding{
+		{RuleID: "SECRET_IN_CODE", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded secret"},
+		{RuleID: "HARDCODED_KEY", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded key"},
+	}
+
+	// Malformed target content: one line with three tokens.
+	malformed := "MY_RULE a b\nSECRET_IN_CODE\n"
+
+	// No operator policy: the malformed target must not error, and Target must
+	// be nil so no findings are suppressed.
+	policy, err := LoadPolicyFromContent([]byte(malformed), "", false)
+	if err != nil {
+		t.Fatalf("LoadPolicyFromContent must not error on malformed target content: %v", err)
+	}
+	if policy.Target != nil {
+		t.Fatalf("expected Target to be nil after malformed parse, got %v", policy.Target)
+	}
+	out := Apply(policy, findings)
+	if len(out.Effective) != len(findings) {
+		t.Fatalf("expected no suppression (Target nil), got %d effective of %d", len(out.Effective), len(findings))
+	}
+
+	// With a trusted operator policy, the malformed target is dropped but the
+	// operator policy must still suppress matching findings.
+	tmp, err := os.CreateTemp("", "operator-policy-*")
+	if err != nil {
+		t.Fatalf("create operator policy: %v", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString("HARDCODED_KEY\n"); err != nil {
+		t.Fatalf("write operator policy: %v", err)
+	}
+	tmp.Close()
+
+	policy, err = LoadPolicyFromContent([]byte(malformed), tmp.Name(), false)
+	if err != nil {
+		t.Fatalf("LoadPolicyFromContent with operator policy must not error: %v", err)
+	}
+	if policy.Target != nil {
+		t.Fatalf("expected Target nil, got %v", policy.Target)
+	}
+	if policy.Operator == nil {
+		t.Fatalf("expected operator policy to load")
+	}
+	out = Apply(policy, findings)
+	if len(out.Suppressed) != 1 {
+		t.Fatalf("expected operator to suppress 1 finding, got %d", len(out.Suppressed))
+	}
+	if len(out.Effective) != 1 {
+		t.Fatalf("expected 1 effective finding, got %d", len(out.Effective))
+	}
+	if len(out.Applied) != 1 || out.Applied[0] != "operator" {
+		t.Fatalf("expected applied=[operator], got %v", out.Applied)
+	}
+}
+
 // TestIntegrationTargetIgnoreControl tests the key scenario from the security audit
 func TestIntegrationTargetIgnoreControl(t *testing.T) {
 	// Test cases for attacker-controlled target ignore behavior

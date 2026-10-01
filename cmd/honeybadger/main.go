@@ -371,6 +371,9 @@ func run(cfg runConfig) (int, error) {
 	if err != nil {
 		return 1, fmt.Errorf("loading ignore policy: %w", err)
 	}
+	if len(targetIgnoreContent) > 0 && policy.Target == nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to parse target .honeybadgerignore; continuing without target suppressions\n")
+	}
 
 	// Apply the policy to findings
 	outcome := ignore.Apply(policy, allFindings)
