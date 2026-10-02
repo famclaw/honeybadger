@@ -25,6 +25,7 @@ type Finding struct {
 	MoreInfoURL string   `json:"more_info_url,omitempty"`
 	References  []string `json:"references,omitempty"`
 	File        string   `json:"file,omitempty"`
+	FileRole    FileRole `json:"file_role"`
 	Line        int      `json:"line,omitempty"`
 	Message     string   `json:"message"`
 	Snippet     string   `json:"snippet,omitempty"`

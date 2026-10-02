@@ -128,7 +128,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		// Skip test files and rule corpus (fixtures, not threats).
 		role := scan.ClassifyFile(path, content)
 		switch role {
-		case scan.RoleTest, scan.RoleRules:
+		case scan.RoleUnknown:
 			continue
 		}
 
@@ -143,7 +143,7 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		// For exfil-intent correlation, only code blocks are scanned (original behavior).
 		s := string(content)
 		codeOnly := s
-		if role == scan.RoleDoc && scan.IsMarkdown(path) {
+		if role == scan.RoleProse && scan.IsMarkdown(path) {
 			codeOnly = string(scan.CodeBlockOnly(content))
 		}
 		fileLines := strings.Split(s, "\n")
