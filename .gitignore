@@ -9,5 +9,3 @@ docs/superpowers/
 *.dylib
 Thumbs.db
 .DS_Store
-/honeybadger
-/honeybadger-binary

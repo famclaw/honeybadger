@@ -249,14 +249,18 @@ func run(cfg runConfig) (int, error) {
 		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
 
-	// Fail-fast guard: offline mode with remote URLs should not proceed
-	if cfg.Offline && (strings.Contains(cfg.RepoURL, "://") || strings.HasPrefix(cfg.RepoURL, "git@")) {
-		return 1, fmt.Errorf("--offline: target %q requires network access; supply a local path instead", cfg.RepoURL)
-	}
-
 	fetcher, err := fetch.Route(cfg.RepoURL)
 	if err != nil {
 		return 1, fmt.Errorf("routing: %w", err)
+	}
+
+	// Fail-fast guard: offline mode must not contact any remote source. The
+	// remote/local split is decided by the routed fetcher so URL classification
+	// stays a single source of truth in the fetch package (covers https://,
+	// git@, and scheme-less github.com/... / gitlab.com/... forms; local paths
+	// and stdin are allowed).
+	if cfg.Offline && fetch.RequiresNetwork(fetcher) {
+		return 1, fmt.Errorf("--offline: target %q requires network access; supply a local path instead", cfg.RepoURL)
 	}
 
 	// Wire stdin reader for piped input

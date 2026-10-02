@@ -54,6 +54,38 @@ func TestRoute(t *testing.T) {
 	}
 }
 
+func TestRequiresNetwork(t *testing.T) {
+	tests := []struct {
+		name string
+		f    Fetcher
+		want bool
+	}{
+		{"GitHub", &GitHubFetcher{}, true},
+		{"GitLab", &GitLabFetcher{}, true},
+		{"Tarball", &TarballFetcher{}, true},
+		{"Local", &LocalFetcher{}, false},
+		{"Stdin", &StdinFetcher{}, false},
+		{"unknown fake (fail-closed)", &fakeRemoteFetcher{}, true},
+		{"nil (fail-closed)", nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := RequiresNetwork(tt.f); got != tt.want {
+				t.Errorf("RequiresNetwork(%T) = %v, want %v", tt.f, got, tt.want)
+			}
+		})
+	}
+}
+
+// fakeRemoteFetcher is an unknown Fetcher implementation that must be treated
+// as network-requiring (fail-closed) by RequiresNetwork.
+type fakeRemoteFetcher struct{}
+
+func (fakeRemoteFetcher) Fetch(ctx context.Context, url string, opts FetchOptions) (*Repo, error) {
+	return &Repo{URL: url}, nil
+}
+
 func TestParseGitHubURL(t *testing.T) {
 	tests := []struct {
 		name      string

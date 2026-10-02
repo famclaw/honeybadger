@@ -84,3 +84,16 @@ func Route(url string) (Fetcher, error) {
 	}
 	return nil, fmt.Errorf("routing: unsupported URL: %s", url)
 }
+
+// RequiresNetwork reports whether the fetcher retrieves data from a remote
+// source and therefore cannot operate in offline mode. Only explicitly local
+// fetchers are considered network-free; any other, unknown, or nil fetcher is
+// treated as network-requiring (fail-closed in --offline mode).
+func RequiresNetwork(f Fetcher) bool {
+	switch f.(type) {
+	case *LocalFetcher, *StdinFetcher:
+		return false
+	default:
+		return true
+	}
+}

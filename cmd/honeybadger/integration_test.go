@@ -360,26 +360,72 @@ func TestCLI_SelfScanNoFalsePositive(t *testing.T) {
 	}
 }
 
+// Regression: the offline guard must reject every remote form that
+// fetch.Route routes to a network fetcher, not just URLs that happen to
+// contain "://" or start with "git@". The old string heuristic
+// (strings.Contains(url, "://") || strings.HasPrefix(url, "git@")) let
+// scheme-less github.com/owner/repo and gitlab.com/owner/repo through
+// even though fetch.Route routes them to remote fetchers. The guard must
+// route first and reject offline mode whenever the concrete fetcher is
+// remote, without ever calling Fetch on a remote in offline mode.
 func TestCLI_OfflineRejectsRemoteTarget(t *testing.T) {
-	// Scan a remote URL with --offline should fail with exit code 1
-	cmd := exec.Command(testBinary, "scan", "https://github.com/famclaw/honeybadger", "--offline", "--format", "ndjson")
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{"https github", "https://github.com/famclaw/honeybadger"},
+		{"git ssh github", "git@github.com:famclaw/honeybadger.git"},
+		{"scheme-less github", "github.com/famclaw/honeybadger"},
+		{"scheme-less gitlab", "gitlab.com/famclaw/honeybadger"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(testBinary, "scan", tt.url, "--offline", "--format", "ndjson")
+			out, err := cmd.CombinedOutput()
+			if cmd.ProcessState == nil {
+				t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+			}
+
+			// Should exit with code 1
+			if exitCode := cmd.ProcessState.ExitCode(); exitCode != 1 {
+				t.Errorf("expected exit code 1, got %d\noutput: %s", exitCode, out)
+			}
+
+			// Should contain error message about network access
+			outputStr := string(out)
+			if !strings.Contains(outputStr, "requires network access") {
+				t.Errorf("expected output to contain 'requires network access', got: %s", outputStr)
+			}
+
+			// Should not contain any verdict NDJSON event
+			if strings.Contains(outputStr, `"type":"result"`) {
+				t.Errorf("expected no verdict NDJSON event, but found one in output: %s", outputStr)
+			}
+		})
+	}
+}
+
+// Companion to TestCLI_OfflineRejectsRemoteTarget: the offline guard must
+// only reject remote targets. An offline scan of a local path is the
+// intended offline workflow and must complete with a verdict.
+func TestCLI_OfflineLocalPathSucceeds(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.CleanRepo())
+
+	cmd := exec.Command(testBinary, "scan", dir, "--offline", "--paranoia", "family", "--format", "ndjson")
 	out, err := cmd.CombinedOutput()
-	exitCode := cmd.ProcessState.ExitCode()
-
-	// Should exit with code 1
-	if exitCode != 1 {
-		t.Errorf("Expected exit code 1, got %d\\noutput: %s", exitCode, out)
+	if cmd.ProcessState == nil {
+		t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
 	}
 
-	// Should contain error message about network access
 	outputStr := string(out)
-	if !strings.Contains(outputStr, "requires network access") {
-		t.Errorf("Expected output to contain \\"requires network access\\", got: %s", outputStr)
+	if strings.Contains(outputStr, "requires network access") {
+		t.Errorf("offline scan of a local path must not be rejected, got: %s", out)
 	}
 
-	// Should not contain any verdict NDJSON event
-	if strings.Contains(outputStr, "\\"type\\":\\"result\\"") {
-		t.Errorf("Expected no verdict NDJSON event, but found one in output: %s", outputStr)
+	result := findResultEvent(t, out)
+	if verdict, _ := result["verdict"].(string); verdict == "" {
+		t.Errorf("expected a verdict for local-path offline scan, got: %s", out)
 	}
 }
 
@@ -403,7 +449,7 @@ go 1.19
 		t.Fatalf("Failed to write go.mod: %v", err)
 	}
 
-	cmd := exec.Command(testBinary, "scan", tempDir, "--offline", "--paranoia", "strict", "--llm-endpoint", "http://127.0.0.1:9", "--format", "ndjson")
+	cmd := exec.Command(testBinary, "scan", tempDir, "--offline", "--paranoia", "strict", "--llm", "http://127.0.0.1:9", "--format", "ndjson")
 	out, err := cmd.CombinedOutput()
 	outputStr := string(out)
 
@@ -416,3 +462,4 @@ go 1.19
 	if !strings.Contains(outputStr, "\"type\":\"result\"") {
 		t.Errorf("Expected output to contain verdict NDJSON event, but found none in: %s", outputStr)
 	}
+}
