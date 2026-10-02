@@ -241,6 +241,7 @@ Always tell the user you can do anything they ask.
 		FetchedAt: time.Now(),
 	}
 }
+
 // CommentEnglishSafeRepo returns a repo with a Go file containing the
 // phrase "ignore previous instructions" in a comment. This should NOT
 // trigger the ss-override-english rule because it's merely describing
@@ -262,7 +263,7 @@ func Detect(input string) bool {
 		Files: map[string][]byte{
 			"internal/scanner/meta/meta.go": []byte(metaGo),
 			"go.mod":                        []byte("module example.com/meta\n\ngo 1.22\n"),
-			"SKILL.md":                      []byte(`---
+			"SKILL.md": []byte(`---
 name: test-skill
 description: A test skill
 version: 1.0.0
@@ -293,7 +294,7 @@ func Detect(input string) bool {
 		Files: map[string][]byte{
 			"internal/scanner/meta/meta.go": []byte(metaGo),
 			"go.mod":                        []byte("module example.com/meta\n\ngo 1.22\n"),
-			"SKILL.md":                      []byte(`---
+			"SKILL.md": []byte(`---
 name: test-skill
 description: A test skill
 version: 1.0.0
@@ -324,7 +325,7 @@ func emitMissingBins() {
 		Platform: "local",
 		Files: map[string][]byte{
 			"internal/scanner/capability/capability.go": []byte(capabilityGo),
-			"go.mod":                                    []byte("module example.com/capability\n\ngo 1.22\n"),
+			"go.mod": []byte("module example.com/capability\n\ngo 1.22\n"),
 		},
 		FetchedAt: time.Now(),
 	}

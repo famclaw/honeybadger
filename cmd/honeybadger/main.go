@@ -46,6 +46,8 @@ func main() {
 	rulesDir := flag.String("rules-dir", "", "custom rules directory")
 	toolManifest := flag.String("tool-manifest", "", "path to MCP tools/list JSON for tool-definition analysis")
 	toolBaseline := flag.String("tool-baseline", "", "path to approved MCP tools/list JSON for rug-pull diffing")
+	ignoreFile := flag.String("ignore-file", "", "path to operator-supplied .honeybadgerignore policy")
+	trustTargetIgnore := flag.Bool("trust-target-ignore", false, "trust target-authored .honeybadgerignore (default: false)")
 	// --mcp-server and --version are handled before flag.Parse (see below)
 
 	// Extract subcommand before parsing flags.
@@ -153,6 +155,8 @@ func main() {
 		RulesDir:          *rulesDir,
 		ToolManifest:      *toolManifest,
 		ToolBaseline:      *toolBaseline,
+		IgnoreFile:        *ignoreFile,
+		TrustTargetIgnore: *trustTargetIgnore,
 	}
 	exitCode, err := run(cfg)
 	if err != nil {
@@ -183,6 +187,8 @@ type runConfig struct {
 	RulesDir          string
 	ToolManifest      string
 	ToolBaseline      string
+	IgnoreFile        string
+	TrustTargetIgnore bool
 }
 
 func run(cfg runConfig) (int, error) {
@@ -345,14 +351,46 @@ func run(cfg runConfig) (int, error) {
 
 	// 7b. Apply .honeybadgerignore suppression before emitting.
 	var suppressedCount int
-	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
-		ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore")
-		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to parse .honeybadgerignore: %v\n", parseErr)
-		} else {
-			var suppressed []ignore.SuppressedFinding
-			allFindings, suppressed = ignoreSet.Filter(allFindings)
-			suppressedCount = len(suppressed)
+
+	// Load suppression policy
+	// First try to get the target ignore file content from repo.Files
+	var targetIgnoreContent []byte
+	if repo.Files != nil {
+		if content, exists := repo.Files[".honeybadgerignore"]; exists {
+			targetIgnoreContent = content
+		}
+	}
+
+	// Determine if we should trust target ignore rules based on either:
+	// 1. Explicit --trust-target-ignore flag
+	// 2. HONEYBADGER_TRUST_TARGET_IGNORE=1 environment variable
+	trustTargetIgnore := cfg.TrustTargetIgnore || os.Getenv("HONEYBADGER_TRUST_TARGET_IGNORE") == "1"
+
+	// Load policy with either content from repo or fall back to filesystem
+	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, trustTargetIgnore)
+	if err != nil {
+		return 1, fmt.Errorf("loading ignore policy: %w", err)
+	}
+	if len(targetIgnoreContent) > 0 && policy.Target == nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to parse target .honeybadgerignore; continuing without target suppressions\n")
+	}
+
+	// Apply the policy to findings
+	outcome := ignore.Apply(policy, allFindings)
+
+	// Use the effective findings for reporting and verdict calculation
+	allFindings = outcome.Effective
+	suppressedCount = len(outcome.Suppressed)
+
+	// Report applied and ignored sources
+	if len(outcome.Applied) > 0 || len(outcome.Ignored) > 0 {
+		if err := emitter.Emit(engine.SuppressionEvent{
+			Type:            "suppression_summary",
+			AppliedSources:  outcome.Applied,
+			IgnoredSources:  outcome.Ignored,
+			SuppressedCount: suppressedCount,
+		}); err != nil {
+			return 1, fmt.Errorf("writing suppression summary: %w", err)
 		}
 	}
 
@@ -477,16 +515,6 @@ func run(cfg runConfig) (int, error) {
 	}
 	if err := emitter.Emit(result); err != nil {
 		return 1, fmt.Errorf("writing output: %w", err)
-	}
-
-	// Emit suppression summary if any findings were suppressed
-	if suppressedCount > 0 {
-		if err := emitter.Emit(engine.SuppressionEvent{
-			Type:            "suppression_summary",
-			SuppressedCount: suppressedCount,
-		}); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
-		}
 	}
 
 	// Write audit if --db provided
