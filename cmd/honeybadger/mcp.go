@@ -13,6 +13,7 @@ import (
 
 	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
+	"github.com/famclaw/honeybadger/internal/ignore"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -172,6 +173,19 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	if installedToolHash != "" {
 		toolFindings := engine.CheckToolHash(repo, installedToolHash)
 		allFindings = append(allFindings, toolFindings...)
+	}
+
+	// 5a. Re-weight findings by file role: drop matches in test fixtures and
+	// honeybadger's own rule corpus, downgrade matches in documentation. This
+	// mirrors the CLI post-scan step so MCP results do not diverge from CLI.
+	allFindings = scan.ApplyFileRoles(allFindings, repo.Files)
+
+	// 5b. Apply .honeybadgerignore suppression, mirroring the CLI.
+	// On parse error, proceed without suppression (the CLI only warns).
+	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
+		if ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore"); parseErr == nil {
+			allFindings, _ = ignoreSet.Filter(allFindings)
+		}
 	}
 
 	// 6. LLM verdict
