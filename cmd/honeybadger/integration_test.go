@@ -359,3 +359,60 @@ func TestCLI_SelfScanNoFalsePositive(t *testing.T) {
 		})
 	}
 }
+
+func TestCLI_OfflineRejectsRemoteTarget(t *testing.T) {
+	// Scan a remote URL with --offline should fail with exit code 1
+	cmd := exec.Command(testBinary, "scan", "https://github.com/famclaw/honeybadger", "--offline", "--format", "ndjson")
+	out, err := cmd.CombinedOutput()
+	exitCode := cmd.ProcessState.ExitCode()
+
+	// Should exit with code 1
+	if exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d\\noutput: %s", exitCode, out)
+	}
+
+	// Should contain error message about network access
+	outputStr := string(out)
+	if !strings.Contains(outputStr, "requires network access") {
+		t.Errorf("Expected output to contain \\"requires network access\\", got: %s", outputStr)
+	}
+
+	// Should not contain any verdict NDJSON event
+	if strings.Contains(outputStr, "\\"type\\":\\"result\\"") {
+		t.Errorf("Expected no verdict NDJSON event, but found one in output: %s", outputStr)
+	}
+}
+
+func TestCLI_OfflineWithLLM(t *testing.T) {
+	// Test local directory scan with --offline, --paranoia strict, --llm-endpoint
+	// Should not ask LLM for verdict but still produce a verdict
+
+	// Create a temporary directory with some content
+	tempDir, err := os.MkdirTemp("", "test-repo-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a simple go.mod file to make it look like a Go project
+	goModContent := `module test
+go 1.19
+`
+	err = os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte(goModContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write go.mod: %v", err)
+	}
+
+	cmd := exec.Command(testBinary, "scan", tempDir, "--offline", "--paranoia", "strict", "--llm-endpoint", "http://127.0.0.1:9", "--format", "ndjson")
+	out, err := cmd.CombinedOutput()
+	outputStr := string(out)
+
+	// Should not contain "Asking LLM for verdict"
+	if strings.Contains(outputStr, "Asking LLM for verdict") {
+		t.Errorf("Expected output to not contain \"Asking LLM for verdict\", but found it in: %s", outputStr)
+	}
+
+	// Should still produce a verdict
+	if !strings.Contains(outputStr, "\"type\":\"result\"") {
+		t.Errorf("Expected output to contain verdict NDJSON event, but found none in: %s", outputStr)
+	}

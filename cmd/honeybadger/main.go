@@ -249,6 +249,11 @@ func run(cfg runConfig) (int, error) {
 		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
 
+	// Fail-fast guard: offline mode with remote URLs should not proceed
+	if cfg.Offline && (strings.Contains(cfg.RepoURL, "://") || strings.HasPrefix(cfg.RepoURL, "git@")) {
+		return 1, fmt.Errorf("--offline: target %q requires network access; supply a local path instead", cfg.RepoURL)
+	}
+
 	fetcher, err := fetch.Route(cfg.RepoURL)
 	if err != nil {
 		return 1, fmt.Errorf("routing: %w", err)
@@ -393,7 +398,7 @@ func run(cfg runConfig) (int, error) {
 	// 9. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
-	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" {
+	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" && !cfg.Offline {
 		if err := emitter.Emit(engine.NewProgressEvent("llm", "Asking LLM for verdict...")); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 		}
