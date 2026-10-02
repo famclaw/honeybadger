@@ -37,13 +37,14 @@ var knownScanners = map[string]bool{
 	"capability": true, "cve": true, "meta": true,
 	"mcptool": true, "attestation": true,
 }
+
 // commentPrefixes maps file extensions to a list of comment prefixes that,
 // when at the start of a line (after whitespace), indicate the line is a comment.
 var commentPrefixes = map[string][]string{
-	".go": {"//"},
-	".sh": {"#"},
+	".go":   {"//"},
+	".sh":   {"#"},
 	".bash": {"#"},
-	".zsh": {"#"},
+	".zsh":  {"#"},
 	".fish": {"#"},
 	// Add more as needed
 }
@@ -128,6 +129,24 @@ func ClassifyFile(rel string, content []byte) FileRole {
 		return RoleProse
 	}
 	return RoleCode
+}
+
+// IsFixtureFile reports whether rel is test material (test directories,
+// _test.go, .test./spec. files, test_*.py). These files exercise or define
+// attack patterns and are not live threats, so the skillsafety signal pass
+// skips them even though ClassifyFile lumps them into RoleUnknown.
+func IsFixtureFile(rel string) bool {
+	p := strings.ToLower(strings.ReplaceAll(rel, "\\", "/"))
+	return isTestPath(p, path.Base(p))
+}
+
+// IsRuleYAMLFile reports whether the yaml/yml file at rel with the given
+// content is a honeybadger detection rule — the rule corpus, which defines
+// attack patterns rather than constituting them. It is excluded from the
+// skillsafety signal pass for the same reason as test fixtures.
+func IsRuleYAMLFile(rel string, content []byte) bool {
+	ext := path.Ext(rel)
+	return (ext == ".yaml" || ext == ".yml") && isRuleYAML(content)
 }
 
 func isTestPath(p, base string) bool {
