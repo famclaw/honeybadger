@@ -10,44 +10,26 @@ import (
 
 // FileRole classifies a repository file by what kind of artifact it is.
 // Scanners and the verdict pipeline use the role to discriminate a threat
-// that is *present* in executable code from one merely *described* in prose,
-// embedded in a test fixture, or defined in honeybadger's own rule corpus.
-type FileRole int
+// that is *present* in executable code from one merely *described* in prose
+// or a comment, or found in a file whose role is not yet distinguished.
+//
+// Findings are no longer dropped by role; instead the role is recorded on
+// each Finding and used to adjust severity, giving the consumer full context.
+type FileRole string
 
 const (
 	// RoleCode is real source: findings carry full severity.
-	RoleCode FileRole = iota
-	// RoleTest is a test file or fixture. Attack strings here are expected
-	// test inputs, not live threats — findings are dropped.
-	RoleTest
-	// RoleDoc is documentation/prose. A described pattern is far weaker
+	RoleCode FileRole = "code"
+	// RoleProse is documentation/prose. A described pattern is far weaker
 	// signal than a present one — findings are downgraded.
-	RoleDoc
-	// RoleConfig is configuration (CI workflows, JSON/TOML/INI). Findings
-	// keep their severity; scanner-specific scoping handles config noise.
-	RoleConfig
-	// RoleRules is a honeybadger rule definition (detection patterns by
-	// design). Pattern matches here are data, not threats — findings dropped.
-	RoleRules
+	RoleProse FileRole = "prose"
+	// RoleComment is a comment line in source. The pattern is described, not
+	// executed — findings are reduced to INFO.
+	RoleComment FileRole = "comment"
+	// RoleUnknown covers test fixtures, config, and rule-corpus files whose
+	// role the classifier does not distinguish from ordinary code.
+	RoleUnknown FileRole = "unknown"
 )
-
-// String renders the role for diagnostics.
-func (r FileRole) String() string {
-	switch r {
-	case RoleCode:
-		return "code"
-	case RoleTest:
-		return "test"
-	case RoleDoc:
-		return "doc"
-	case RoleConfig:
-		return "config"
-	case RoleRules:
-		return "rules"
-	default:
-		return "unknown"
-	}
-}
 
 // knownScanners are the scanner names a honeybadger rule YAML may target.
 var knownScanners = map[string]bool{
@@ -55,13 +37,14 @@ var knownScanners = map[string]bool{
 	"capability": true, "cve": true, "meta": true,
 	"mcptool": true, "attestation": true,
 }
+
 // commentPrefixes maps file extensions to a list of comment prefixes that,
 // when at the start of a line (after whitespace), indicate the line is a comment.
 var commentPrefixes = map[string][]string{
-	".go": {"//"},
-	".sh": {"#"},
+	".go":   {"//"},
+	".sh":   {"#"},
 	".bash": {"#"},
-	".zsh": {"#"},
+	".zsh":  {"#"},
 	".fish": {"#"},
 	// Add more as needed
 }
@@ -118,32 +101,52 @@ var configExts = map[string]bool{
 }
 
 // ClassifyFile determines the FileRole of a repository file from its path
-// (relative, any OS separator) and, when available, its content. Content is
-// only consulted to recognise honeybadger rule YAML; nil content is fine.
+// (relative, any OS separator) and, when available, its content.
+//
+// The new role set is {code, prose, comment, unknown}. Test fixtures,
+// config, and rule-corpus files all map to RoleUnknown; the caller can
+// distinguish them via the path if needed.
 func ClassifyFile(rel string, content []byte) FileRole {
 	p := strings.ToLower(strings.ReplaceAll(rel, "\\", "/"))
 	base := path.Base(p)
 	ext := path.Ext(p)
 
-	// Test material is classified first: a SKILL.md or rule YAML living under
-	// a testdata/ tree is a deliberately crafted fixture, not a live artifact.
+	// Test material, config, and rule corpus → RoleUnknown.
 	if isTestPath(p, base) {
-		return RoleTest
+		return RoleUnknown
+	}
+	if (ext == ".yaml" || ext == ".yml") && isRuleYAML(content) {
+		return RoleUnknown
+	}
+	if configExts[ext] || strings.HasPrefix(base, "dockerfile") || hasSegment(p, ".github") {
+		return RoleUnknown
 	}
 	// SKILL.md is the skill manifest — the subject of analysis, not prose.
 	if base == "skill.md" {
 		return RoleCode
 	}
-	if (ext == ".yaml" || ext == ".yml") && isRuleYAML(content) {
-		return RoleRules
-	}
 	if isDocPath(p, base, ext) {
-		return RoleDoc
-	}
-	if configExts[ext] || strings.HasPrefix(base, "dockerfile") || hasSegment(p, ".github") {
-		return RoleConfig
+		return RoleProse
 	}
 	return RoleCode
+}
+
+// IsFixtureFile reports whether rel is test material (test directories,
+// _test.go, .test./spec. files, test_*.py). These files exercise or define
+// attack patterns and are not live threats, so the skillsafety signal pass
+// skips them even though ClassifyFile lumps them into RoleUnknown.
+func IsFixtureFile(rel string) bool {
+	p := strings.ToLower(strings.ReplaceAll(rel, "\\", "/"))
+	return isTestPath(p, path.Base(p))
+}
+
+// IsRuleYAMLFile reports whether the yaml/yml file at rel with the given
+// content is a honeybadger detection rule — the rule corpus, which defines
+// attack patterns rather than constituting them. It is excluded from the
+// skillsafety signal pass for the same reason as test fixtures.
+func IsRuleYAMLFile(rel string, content []byte) bool {
+	ext := path.Ext(rel)
+	return (ext == ".yaml" || ext == ".yml") && isRuleYAML(content)
 }
 
 func isTestPath(p, base string) bool {
@@ -209,20 +212,21 @@ func isRuleYAML(content []byte) bool {
 }
 
 // AdjustSeverity maps a finding's raw severity through the file role it was
-// found in. The second return is false when the finding should be dropped.
-func AdjustSeverity(raw string, role FileRole) (string, bool) {
+// found in. Findings are no longer dropped; instead the role dictates how
+// aggressively severity is downgraded.
+func AdjustSeverity(raw string, role FileRole) string {
 	switch role {
-	case RoleTest, RoleRules:
-		return "", false
-	case RoleDoc:
+	case RoleProse:
 		// A described threat is two severity levels weaker than a present one.
 		rank := SeverityRank(raw) - 2
 		if rank < 1 {
-			return "", false
+			return SevInfo
 		}
-		return severityForRank(rank), true
-	default: // RoleCode, RoleConfig
-		return raw, true
+		return severityForRank(rank)
+	case RoleComment:
+		return SevInfo
+	default: // RoleCode, RoleUnknown
+		return raw
 	}
 }
 
@@ -284,46 +288,47 @@ func IsApplicationRepo(files map[string][]byte) bool {
 	return hasManifest && sourceCount >= minAppSourceFiles
 }
 
-// ApplyFileRoles re-weights findings by the role of the file each was found
-// in: test/rule-corpus findings are dropped, documentation findings are
-// downgraded, code/config findings pass through. Findings with no File field
-// are left untouched (the caller's scanner-level scoping handles those).
+// ApplyFileRoles annotates each finding with the FileRole of the file it was
+// found in and adjusts severity accordingly. Findings are never dropped;
+// the role and adjusted severity give the consumer full context.
 //
 // For Markdown documents the line of the match is consulted: a match in prose
-// (a sentence, a table cell) is dropped because prose only *describes* a
-// pattern, while a match inside a code block is reduced to INFO because an
-// example snippet is not the executable artifact.
+// (a sentence, a table cell) is downgraded like other prose, while a match
+// inside a code block is reduced to INFO because an example snippet is not
+// the executable artifact. For source files, a match on a comment line is
+// classified as RoleComment and reduced to INFO.
 func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 	kept := make([]Finding, 0, len(findings))
-	for _, f := range findings {
+	for i := range findings {
+		f := &findings[i]
 		if f.File == "" {
-			kept = append(kept, f)
+			f.FileRole = RoleUnknown
+			kept = append(kept, *f)
 			continue
 		}
 		content := files[f.File]
 		role := ClassifyFile(f.File, content)
 
-		if role == RoleDoc && IsMarkdown(f.File) && f.Line > 0 {
-			if !CodeBlockLines(content)[f.Line] {
-				continue // prose match — described, not present
+		// Markdown: distinguish code-block lines from prose.
+		if role == RoleProse && IsMarkdown(f.File) && f.Line > 0 {
+			if CodeBlockLines(content)[f.Line] {
+				f.Severity = SevInfo
+			} else {
+				f.Severity = AdjustSeverity(f.Severity, RoleProse)
 			}
-			f.Severity = SevInfo // code-block example — informational only
-			kept = append(kept, f)
+			f.FileRole = RoleProse
+			kept = append(kept, *f)
 			continue
 		}
 
-		if role == RoleCode && f.Line > 0 {
-			if IsCommentLine(content, f.Line, f.File) {
-				continue // comment in code — described, not present
-			}
+		// Comment line in source code — described, not present.
+		if role == RoleCode && f.Line > 0 && IsCommentLine(content, f.Line, f.File) {
+			role = RoleComment
 		}
 
-		sev, ok := AdjustSeverity(f.Severity, role)
-		if !ok {
-			continue
-		}
-		f.Severity = sev
-		kept = append(kept, f)
+		f.FileRole = role
+		f.Severity = AdjustSeverity(f.Severity, role)
+		kept = append(kept, *f)
 	}
 	return kept
 }
