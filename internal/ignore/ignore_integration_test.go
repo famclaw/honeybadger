@@ -132,6 +132,26 @@ func TestIntegrationTargetIgnoreControl(t *testing.T) {
 			expectIgnored:    []string{},
 			description:      "Operator policy should work when no target ignore exists",
 		},
+		{
+			name:             "Malformed target ignore, trust OFF",
+			targetIgnore:     "SECRET_IN_CODE a b\n", // Malformed line with 3 tokens
+			trustTarget:      false,
+			operatorIgnore:   "",
+			expectSuppressed: 0, // Should not suppress anything due to malformed target
+			expectApplied:    []string{},
+			expectIgnored:    []string{}, // Target is nil, so no ignored sources
+			description:      "Malformed target ignore should not cause LoadPolicy to error, Target should be nil",
+		},
+		{
+			name:             "Malformed target ignore, trust ON",
+			targetIgnore:     "SECRET_IN_CODE a b\n", // Malformed line with 3 tokens
+			trustTarget:      true,
+			operatorIgnore:   "",
+			expectSuppressed: 0, // Should not suppress anything due to malformed target
+			expectApplied:    []string{},
+			expectIgnored:    []string{}, // Target is nil, so no ignored sources
+			description:      "Malformed target ignore should not cause LoadPolicy to error, Target should be nil",
+		},
 	}
 
 	for _, tc := range tests {

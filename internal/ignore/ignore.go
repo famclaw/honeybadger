@@ -153,9 +153,14 @@ func LoadPolicy(targetDir, operatorPolicyFile string, trustTarget bool) (*Policy
 		if err != nil {
 			return nil, fmt.Errorf("reading target ignore file: %w", err)
 		}
-		p.Target, err = Parse(content, ".honeybadgerignore")
-		if err != nil {
-			return nil, fmt.Errorf("parsing target ignore file: %w", err)
+		// Parse target content directly rather than calling LoadPolicyFromContent
+		// to avoid duplicate parsing of operator policy
+		set, parseErr := Parse(content, ".honeybadgerignore")
+		if parseErr != nil {
+			// On parse failure, leave Target as nil as per PM direction
+			p.Target = nil
+		} else {
+			p.Target = set
 		}
 	}
 

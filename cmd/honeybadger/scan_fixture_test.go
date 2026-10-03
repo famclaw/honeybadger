@@ -78,6 +78,14 @@ func TestScanFixture(t *testing.T) {
 			expectFindings: 2, // Should have 2 findings (the secret and the hard-coded key)
 			description:    "Test with trust OFF - should still have 2 findings because attacker ignore is not trusted",
 		},
+		{
+			name:           "Malformed target ignore",
+			attackerIgnore: "SECRET_IN_CODE a b\n", // Malformed line with 3 tokens
+			trustTarget:    true,
+			operatorIgnore: "",
+			expectFindings: 2, // Should have 2 findings because malformed target is ignored
+			description:    "Malformed target ignore should not cause LoadPolicy to error, Target should be nil",
+		},
 	}
 
 	for _, tc := range tests {
@@ -132,10 +140,19 @@ func TestScanFixture(t *testing.T) {
 			}
 
 			// Validate applied sources
+			// For malformed target ignore, Target should be nil, so nothing should be applied
 			if tc.trustTarget && tc.attackerIgnore != "" {
-				// Should have applied target
-				if len(outcome.Applied) == 0 || !strings.Contains(outcome.Applied[0], "target") {
-					t.Errorf("Expected target to be applied, got: %v", outcome.Applied)
+				// Check if the target is malformed (should result in nil Target)
+				if strings.Contains(tc.attackerIgnore, "a b") { // Malformed line
+					// For malformed targets, Target should be nil, so nothing should be applied
+					if len(outcome.Applied) > 0 {
+						t.Errorf("Expected target to be ignored due to malformed content, got: %v", outcome.Applied)
+					}
+				} else {
+					// For valid targets, should have applied target
+					if len(outcome.Applied) == 0 || !strings.Contains(outcome.Applied[0], "target") {
+						t.Errorf("Expected target to be applied, got: %v", outcome.Applied)
+					}
 				}
 			}
 
