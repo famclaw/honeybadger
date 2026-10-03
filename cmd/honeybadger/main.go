@@ -244,11 +244,6 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// 5. Fetch repo
-	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
-	}
-
 	fetcher, err := fetch.Route(cfg.RepoURL)
 	if err != nil {
 		return 1, fmt.Errorf("routing: %w", err)
@@ -272,6 +267,13 @@ func run(cfg runConfig) (int, error) {
 		GithubToken: cfg.GithubToken,
 		GitlabToken: cfg.GitlabToken,
 		SubPath:     cfg.SubPath,
+	}
+
+	// Emit fetch progress only after routing and the offline guard have
+	// passed, so an offline remote rejection does not mislead the user with
+	// a progress line before the error.
+	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
 
 	repo, err := fetcher.Fetch(ctx, cfg.RepoURL, fetchOpts)

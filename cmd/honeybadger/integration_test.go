@@ -406,6 +406,47 @@ func TestCLI_OfflineRejectsRemoteTarget(t *testing.T) {
 	}
 }
 
+// Regression: `scan <remote> --offline` used to emit "Fetching repository..."
+// before fetch.Route and the offline RequiresNetwork guard ran, so the user
+// saw a misleading fetch-progress line before the "requires network access"
+// error. The fetch progress event must only be emitted after routing and the
+// guard pass (i.e. right before an actual fetch). An offline scan of a local
+// path is allowed and must keep emitting the progress line.
+func TestCLI_OfflineRemoteDoesNotEmitFetchProgress(t *testing.T) {
+	const progress = "Fetching repository"
+
+	t.Run("remote offline reports error without fetch progress", func(t *testing.T) {
+		cmd := exec.Command(testBinary, "scan", "github.com/famclaw/honeybadger", "--offline", "--format", "text")
+		out, err := cmd.CombinedOutput()
+		if cmd.ProcessState == nil {
+			t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+		}
+		if exitCode := cmd.ProcessState.ExitCode(); exitCode != 1 {
+			t.Errorf("expected exit code 1, got %d\noutput: %s", exitCode, out)
+		}
+		outputStr := string(out)
+		if !strings.Contains(outputStr, "requires network access") {
+			t.Errorf("expected 'requires network access' in output, got: %s", outputStr)
+		}
+		if strings.Contains(outputStr, progress) {
+			t.Errorf("offline remote scan must not emit fetch progress before failing, got: %s", outputStr)
+		}
+	})
+
+	t.Run("local offline preserves fetch progress", func(t *testing.T) {
+		dir := testfixture.WriteToDir(t, testfixture.CleanRepo())
+		cmd := exec.Command(testBinary, "scan", dir, "--offline", "--format", "text")
+		out, err := cmd.CombinedOutput()
+		if cmd.ProcessState == nil {
+			t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+		}
+		outputStr := string(out)
+		if !strings.Contains(outputStr, progress) {
+			t.Errorf("offline local-path scan should still emit fetch progress, got: %s", outputStr)
+		}
+	})
+}
+
 // Companion to TestCLI_OfflineRejectsRemoteTarget: the offline guard must
 // only reject remote targets. An offline scan of a local path is the
 // intended offline workflow and must complete with a verdict.
