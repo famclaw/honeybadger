@@ -14,8 +14,8 @@ import (
 
 // namedScanner is a helper type that associates a scanner name with its scanning function.
 type namedScanner struct {
-	Name  string
-	Run   scan.ScanFunc
+	Name string
+	Run  scan.ScanFunc
 }
 
 // scannersFor returns the scanner set for a paranoia level. It is the single

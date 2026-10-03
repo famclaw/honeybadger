@@ -55,13 +55,14 @@ var knownScanners = map[string]bool{
 	"capability": true, "cve": true, "meta": true,
 	"mcptool": true, "attestation": true,
 }
+
 // commentPrefixes maps file extensions to a list of comment prefixes that,
 // when at the start of a line (after whitespace), indicate the line is a comment.
 var commentPrefixes = map[string][]string{
-	".go": {"//"},
-	".sh": {"#"},
+	".go":   {"//"},
+	".sh":   {"#"},
 	".bash": {"#"},
-	".zsh": {"#"},
+	".zsh":  {"#"},
 	".fish": {"#"},
 	// Add more as needed
 }

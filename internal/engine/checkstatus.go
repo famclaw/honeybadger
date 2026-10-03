@@ -1,16 +1,16 @@
 package engine
 
 import (
-	"log"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/scan"
+	"log"
 )
 
 // CheckResult represents the result of a single check
 type CheckResult struct {
-	Name  string
+	Name    string
 	Verdict string
-	Error string
+	Error   string
 }
 
 // CheckResults represents the collection of all check results
@@ -34,17 +34,17 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 			uniqueNames = append(uniqueNames, name)
 		}
 	}
-	
+
 	// Seed results with PASS for each scanner name
 	results := make([]CheckResult, 0, len(uniqueNames))
 	for _, name := range uniqueNames {
 		results = append(results, CheckResult{
-			Name: name,
+			Name:    name,
 			Verdict: "PASS",
-			Error: "",
+			Error:   "",
 		})
 	}
-	
+
 	// Process runtime errors
 	for _, err := range runtimeErrors {
 		// Look for existing entry with matching name
@@ -52,15 +52,15 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 		for i, result := range results {
 			if result.Name == err.Scanner {
 				results[i] = CheckResult{
-					Name: result.Name,
+					Name:    result.Name,
 					Verdict: "FAIL",
-					Error: err.Message,
+					Error:   err.Message,
 				}
 				found = true
 				break
 			}
 		}
-		
+
 		// If no existing entry, add new entry
 		if !found {
 			// unknown scanner names (e.g. "runner", which is how scanner panics are tagged by scan.RunAll)
@@ -69,13 +69,13 @@ func NewCheckResultsFromErrors(scannerNames []string, runtimeErrors []scan.Runti
 			// for a security scanner.
 			log.Printf("honeybadger: runtime error from unrecognized scanner %q: %s — counting as failed check (fail-safe)", err.Scanner, err.Message)
 			results = append(results, CheckResult{
-				Name: err.Scanner,
+				Name:    err.Scanner,
 				Verdict: "FAIL",
-				Error: err.Message,
+				Error:   err.Message,
 			})
 		}
 	}
-	
+
 	return CheckResults{
 		Results: results,
 	}
@@ -87,12 +87,12 @@ func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.Parano
 	// ComputeVerdict already applies the LLM worse-of escalation internally;
 	// do not re-apply it here (see engine.go ComputeVerdict, "Combine with LLM verdict").
 	baseVerdict, reasoning, keyFinding := ComputeVerdict(findings, paranoia, llmVerdict)
-	
-	// If we have check results, and any required check failed, downgrade PASS/WARN to INCOMPLETE
-	// For simplicity, we assume all checks are required for now
-	// Check if checkResults is nil (which means no checks were performed) or if it's an empty slice
-	// In both cases, we skip the downgrade logic to avoid silently ignoring runtime errors
-	if checkResults.Results != nil {
+
+	// If any tracked check failed, downgrade PASS/WARN to INCOMPLETE.
+	// A nil or empty Results slice means no checks were tracked (zero-value
+	// CheckResults{} or an explicitly empty slice), so there is nothing to
+	// evaluate and we skip the block entirely.
+	if len(checkResults.Results) > 0 {
 		// Check if any required check failed
 		hasFailedRequiredCheck := false
 		for _, result := range checkResults.Results {
@@ -101,14 +101,14 @@ func ComputeVerdictWithCheckStatus(findings []scan.Finding, paranoia scan.Parano
 				break
 			}
 		}
-		
+
 		// If a required check failed and we had PASS or WARN, downgrade to INCOMPLETE
 		if hasFailedRequiredCheck && (baseVerdict == "PASS" || baseVerdict == "WARN") {
 			baseVerdict = "INCOMPLETE"
 			reasoning = reasoning + " (downgraded due to failed required check)"
 		}
 	}
-	
+
 	return baseVerdict, reasoning, keyFinding
 }
 

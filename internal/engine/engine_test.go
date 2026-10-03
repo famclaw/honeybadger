@@ -189,8 +189,8 @@ func TestIsTermux(t *testing.T) {
 
 func TestExitCodeForVerdict(t *testing.T) {
 	tests := []struct {
-		verdict   string
-		wantCode  int
+		verdict  string
+		wantCode int
 	}{
 		{"PASS", 0},
 		{"WARN", 1},
