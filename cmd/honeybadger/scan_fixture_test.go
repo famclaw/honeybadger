@@ -14,13 +14,6 @@ func TestScanFixture(t *testing.T) {
 	// Test scanning with various suppression scenarios
 	// This mimics the table-driven test from the plan
 
-	// Create a temporary directory for our test
-	tempDir, err := os.MkdirTemp("", "honeybadger-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
 	// Test cases from the plan
 	tests := []struct {
 		name           string
@@ -37,7 +30,7 @@ func TestScanFixture(t *testing.T) {
 			trustTarget:    false,
 			operatorIgnore: "",
 			expectFindings: 2, // Should have 2 findings (the secret and the hard-coded key)
-			description:    "Should still have findings because target ignore is not trusted",
+			description:    "Should still have 2 findings because target ignore is not trusted",
 		},
 		{
 			name:           "Attacker ignore, trust OFF, operator suppresses rule-1",
@@ -88,10 +81,26 @@ func TestScanFixture(t *testing.T) {
 			malformed:      true,
 			description:    "Malformed target ignore should not cause LoadPolicy to error, Target should be nil",
 		},
+		// This test case demonstrates the issue:
+		{
+			name:           "Empty attacker ignore (this should not pick up stale files)",
+			attackerIgnore: "", // Empty - no file should be written
+			trustTarget:    false,
+			operatorIgnore: "",
+			expectFindings: 2, // Should have 2 findings because no target ignore file exists
+			description:    "Test with empty attacker ignore - should not have stale files from previous tests",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Create a fresh temporary directory for each subtest to ensure test isolation
+			tempDir, err := os.MkdirTemp("", "honeybadger-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(tempDir)
+
 			// Create a mock repo structure
 			// This would normally be done through the fetcher, but we simulate it here
 
