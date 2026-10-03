@@ -244,14 +244,18 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// 5. Fetch repo
-	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
-	}
-
 	fetcher, err := fetch.Route(cfg.RepoURL)
 	if err != nil {
 		return 1, fmt.Errorf("routing: %w", err)
+	}
+
+	// Fail-fast guard: offline mode must not contact any remote source. The
+	// remote/local split is decided by the routed fetcher so URL classification
+	// stays a single source of truth in the fetch package (covers https://,
+	// git@, and scheme-less github.com/... / gitlab.com/... forms; local paths
+	// and stdin are allowed).
+	if cfg.Offline && fetch.RequiresNetwork(fetcher) {
+		return 1, fmt.Errorf("--offline: target %q requires network access; supply a local path instead", cfg.RepoURL)
 	}
 
 	// Wire stdin reader for piped input
@@ -263,6 +267,13 @@ func run(cfg runConfig) (int, error) {
 		GithubToken: cfg.GithubToken,
 		GitlabToken: cfg.GitlabToken,
 		SubPath:     cfg.SubPath,
+	}
+
+	// Emit fetch progress only after routing and the offline guard have
+	// passed, so an offline remote rejection does not mislead the user with
+	// a progress line before the error.
+	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 	}
 
 	repo, err := fetcher.Fetch(ctx, cfg.RepoURL, fetchOpts)
@@ -393,7 +404,7 @@ func run(cfg runConfig) (int, error) {
 	// 9. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
-	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" {
+	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" && !cfg.Offline {
 		if err := emitter.Emit(engine.NewProgressEvent("llm", "Asking LLM for verdict...")); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 		}
