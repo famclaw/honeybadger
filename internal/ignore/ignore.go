@@ -157,7 +157,9 @@ func LoadPolicy(targetDir, operatorPolicyFile string, trustTarget bool) (*Policy
 		// to avoid duplicate parsing of operator policy
 		set, parseErr := Parse(content, ".honeybadgerignore")
 		if parseErr != nil {
-			// On parse failure, leave Target as nil as per PM direction
+			// A malformed target .honeybadgerignore is untrusted input:
+			// leaving Target nil prevents a DoS via an attacker-controlled
+			// file and means no target suppressions will be applied.
 			p.Target = nil
 		} else {
 			p.Target = set
@@ -229,7 +231,10 @@ func Apply(policy *Policy, findings []scan.Finding) *Outcome {
 		kept, suppressed := policy.Target.Filter(findings)
 		keptFindings = kept
 		suppressedFindings = append(suppressedFindings, suppressed...)
-		outcome.Applied = append(outcome.Applied, "target")
+		// Only add to Applied if at least one finding was suppressed
+		if len(suppressed) > 0 {
+			outcome.Applied = append(outcome.Applied, "target")
+		}
 	} else if policy.Target != nil {
 		// If target is not trusted, we don't apply target rules, so all findings stay
 		keptFindings = findings
@@ -243,7 +248,10 @@ func Apply(policy *Policy, findings []scan.Finding) *Outcome {
 		kept, suppressed := policy.Operator.Filter(keptFindings)
 		keptFindings = kept
 		suppressedFindings = append(suppressedFindings, suppressed...)
-		outcome.Applied = append(outcome.Applied, "operator")
+		// Only add to Applied if at least one finding was suppressed
+		if len(suppressed) > 0 {
+			outcome.Applied = append(outcome.Applied, "operator")
+		}
 	}
 
 	// Set the final results

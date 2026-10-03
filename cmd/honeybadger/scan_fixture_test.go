@@ -28,6 +28,7 @@ func TestScanFixture(t *testing.T) {
 		trustTarget    bool
 		operatorIgnore string
 		expectFindings int
+		malformed      bool
 		description    string
 	}{
 		{
@@ -84,6 +85,7 @@ func TestScanFixture(t *testing.T) {
 			trustTarget:    true,
 			operatorIgnore: "",
 			expectFindings: 2, // Should have 2 findings because malformed target is ignored
+			malformed:      true,
 			description:    "Malformed target ignore should not cause LoadPolicy to error, Target should be nil",
 		},
 	}
@@ -140,11 +142,11 @@ func TestScanFixture(t *testing.T) {
 			}
 
 			// Validate applied sources
-			// For malformed target ignore, Target should be nil, so nothing should be applied
+			// A malformed target leaves Target nil, so nothing is applied even
+			// when trusted; a valid target under trust records "target".
 			if tc.trustTarget && tc.attackerIgnore != "" {
-				// Check if the target is malformed (should result in nil Target)
-				if strings.Contains(tc.attackerIgnore, "a b") { // Malformed line
-					// For malformed targets, Target should be nil, so nothing should be applied
+				if tc.malformed {
+					// Target is nil, so nothing should be applied.
 					if len(outcome.Applied) > 0 {
 						t.Errorf("Expected target to be ignored due to malformed content, got: %v", outcome.Applied)
 					}

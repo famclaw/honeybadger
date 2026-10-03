@@ -2,6 +2,7 @@ package ignore
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -117,10 +118,10 @@ func TestIntegrationTargetIgnoreControl(t *testing.T) {
 			targetIgnore:     "SECRET_IN_CODE\n",
 			trustTarget:      true,
 			operatorIgnore:   "SECRET_IN_CODE\n",
-			expectSuppressed: 1, // Should suppress one finding via operator policy
-			expectApplied:    []string{"target", "operator"},
+			expectSuppressed: 1, // Should suppress one finding via target policy (operator suppresses none due to prior suppression)
+			expectApplied:    []string{"target"},
 			expectIgnored:    []string{},
-			description:      "Both target and operator policies should apply when trust is on",
+			description:      "Target policy should apply first, then operator policy suppresses nothing (due to prior suppression)",
 		},
 		{
 			name:             "No target ignore, operator suppresses",
@@ -221,4 +222,40 @@ func TestIntegrationTargetIgnoreControl(t *testing.T) {
 			}
 		})
 	}
+
+	// Exercise the filesystem-backed LoadPolicy path with runtime fixtures.
+	t.Run("LoadPolicy_MalformedTarget", func(t *testing.T) {
+		targetDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(targetDir, ".honeybadgerignore"),
+			[]byte("MY_RULE a b\nSECRET_IN_CODE\n"), 0o644); err != nil {
+			t.Fatalf("write target ignore: %v", err)
+		}
+
+		// Malformed target .honeybadgerignore must not error and must leave
+		// Target nil regardless of trust flag.
+		for _, trust := range []bool{false, true} {
+			policy, err := LoadPolicy(targetDir, "", trust)
+			if err != nil {
+				t.Fatalf("LoadPolicy must not error on malformed target (trust=%v): %v", trust, err)
+			}
+			if policy.Target != nil {
+				t.Fatalf("expected Target nil after malformed parse (trust=%v), got %v", trust, policy.Target)
+			}
+		}
+
+		// Malformed operator policy is fatal.
+		malformedOp := filepath.Join(targetDir, "operator-malformed.policy")
+		if err := os.WriteFile(malformedOp, []byte("MALFORMED_LINE a b c\n"), 0o644); err != nil {
+			t.Fatalf("write operator policy: %v", err)
+		}
+		if _, err := LoadPolicy(targetDir, malformedOp, false); err == nil {
+			t.Fatal("LoadPolicy should error on malformed operator policy")
+		}
+
+		// Missing operator policy file is fatal.
+		missingOp := filepath.Join(targetDir, "does-not-exist.policy")
+		if _, err := LoadPolicy(targetDir, missingOp, false); err == nil {
+			t.Fatal("LoadPolicy should error on missing operator policy file")
+		}
+	})
 }
