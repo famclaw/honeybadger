@@ -250,10 +250,13 @@ func Apply(policy *Policy, findings []scan.Finding) *Outcome {
 		kept, suppressed := policy.Operator.Filter(keptFindings)
 		keptFindings = kept
 		suppressedFindings = append(suppressedFindings, suppressed...)
-		// Only add to Applied if at least one finding was suppressed
-		if len(suppressed) > 0 {
-			outcome.Applied = append(outcome.Applied, "operator")
-		}
+		// Record "operator" in Applied whenever an operator policy is in
+		// effect, even if it suppresses zero findings. This mirrors the
+		// trusted-target source and keeps an auditor able to distinguish
+		// "no operator policy" from "operator policy present, applied, but no
+		// matches" (which would otherwise appear in neither Applied nor
+		// Ignored and be dropped by the emission guard).
+		outcome.Applied = append(outcome.Applied, "operator")
 	}
 
 	// Set the final results

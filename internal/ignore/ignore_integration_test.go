@@ -119,9 +119,12 @@ func TestIntegrationTargetIgnoreControl(t *testing.T) {
 			trustTarget:      true,
 			operatorIgnore:   "SECRET_IN_CODE\n",
 			expectSuppressed: 1, // Should suppress one finding via target policy (operator suppresses none due to prior suppression)
-			expectApplied:    []string{"target"},
-			expectIgnored:    []string{},
-			description:      "Target policy should apply first, then operator policy suppresses nothing (due to prior suppression)",
+			// Both sources are in effect: target records itself even with
+			// zero operator matches, and operator records itself even though
+			// the target already suppressed the only matching finding.
+			expectApplied: []string{"target", "operator"},
+			expectIgnored: []string{},
+			description:   "Target policy should apply first, then operator policy records itself despite prior suppression",
 		},
 		{
 			name:             "No target ignore, operator suppresses",
@@ -346,6 +349,57 @@ func TestApplyUntrustedTargetNoMatchesStillIgnored(t *testing.T) {
 	}
 	if len(out.Effective) != len(findings) {
 		t.Fatalf("expected %d effective findings, got %d", len(findings), len(out.Effective))
+	}
+}
+
+// TestApplyOperatorPolicyNoMatchesStillApplied is the operator-source mirror of
+// TestApplyTrustedTargetNoMatchesStillApplied. An operator policy that is present
+// and parses successfully but matches zero findings must still record "operator"
+// in Outcome.Applied, so an auditor can tell "no operator policy" apart from
+// "operator policy present, applied, but no matches." Before the fix the operator
+// source was only recorded when it suppressed at least one finding, leaving the
+// two situations indistinguishable and breaking symmetry with the trusted-target
+// source.
+func TestApplyOperatorPolicyNoMatchesStillApplied(t *testing.T) {
+	findings := []scan.Finding{
+		{RuleID: "SECRET_IN_CODE", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded secret"},
+		{RuleID: "HARDCODED_KEY", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded key"},
+	}
+
+	// An operator policy that matches none of the findings above.
+	operatorSet, err := Parse([]byte("UNRELATED_RULE\n"), "operator-policy")
+	if err != nil {
+		t.Fatalf("parse operator policy: %v", err)
+	}
+
+	// Case 1: operator policy present but no matches.
+	withOperator := Apply(&Policy{Operator: operatorSet}, findings)
+	if len(withOperator.Effective) != len(findings) {
+		t.Fatalf("expected %d effective findings (none suppressed), got %d", len(findings), len(withOperator.Effective))
+	}
+	if len(withOperator.Suppressed) != 0 {
+		t.Fatalf("expected 0 suppressed, got %d", len(withOperator.Suppressed))
+	}
+	if len(withOperator.Applied) != 1 || withOperator.Applied[0] != "operator" {
+		t.Fatalf("expected Applied=[operator] for present no-match operator, got %v", withOperator.Applied)
+	}
+	if len(withOperator.Ignored) != 0 {
+		t.Fatalf("expected Ignored empty, got %v", withOperator.Ignored)
+	}
+
+	// Case 2: no operator policy at all. Must differ in Applied so an auditor
+	// can distinguish the two situations.
+	noOperator := Apply(&Policy{}, findings)
+	if len(noOperator.Applied) != 0 {
+		t.Fatalf("expected Applied empty when no operator policy present, got %v", noOperator.Applied)
+	}
+	if len(noOperator.Effective) != len(findings) {
+		t.Fatalf("expected %d effective findings, got %d", len(findings), len(noOperator.Effective))
+	}
+
+	// The two cases must be distinguishable via Applied.
+	if hasString(withOperator.Applied, "operator") == hasString(noOperator.Applied, "operator") {
+		t.Fatalf("present no-match operator and no-operator policy must differ in Applied: with=%v without=%v", withOperator.Applied, noOperator.Applied)
 	}
 }
 
