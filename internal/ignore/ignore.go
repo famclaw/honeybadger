@@ -231,10 +231,12 @@ func Apply(policy *Policy, findings []scan.Finding) *Outcome {
 		kept, suppressed := policy.Target.Filter(findings)
 		keptFindings = kept
 		suppressedFindings = append(suppressedFindings, suppressed...)
-		// Only add to Applied if at least one finding was suppressed
-		if len(suppressed) > 0 {
-			outcome.Applied = append(outcome.Applied, "target")
-		}
+		// Record "target" in Applied whenever a trusted target policy is in
+		// effect, even if it suppresses zero findings. This keeps an auditor
+		// able to distinguish "no target ignore file" from "target ignore file
+		// present, trusted, but no matches" (which would otherwise appear in
+		// neither Applied nor Ignored and be dropped by the emission guard).
+		outcome.Applied = append(outcome.Applied, "target")
 	} else if policy.Target != nil {
 		// If target is not trusted, we don't apply target rules, so all findings stay
 		keptFindings = findings

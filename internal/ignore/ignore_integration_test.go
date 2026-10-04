@@ -153,6 +153,16 @@ func TestIntegrationTargetIgnoreControl(t *testing.T) {
 			expectIgnored:    []string{}, // Target is nil, so no ignored sources
 			description:      "Malformed target ignore should not cause LoadPolicy to error, Target should be nil",
 		},
+		{
+			name:             "Trusted target present but zero matching findings",
+			targetIgnore:     "UNRELATED_RULE\n",
+			trustTarget:      true,
+			operatorIgnore:   "",
+			expectSuppressed: 0,
+			expectApplied:    []string{"target"},
+			expectIgnored:    []string{},
+			description:      "Auditability: trusted target with no matches must still record 'target' in Applied",
+		},
 	}
 
 	for _, tc := range tests {
@@ -258,4 +268,92 @@ func TestIntegrationTargetIgnoreControl(t *testing.T) {
 			t.Fatal("LoadPolicy should error on missing operator policy file")
 		}
 	})
+}
+
+// TestApplyTrustedTargetNoMatchesStillApplied is a regression test for the
+// auditability gap: a trusted target .honeybadgerignore that is present and
+// parses successfully but matches zero findings must still record "target" in
+// Outcome.Applied. Before the fix it appeared in neither Applied nor Ignored,
+// so main.go's emission guard (len(Applied)>0 || len(Ignored)>0) dropped the
+// suppression event entirely, making it impossible for an auditor to tell
+// "no target ignore file" from "target ignore file present, trusted, but no
+// matches."
+func TestApplyTrustedTargetNoMatchesStillApplied(t *testing.T) {
+	findings := []scan.Finding{
+		{RuleID: "SECRET_IN_CODE", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded secret"},
+		{RuleID: "HARDCODED_KEY", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded key"},
+	}
+
+	// A trusted target policy that matches none of the findings above.
+	targetSet, err := Parse([]byte("UNRELATED_RULE\n"), ".honeybadgerignore")
+	if err != nil {
+		t.Fatalf("parse target policy: %v", err)
+	}
+
+	// Case 1: trusted target present but no matches.
+	withTarget := Apply(&Policy{TrustTarget: true, Target: targetSet}, findings)
+	if len(withTarget.Effective) != len(findings) {
+		t.Fatalf("expected %d effective findings (none suppressed), got %d", len(findings), len(withTarget.Effective))
+	}
+	if len(withTarget.Suppressed) != 0 {
+		t.Fatalf("expected 0 suppressed, got %d", len(withTarget.Suppressed))
+	}
+	if len(withTarget.Applied) != 1 || withTarget.Applied[0] != "target" {
+		t.Fatalf("expected Applied=[target] for trusted no-match target, got %v", withTarget.Applied)
+	}
+	if len(withTarget.Ignored) != 0 {
+		t.Fatalf("expected Ignored empty, got %v", withTarget.Ignored)
+	}
+
+	// Case 2: no target policy at all. This must remain indistinguishable in
+	// Effective/Suppressed but DIFFERENT in Applied, so an auditor can tell the
+	// two situations apart.
+	noTarget := Apply(&Policy{TrustTarget: true}, findings)
+	if len(noTarget.Applied) != 0 {
+		t.Fatalf("expected Applied empty when no target policy present, got %v", noTarget.Applied)
+	}
+	if len(noTarget.Ignored) != 0 {
+		t.Fatalf("expected Ignored empty when no target policy present, got %v", noTarget.Ignored)
+	}
+	if len(noTarget.Effective) != len(findings) {
+		t.Fatalf("expected %d effective findings, got %d", len(findings), len(noTarget.Effective))
+	}
+
+	// The two cases must now be distinguishable via Applied.
+	if hasString(withTarget.Applied, "target") == hasString(noTarget.Applied, "target") {
+		t.Fatalf("trusted no-match target and no-target policy must differ in Applied: with=%v without=%v", withTarget.Applied, noTarget.Applied)
+	}
+}
+
+// TestApplyUntrustedTargetNoMatchesStillIgnored confirms the mirror case: an
+// untrusted target policy that matches nothing still records "target" in
+// Ignored (this behavior was already unconditional and is preserved).
+func TestApplyUntrustedTargetNoMatchesStillIgnored(t *testing.T) {
+	findings := []scan.Finding{
+		{RuleID: "SECRET_IN_CODE", Severity: scan.SevHigh, File: "main.go", Message: "hardcoded secret"},
+	}
+	targetSet, err := Parse([]byte("UNRELATED_RULE\n"), ".honeybadgerignore")
+	if err != nil {
+		t.Fatalf("parse target policy: %v", err)
+	}
+
+	out := Apply(&Policy{TrustTarget: false, Target: targetSet}, findings)
+	if len(out.Applied) != 0 {
+		t.Fatalf("expected Applied empty for untrusted target, got %v", out.Applied)
+	}
+	if len(out.Ignored) != 1 || out.Ignored[0] != "target" {
+		t.Fatalf("expected Ignored=[target] for untrusted target, got %v", out.Ignored)
+	}
+	if len(out.Effective) != len(findings) {
+		t.Fatalf("expected %d effective findings, got %d", len(findings), len(out.Effective))
+	}
+}
+
+func hasString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
