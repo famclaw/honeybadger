@@ -14,11 +14,6 @@
 mcp-concealment internal/testfixture/fixtures.go
 sc-base64-eval internal/scanner/supplychain/supplychain_test.go
 sc-crypto-mining README.md
-# temp_readme.md is an intentional demo/doc artifact documenting HoneyBadger's
-# detection capabilities; its "What it checks" table intentionally names the
-# attack patterns the scanners detect.
-sc-curl-pipe-bash temp_readme.md
-sc-crypto-mining temp_readme.md
 sc-crypto-mining internal/rules/rules_test.go
 sc-crypto-mining internal/scan/markdown_test.go
 sc-crypto-mining internal/scanner/supplychain/supplychain_test.go
