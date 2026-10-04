@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -352,14 +353,11 @@ func run(cfg runConfig) (int, error) {
 	// 7b. Apply .honeybadgerignore suppression before emitting.
 	var suppressedCount int
 
-	// Load suppression policy
-	// First try to get the target ignore file content from repo.Files
-	var targetIgnoreContent []byte
-	if repo.Files != nil {
-		if content, exists := repo.Files[".honeybadgerignore"]; exists {
-			targetIgnoreContent = content
-		}
-	}
+	// Load suppression policy.
+	// The target .honeybadgerignore content is resolved from the fetched repo,
+	// with a filesystem fallback for local-path scans so the target policy is
+	// not silently skipped when it was not captured in repo.Files.
+	targetIgnoreContent := resolveTargetIgnoreContent(repo)
 
 	// Determine if we should trust target ignore rules based on either:
 	// 1. Explicit --trust-target-ignore flag
@@ -528,6 +526,30 @@ func run(cfg runConfig) (int, error) {
 
 	// 12. Exit code
 	return engine.ExitCodeForVerdict(verdict), nil
+}
+
+// resolveTargetIgnoreContent returns the target .honeybadgerignore content for
+// a fetched repo. It prefers the content captured in repo.Files during fetch and
+// falls back to reading the file from disk for local-path scans. The fallback
+// guards against a local scan (e.g. with --path) leaving the repo-root
+// .honeybadgerignore out of repo.Files while the file still exists on disk;
+// without it the target policy would be silently dropped even when
+// --trust-target-ignore is set. It returns nil when no content is available.
+func resolveTargetIgnoreContent(repo *fetch.Repo) []byte {
+	if repo == nil {
+		return nil
+	}
+	if repo.Files != nil {
+		if content, exists := repo.Files[".honeybadgerignore"]; exists {
+			return content
+		}
+	}
+	if repo.Platform == "local" && repo.URL != "" {
+		if content, err := os.ReadFile(filepath.Join(repo.URL, ".honeybadgerignore")); err == nil {
+			return content
+		}
+	}
+	return nil
 }
 
 func serveMCP(rulesDir string) error {
