@@ -148,6 +148,34 @@ func TestApplyFileRolesMarkdown(t *testing.T) {
 	}
 }
 
+func TestIsRuleYAMLFile(t *testing.T) {
+	rule := []byte(sampleRuleYAML)
+	plain := []byte("server:\n  port: 8080\n")
+	cases := []struct {
+		name    string
+		path    string
+		content []byte
+		want    bool
+	}{
+		{"lowercase yaml rule", "rules/supplychain/patterns/reverse_shell.yaml", rule, true},
+		{"uppercase YAML rule", "rules/FOO.YAML", rule, true},
+		{"uppercase YML rule", "rules/Bar.YML", rule, true},
+		{"mixed case Yaml rule", "rules/Baz.Yaml", rule, true},
+		{"backslash uppercase rule", `rules\FOO.YAML`, rule, true},
+		{"non-rule yaml", "config/app.yaml", plain, false},
+		{"non-rule uppercase yaml", "config/APP.YAML", plain, false},
+		{"non-yaml extension", "rules/FOO.txt", rule, false},
+		{"empty content", "rules/FOO.YAML", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsRuleYAMLFile(c.path, c.content); got != c.want {
+				t.Errorf("IsRuleYAMLFile(%q) = %v, want %v", c.path, got, c.want)
+			}
+		})
+	}
+}
+
 func TestIsApplicationRepo(t *testing.T) {
 	cases := []struct {
 		name  string

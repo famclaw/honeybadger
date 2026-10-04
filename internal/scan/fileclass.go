@@ -145,7 +145,8 @@ func IsFixtureFile(rel string) bool {
 // attack patterns rather than constituting them. It is excluded from the
 // skillsafety signal pass for the same reason as test fixtures.
 func IsRuleYAMLFile(rel string, content []byte) bool {
-	ext := path.Ext(rel)
+	p := strings.ToLower(strings.ReplaceAll(rel, "\\", "/"))
+	ext := path.Ext(p)
 	return (ext == ".yaml" || ext == ".yml") && isRuleYAML(content)
 }
 
