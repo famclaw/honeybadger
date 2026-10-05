@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 )
 
@@ -86,14 +87,16 @@ func (e *TextEmitter) Emit(v any) error {
 
 		// Display applied sources
 		if len(appliedSources) > 0 {
-			fmt.Fprintf(e.w, "[suppressed] %d finding(s) via: ", int(count))
+			sources := make([]string, len(appliedSources))
 			for i, src := range appliedSources {
-				if i > 0 {
-					fmt.Fprintf(e.w, ", ")
-				}
-				fmt.Fprintf(e.w, "%s", src)
+				s, _ := src.(string)
+				sources[i] = s
 			}
-			fmt.Fprintf(e.w, "\n")
+			if int(count) > 0 {
+				fmt.Fprintf(e.w, "[suppressed] %d finding(s) via: %s\n", int(count), strings.Join(sources, ", "))
+			} else {
+				fmt.Fprintf(e.w, "[suppression-applied] no findings matched via: %s\n", strings.Join(sources, ", "))
+			}
 		}
 
 		// Display ignored sources

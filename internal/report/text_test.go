@@ -278,3 +278,77 @@ func TestTextEmitProgress(t *testing.T) {
 		t.Errorf("expected message, got: %s", out)
 	}
 }
+
+// Regression: when a trusted target policy is present but matches zero
+// findings, the old output "[suppressed] 0 finding(s) via: target" was
+// misleading — it said "suppressed" with a count of 0.
+func TestTextEmitter_SuppressionSummary_ZeroCount(t *testing.T) {
+	var buf bytes.Buffer
+	e := NewTextEmitter(&buf)
+
+	err := e.Emit(map[string]any{
+		"type":             "suppression_summary",
+		"suppressed_count": 0,
+		"applied_sources":  []any{"target"},
+	})
+	if err != nil {
+		t.Fatalf("Emit error: %v", err)
+	}
+
+	out := buf.String()
+	// Should NOT use the misleading "[suppressed] 0" phrasing.
+	if strings.Contains(out, "[suppressed] 0") {
+		t.Errorf("zero-count suppression should not use '[suppressed] 0', got: %s", out)
+	}
+	// Should use the corrected "[suppression-applied]" phrasing.
+	if !strings.Contains(out, "[suppression-applied]") {
+		t.Errorf("expected [suppression-applied] prefix for zero count, got: %s", out)
+	}
+	if !strings.Contains(out, "no findings matched") {
+		t.Errorf("expected 'no findings matched' for zero count, got: %s", out)
+	}
+	if !strings.Contains(out, "target") {
+		t.Errorf("expected source 'target' in output, got: %s", out)
+	}
+}
+
+// When findings are actually suppressed, the original "[suppressed] N"
+// phrasing is correct.
+func TestTextEmitter_SuppressionSummary_NonZeroCount(t *testing.T) {
+	var buf bytes.Buffer
+	e := NewTextEmitter(&buf)
+
+	err := e.Emit(map[string]any{
+		"type":             "suppression_summary",
+		"suppressed_count": 3,
+		"applied_sources":  []any{"target", "operator"},
+	})
+	if err != nil {
+		t.Fatalf("Emit error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[suppressed] 3 finding(s) via: target, operator") {
+		t.Errorf("expected '[suppressed] 3 finding(s) via: target, operator', got: %s", out)
+	}
+}
+
+// Ignored (untrusted) sources are reported separately.
+func TestTextEmitter_SuppressionSummary_IgnoredSources(t *testing.T) {
+	var buf bytes.Buffer
+	e := NewTextEmitter(&buf)
+
+	err := e.Emit(map[string]any{
+		"type":             "suppression_summary",
+		"suppressed_count": 0,
+		"ignored_sources":  []any{"target"},
+	})
+	if err != nil {
+		t.Fatalf("Emit error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[suppression-ignored] target: untrusted target") {
+		t.Errorf("expected '[suppression-ignored] target: untrusted target', got: %s", out)
+	}
+}
