@@ -2,7 +2,6 @@ package attestation
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -213,20 +212,16 @@ jobs:
 }
 
 func TestRunAttestationWithMockAPI(t *testing.T) {
-	// Test with mock HTTP server for GitHub attestation API
-	t.Run("API returns attestation", func(t *testing.T) {
+	// The GitHub attestation check is skipped whenever only a commit SHA is
+	// available (no sha256: artifact digest), so no attestation API call is made.
+	t.Run("commit SHA never used as sha256 subject digest; API skipped", func(t *testing.T) {
+		// The mock fails the test if the attestation API is ever called: repo.SHA
+		// is a commit SHA, not a sha256: artifact digest, so the check must skip.
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			resp := map[string]interface{}{
-				"attestations": []map[string]interface{}{
-					{"bundle": "test"},
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			t.Errorf("attestation API must not be called with a commit SHA; got %s", r.URL.String())
 		}))
 		defer server.Close()
 
-		// Override the API base for this test
 		origBase := AttestationAPIBase
 		AttestationAPIBase = server.URL
 		defer func() { AttestationAPIBase = origBase }()
@@ -252,65 +247,21 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}()
 		findings := collectFindings(ch)
 
-		// Should have INFO finding with the reworded presence-only message
-		foundMetadataPresent := false
+		foundSkip := false
 		for _, f := range findings {
-			if f.RuleID == "att-gh-attestation-present" && contains(f.Message, "GitHub attestation metadata present") {
-				foundMetadataPresent = true
+			if f.RuleID == "att-gh-attestation-skipped" &&
+				contains(f.Message, "attestation digest unavailable, skipping cryptographic check") &&
+				f.Severity == scan.SevInfo {
+				foundSkip = true
 			}
 		}
-		if !foundMetadataPresent {
-			t.Errorf("expected 'GitHub attestation metadata present' finding with RuleID att-gh-attestation-present, got: %+v", findings)
+		if !foundSkip {
+			t.Errorf("expected INFO 'attestation digest unavailable, skipping cryptographic check' (att-gh-attestation-skipped), got: %+v", findings)
 		}
-	})
-
-	t.Run("API returns zero attestations", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			resp := map[string]interface{}{
-				"attestations": []interface{}{},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
-		}))
-		defer server.Close()
-
-		origBase := AttestationAPIBase
-		AttestationAPIBase = server.URL
-		defer func() { AttestationAPIBase = origBase }()
-
-		repo := &fetch.Repo{
-			Platform: "github",
-			Owner:    "test",
-			Name:     "repo",
-			SHA:      "abc123",
-			Files:    map[string][]byte{},
-		}
-		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
-		ch := make(chan scan.Finding, 100)
-		errs := make(chan scan.RuntimeError, 4)
-		go func() {
-			Run(context.Background(), repo, opts, ch, errs)
-			close(ch)
-			close(errs)
-		}()
-		findings := collectFindings(ch)
-
-		// No attestation metadata → should get "No GitHub attestation found"
-		foundNoAttestation := false
-		foundMetadataPresent := false
 		for _, f := range findings {
-			if contains(f.Message, "No GitHub attestation found") && f.Severity == scan.SevMedium {
-				foundNoAttestation = true
-			}
 			if f.RuleID == "att-gh-attestation-present" {
-				foundMetadataPresent = true
+				t.Errorf("did not expect att-gh-attestation-present when the digest is unavailable: %+v", f)
 			}
-		}
-		if !foundNoAttestation {
-			t.Errorf("expected MEDIUM 'No GitHub attestation found' finding, got: %+v", findings)
-		}
-		if foundMetadataPresent {
-			t.Errorf("did not expect att-gh-attestation-present finding when zero attestations returned, got: %+v", findings)
 		}
 	})
 
@@ -349,44 +300,6 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}
 		if !foundEmptySHA {
 			t.Errorf("expected INFO 'No SHA available for attestation verification' finding, got: %+v", findings)
-		}
-	})
-
-	t.Run("API returns no attestation", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
-
-		origBase := AttestationAPIBase
-		AttestationAPIBase = server.URL
-		defer func() { AttestationAPIBase = origBase }()
-
-		repo := &fetch.Repo{
-			Platform: "github",
-			Owner:    "test",
-			Name:     "repo",
-			SHA:      "abc123",
-			Files:    map[string][]byte{},
-		}
-		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
-		ch := make(chan scan.Finding, 100)
-		errs := make(chan scan.RuntimeError, 4)
-		go func() {
-			Run(context.Background(), repo, opts, ch, errs)
-			close(ch)
-			close(errs)
-		}()
-		findings := collectFindings(ch)
-
-		foundNoAttestation := false
-		for _, f := range findings {
-			if contains(f.Message, "No GitHub attestation found") && f.Severity == scan.SevMedium {
-				foundNoAttestation = true
-			}
-		}
-		if !foundNoAttestation {
-			t.Errorf("expected MEDIUM finding for no attestation, got: %+v", findings)
 		}
 	})
 }
