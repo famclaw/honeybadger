@@ -2,7 +2,6 @@ package attestation
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -212,21 +211,48 @@ jobs:
 	}
 }
 
+func TestRunAttestationWorkflowRuleID(t *testing.T) {
+	repo := &fetch.Repo{
+		Platform: "github",
+		Owner:    "test",
+		Name:     "repo",
+		SHA:      "abc123",
+		Files: map[string][]byte{
+			".github/workflows/release.yml": []byte("uses: actions/attest-build-provenance@v1"),
+		},
+	}
+	opts := scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true}
+	ch := make(chan scan.Finding, 100)
+	errs := make(chan scan.RuntimeError, 4)
+	go func() {
+		Run(context.Background(), repo, opts, ch, errs)
+		close(ch)
+		close(errs)
+	}()
+	findings := collectFindings(ch)
+
+	foundWorkflow := false
+	for _, f := range findings {
+		if f.RuleID == "att-gh-workflow-configured" && f.Severity == scan.SevInfo {
+			foundWorkflow = true
+		}
+	}
+	if !foundWorkflow {
+		t.Errorf("expected finding with RuleID att-gh-workflow-configured, got: %+v", findings)
+	}
+}
+
 func TestRunAttestationWithMockAPI(t *testing.T) {
-	// Test with mock HTTP server for GitHub attestation API
-	t.Run("API returns attestation", func(t *testing.T) {
+	// The GitHub attestation check is skipped whenever only a commit SHA is
+	// available (no sha256: artifact digest), so no attestation API call is made.
+	t.Run("commit SHA never used as sha256 subject digest; API skipped", func(t *testing.T) {
+		// The mock fails the test if the attestation API is ever called: repo.SHA
+		// is a commit SHA, not a sha256: artifact digest, so the check must skip.
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			resp := map[string]interface{}{
-				"attestations": []map[string]interface{}{
-					{"bundle": "test"},
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			t.Errorf("attestation API must not be called with a commit SHA; got %s", r.URL.String())
 		}))
 		defer server.Close()
 
-		// Override the API base for this test
 		origBase := AttestationAPIBase
 		AttestationAPIBase = server.URL
 		defer func() { AttestationAPIBase = origBase }()
@@ -252,21 +278,38 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}()
 		findings := collectFindings(ch)
 
-		// Should have INFO findings: API verified, workflow found, SHA256SUMS, cosign
-		foundAPIVerified := false
+		foundSkip := false
 		for _, f := range findings {
-			if contains(f.Message, "attestation verified") {
-				foundAPIVerified = true
+			if f.RuleID == "att-gh-attestation-skipped" &&
+				contains(f.Message, "attestation digest unavailable, skipping cryptographic check") &&
+				f.Severity == scan.SevInfo {
+				foundSkip = true
 			}
 		}
-		if !foundAPIVerified {
-			t.Errorf("expected API verification INFO finding, got: %+v", findings)
+		if !foundSkip {
+			t.Errorf("expected INFO 'attestation digest unavailable, skipping cryptographic check' (att-gh-attestation-skipped), got: %+v", findings)
+		}
+		for _, f := range findings {
+			if f.RuleID == "att-gh-attestation-present" {
+				t.Errorf("did not expect att-gh-attestation-present when the digest is unavailable: %+v", f)
+			}
+		}
+		// Even though the cryptographic check is skipped, the configured
+		// build-attestation workflow is still emitted and drives Attested=true.
+		foundWorkflow := false
+		for _, f := range findings {
+			if f.RuleID == "att-gh-workflow-configured" && f.Severity == scan.SevInfo {
+				foundWorkflow = true
+			}
+		}
+		if !foundWorkflow {
+			t.Errorf("expected INFO att-gh-workflow-configured finding (fixture configures the attestation workflow), got: %+v", findings)
 		}
 	})
 
-	t.Run("API returns no attestation", func(t *testing.T) {
+	t.Run("empty SHA short-circuits without API call", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
+			t.Error("unexpected API call when SHA is empty")
 		}))
 		defer server.Close()
 
@@ -278,7 +321,7 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 			Platform: "github",
 			Owner:    "test",
 			Name:     "repo",
-			SHA:      "abc123",
+			SHA:      "",
 			Files:    map[string][]byte{},
 		}
 		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
@@ -291,14 +334,14 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}()
 		findings := collectFindings(ch)
 
-		foundNoAttestation := false
+		foundEmptySHA := false
 		for _, f := range findings {
-			if contains(f.Message, "No GitHub attestation found") && f.Severity == scan.SevMedium {
-				foundNoAttestation = true
+			if contains(f.Message, "No SHA available for attestation verification") && f.Severity == scan.SevInfo {
+				foundEmptySHA = true
 			}
 		}
-		if !foundNoAttestation {
-			t.Errorf("expected MEDIUM finding for no attestation, got: %+v", findings)
+		if !foundEmptySHA {
+			t.Errorf("expected INFO 'No SHA available for attestation verification' finding, got: %+v", findings)
 		}
 	})
 }

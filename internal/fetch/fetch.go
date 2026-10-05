@@ -3,6 +3,8 @@ package fetch
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -83,6 +85,22 @@ func Route(url string) (Fetcher, error) {
 		return nil, fmt.Errorf("routing: unsupported URL: %s", url)
 	}
 	return nil, fmt.Errorf("routing: unsupported URL: %s", url)
+}
+
+// defaultMaxFileCount caps how many individual files a remote fetcher will
+// download and scan. Trees above this are truncated with a HIGH
+// coverage-incomplete finding rather than fetched file-by-file unboundedly.
+const defaultMaxFileCount = 500
+
+// maxFileCount returns the configured maximum number of files to fetch.
+// Read from HONEYBADGER_MAX_FILES env var; falls back to defaultMaxFileCount.
+func maxFileCount() int {
+	if s := os.Getenv("HONEYBADGER_MAX_FILES"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultMaxFileCount
 }
 
 // RequiresNetwork reports whether the fetcher retrieves data from a remote

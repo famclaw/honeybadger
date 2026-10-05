@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,6 +267,325 @@ func TestGitHubFetcherWithMock(t *testing.T) {
 	}
 	if len(repo.Health.IssuesMentioningRisk) != 1 {
 		t.Errorf("IssuesMentioningRisk count = %d, want 1", len(repo.Health.IssuesMentioningRisk))
+	}
+}
+
+func TestGitHubFetcherFileCountCap(t *testing.T) {
+	t.Setenv("HONEYBADGER_MAX_FILES", "1")
+
+	b64Content := base64.StdEncoding.EncodeToString([]byte("package main\n"))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-owner/test-repo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"default_branch": "main",
+			"created_at":     time.Now().AddDate(0, -1, 0).Format(time.RFC3339),
+			"pushed_at":      time.Now().AddDate(0, 0, -1).Format(time.RFC3339),
+		})
+	})
+	// No /commits/ handler: SHA resolution 404s and the fetcher falls back to the branch ref.
+	mux.HandleFunc("/repos/test-owner/test-repo/git/trees/main", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"tree": []map[string]string{
+				{"path": "a.go", "type": "blob"},
+				{"path": "b.go", "type": "blob"},
+				{"path": "c.go", "type": "blob"},
+			},
+		})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/contents/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"content": b64Content, "encoding": "base64"})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/contributors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+	})
+	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	fetcher := &GitHubFetcher{BaseURL: server.URL}
+	repo, err := fetcher.Fetch(context.Background(), "https://github.com/test-owner/test-repo", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+
+	if len(repo.Files) != 1 {
+		t.Errorf("len(Files) = %d, want 1 (cap), got keys: %v", len(repo.Files), fileKeys(repo.Files))
+	}
+	truncated := false
+	for _, cw := range repo.CoverageWarnings {
+		if cw.Type == "coverage-incomplete" && cw.Severity == "HIGH" && strings.Contains(cw.Message, "1-file cap") {
+			truncated = true
+		}
+	}
+	if !truncated {
+		t.Errorf("expected HIGH file-count-cap coverage warning, got: %+v", repo.CoverageWarnings)
+	}
+}
+
+func TestGitHubFetcherCommitSHAUsedAsContentRef(t *testing.T) {
+	commitSHA := "deadbeefcafe1234567890abcdef1234567890"
+	b64Content := base64.StdEncoding.EncodeToString([]byte("package main\n"))
+
+	var contentRef string
+	mux := http.NewServeMux()
+	// No top-level sha in repo metadata; SHA is resolved via the commits endpoint.
+	mux.HandleFunc("/repos/test-owner/test-repo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"default_branch": "main",
+			"created_at":     time.Now().AddDate(0, -1, 0).Format(time.RFC3339),
+			"pushed_at":      time.Now().AddDate(0, 0, -1).Format(time.RFC3339),
+		})
+	})
+	// Commit SHA resolution pins subsequent fetches to the immutable commit.
+	mux.HandleFunc("/repos/test-owner/test-repo/commits/main", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"sha": commitSHA})
+	})
+	// Tree fetch must target the commit SHA, not the branch.
+	mux.HandleFunc("/repos/test-owner/test-repo/git/trees/"+commitSHA, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"tree": []map[string]string{{"path": "main.go", "type": "blob"}},
+		})
+	})
+	// File content: capture the ?ref= query parameter.
+	mux.HandleFunc("/repos/test-owner/test-repo/contents/", func(w http.ResponseWriter, r *http.Request) {
+		contentRef = r.URL.Query().Get("ref")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"content": b64Content, "encoding": "base64"})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/contributors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+	})
+	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	fetcher := &GitHubFetcher{BaseURL: server.URL}
+	repo, err := fetcher.Fetch(context.Background(), "https://github.com/test-owner/test-repo", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if repo.SHA != commitSHA {
+		t.Errorf("repo.SHA = %q, want %q", repo.SHA, commitSHA)
+	}
+	if contentRef != commitSHA {
+		t.Errorf("content request ?ref= = %q, want commit SHA %q", contentRef, commitSHA)
+	}
+	if _, ok := repo.Files["main.go"]; !ok {
+		t.Errorf("Files missing main.go: %v", fileKeys(repo.Files))
+	}
+}
+
+func TestGitHubFetcherNonOversizedFetchErrorYieldsCoverageWarning(t *testing.T) {
+	commitSHA := "cafefeed0123456789abcdef0123456789"
+	b64Content := base64.StdEncoding.EncodeToString([]byte("package main\n"))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-owner/test-repo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"sha":            commitSHA,
+			"default_branch": "main",
+			"created_at":     time.Now().AddDate(0, -1, 0).Format(time.RFC3339),
+			"pushed_at":      time.Now().AddDate(0, 0, -1).Format(time.RFC3339),
+		})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/git/trees/"+commitSHA, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"tree": []map[string]string{
+				{"path": "ok.go", "type": "blob"},
+				{"path": "missing.go", "type": "blob"},
+			},
+		})
+	})
+	// ok.go succeeds; missing.go 404s (a non-oversized fetch error).
+	mux.HandleFunc("/repos/test-owner/test-repo/contents/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "missing.go") {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"message":"Not Found"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"content": b64Content, "encoding": "base64"})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/contributors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+	})
+	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	fetcher := &GitHubFetcher{BaseURL: server.URL}
+	repo, err := fetcher.Fetch(context.Background(), "https://github.com/test-owner/test-repo", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if _, ok := repo.Files["ok.go"]; !ok {
+		t.Errorf("Files missing ok.go: %v", fileKeys(repo.Files))
+	}
+	if _, ok := repo.Files["missing.go"]; ok {
+		t.Errorf("Files should not contain the unfetchable missing.go: %v", fileKeys(repo.Files))
+	}
+	found := false
+	for _, cw := range repo.CoverageWarnings {
+		if cw.Type == "coverage-incomplete" && cw.Check == "github-file" && cw.File == "missing.go" &&
+			strings.Contains(cw.Message, "could not be fetched and was not scanned") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a github-file coverage warning for missing.go, got: %+v", repo.CoverageWarnings)
+	}
+}
+
+func TestGitLabFetcherCommitSHAUsedAsContentRef(t *testing.T) {
+	commitSHA := "abcdef0123456789abcdef0123456789abcdef01"
+	fileContent := "package main\n"
+	encodedPath := url.PathEscape("test-owner/test-repo")
+
+	var contentRef string
+	mux := http.NewServeMux()
+	// Project metadata.
+	mux.HandleFunc("/projects/"+encodedPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":               42,
+			"default_branch":   "main",
+			"star_count":       3,
+			"created_at":       time.Now().AddDate(0, -1, 0).Format(time.RFC3339),
+			"last_activity_at": time.Now().AddDate(0, 0, -1).Format(time.RFC3339),
+			"license":          map[string]interface{}{"key": "mit"},
+		})
+	})
+	// Commit SHA resolution.
+	mux.HandleFunc("/projects/42/repository/commits", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("ref_name"); got != "main" {
+			t.Errorf("commits ref_name = %q, want main", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{{"id": commitSHA}})
+	})
+	// Tree fetch must target the commit SHA, not the branch.
+	mux.HandleFunc("/projects/42/repository/tree", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("ref"); got != commitSHA {
+			t.Errorf("tree ?ref= = %q, want commit SHA %q", got, commitSHA)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]string{{"path": "main.go", "type": "blob"}})
+	})
+	// File raw content: capture the ?ref= query parameter.
+	mux.HandleFunc("/projects/42/repository/files/", func(w http.ResponseWriter, r *http.Request) {
+		contentRef = r.URL.Query().Get("ref")
+		w.Write([]byte(fileContent))
+	})
+	mux.HandleFunc("/projects/42/repository/contributors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	fetcher := &GitLabFetcher{BaseURL: server.URL}
+	repo, err := fetcher.Fetch(context.Background(), "https://gitlab.com/test-owner/test-repo", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if repo.SHA != commitSHA {
+		t.Errorf("repo.SHA = %q, want %q", repo.SHA, commitSHA)
+	}
+	if contentRef != commitSHA {
+		t.Errorf("content request ?ref= = %q, want commit SHA %q", contentRef, commitSHA)
+	}
+	if got := string(repo.Files["main.go"]); got != fileContent {
+		t.Errorf("main.go = %q, want %q", got, fileContent)
+	}
+}
+
+func TestGitLabFetcherNonOversizedFetchErrorYieldsCoverageWarning(t *testing.T) {
+	commitSHA := "abcdef0123456789abcdef0123456789abcdef01"
+	encodedPath := url.PathEscape("test-owner/test-repo")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/projects/"+encodedPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":               42,
+			"default_branch":   "main",
+			"created_at":       time.Now().AddDate(0, -1, 0).Format(time.RFC3339),
+			"last_activity_at": time.Now().AddDate(0, 0, -1).Format(time.RFC3339),
+		})
+	})
+	mux.HandleFunc("/projects/42/repository/commits", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{{"id": commitSHA}})
+	})
+	mux.HandleFunc("/projects/42/repository/tree", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]string{
+			{"path": "ok.go", "type": "blob"},
+			{"path": "missing.go", "type": "blob"},
+		})
+	})
+	// ok.go succeeds; missing.go 404s (a non-oversized fetch error).
+	mux.HandleFunc("/projects/42/repository/files/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "missing.go/raw") {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"message":"404 Not Found"}`))
+			return
+		}
+		w.Write([]byte("package main\n"))
+	})
+	mux.HandleFunc("/projects/42/repository/contributors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	fetcher := &GitLabFetcher{BaseURL: server.URL}
+	repo, err := fetcher.Fetch(context.Background(), "https://gitlab.com/test-owner/test-repo", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if _, ok := repo.Files["ok.go"]; !ok {
+		t.Errorf("Files missing ok.go: %v", fileKeys(repo.Files))
+	}
+	if _, ok := repo.Files["missing.go"]; ok {
+		t.Errorf("Files should not contain the unfetchable missing.go: %v", fileKeys(repo.Files))
+	}
+	found := false
+	for _, cw := range repo.CoverageWarnings {
+		if cw.Type == "coverage-incomplete" && cw.Check == "gitlab-file" && cw.File == "missing.go" &&
+			strings.Contains(cw.Message, "could not be fetched and was not scanned") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a gitlab-file coverage warning for missing.go, got: %+v", repo.CoverageWarnings)
 	}
 }
 

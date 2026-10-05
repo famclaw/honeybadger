@@ -68,15 +68,50 @@ func (g *GitLabFetcher) Fetch(ctx context.Context, rawURL string, opts FetchOpti
 		name = parts[1]
 	}
 
+	// Resolve the default-branch tip commit SHA so every tree/content fetch
+	// pins to an immutable ref instead of a mutable branch.
+	sha, _ := g.resolveCommitSHA(ctx, projectID, defaultBranch, token)
+	// ref is what every tree/content call targets: the commit SHA when it was
+	// resolved, otherwise (as a fallback) the mutable branch ref.
+	ref := defaultBranch
+	if sha != "" {
+		ref = sha
+	}
+
+	// Build the repo early so fetch-time coverage findings attach to it.
+	repo := &Repo{
+		URL:      rawURL,
+		Owner:    owner,
+		Name:     name,
+		Platform: "gitlab",
+		SHA:      sha,
+		Branch:   defaultBranch,
+		Files:    make(map[string][]byte),
+	}
+	if sha == "" {
+		// Fallback means content was fetched against a mutable branch ref, which
+		// can move between the tree listing and the content fetch. Flag it.
+		repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+			Type:     "coverage-incomplete",
+			Severity: "MEDIUM",
+			Check:    "gitlab-tree",
+			Message:  fmt.Sprintf("Could not resolve the commit SHA for %s branch %q; content fetched against the mutable branch ref", name, defaultBranch),
+		})
+	}
+
 	// 2. Recursive file tree (paginated)
-	treePaths, err := g.fetchTree(ctx, projectID, defaultBranch, token)
+	treePaths, err := g.fetchTree(ctx, projectID, ref, token)
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: fetching file tree: %w", err)
 	}
 
 	// 3. File contents
-	files := make(map[string][]byte)
 	hasSecurityMD := false
+	maxBytes := maxFileBytes()
+
+	// Enumerate the scannable candidates first so we can cap the number of
+	// per-file downloads; a huge tree must not trigger unbounded API calls.
+	candidates := make([]string, 0, len(treePaths))
 	for _, path := range treePaths {
 		if isBinaryExtension(path) {
 			continue
@@ -84,14 +119,47 @@ func (g *GitLabFetcher) Fetch(ctx context.Context, rawURL string, opts FetchOpti
 		if opts.SubPath != "" && !strings.HasPrefix(path, opts.SubPath) {
 			continue
 		}
+		candidates = append(candidates, path)
+	}
+	maxFiles := maxFileCount()
+	if len(candidates) > maxFiles {
+		repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+			Type:     "coverage-incomplete",
+			Severity: "HIGH",
+			Check:    "gitlab-tree",
+			Message:  fmt.Sprintf("Repository has %d scannable files, exceeding the %d-file cap; only the first %d were fetched and scanned", len(candidates), maxFiles, maxFiles),
+		})
+		candidates = candidates[:maxFiles]
+	}
+
+	for _, path := range candidates {
 		if strings.ToUpper(filepath.Base(path)) == "SECURITY.MD" {
 			hasSecurityMD = true
 		}
-		content, err := g.fetchFileContent(ctx, projectID, path, defaultBranch, token)
+		content, err := g.fetchFileContent(ctx, projectID, path, ref, token)
 		if err != nil {
+			// A file present in the tree but not fetchable means the scan is
+			// coverage-incomplete. Report it rather than dropping it silently.
+			repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+				Type:     "coverage-incomplete",
+				Severity: "MEDIUM",
+				Check:    "gitlab-file",
+				File:     path,
+				Message:  fmt.Sprintf("File %s is in the tree but could not be fetched and was not scanned: %v", path, err),
+			})
 			continue
 		}
-		files[path] = content
+		if len(content) > maxBytes {
+			repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+				Type:     "coverage-incomplete",
+				Severity: "HIGH",
+				Check:    "gitlab-tree",
+				File:     path,
+				Message:  fmt.Sprintf("File %s exceeds %d-byte size cap (%d bytes) and was not scanned", path, maxBytes, len(content)),
+			})
+			continue
+		}
+		repo.Files[path] = content
 	}
 
 	// 4. Health signals
@@ -101,23 +169,15 @@ func (g *GitLabFetcher) Fetch(ctx context.Context, rawURL string, opts FetchOpti
 	ageDays := int(now.Sub(createdAt).Hours() / 24)
 	lastCommitDays := int(now.Sub(lastActivity).Hours() / 24)
 
-	repo := &Repo{
-		URL:      rawURL,
-		Owner:    owner,
-		Name:     name,
-		Platform: "gitlab",
-		Branch:   defaultBranch,
-		Files:    files,
-		Health: Health{
-			Stars:          stars,
-			Contributors:   contributors,
-			AgeDays:        ageDays,
-			LastCommitDays: lastCommitDays,
-			HasLicense:     hasLicense,
-			HasSecurityMD:  hasSecurityMD,
-		},
-		FetchedAt: now,
+	repo.Health = Health{
+		Stars:          stars,
+		Contributors:   contributors,
+		AgeDays:        ageDays,
+		LastCommitDays: lastCommitDays,
+		HasLicense:     hasLicense,
+		HasSecurityMD:  hasSecurityMD,
 	}
+	repo.FetchedAt = now
 
 	return repo, nil
 }
@@ -136,13 +196,33 @@ func (g *GitLabFetcher) fetchProjectMetadata(ctx context.Context, encodedPath, t
 	return data, nil
 }
 
-// fetchTree retrieves the recursive file tree with pagination.
-func (g *GitLabFetcher) fetchTree(ctx context.Context, projectID int, branch, token string) ([]string, error) {
+// resolveCommitSHA resolves the default-branch tip commit SHA via the
+// /projects/{id}/repository/commits?ref_name={branch} endpoint.
+func (g *GitLabFetcher) resolveCommitSHA(ctx context.Context, projectID int, branch, token string) (string, error) {
+	apiPath := fmt.Sprintf("/projects/%d/repository/commits?ref_name=%s&per_page=1", projectID, url.QueryEscape(branch))
+	body, _, err := g.gitlabAPI(ctx, apiPath, token)
+	if err != nil {
+		return "", fmt.Errorf("resolving commit SHA for project %d branch %s: %w", projectID, branch, err)
+	}
+	var data []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return "", fmt.Errorf("decoding commit list for project %d branch %s: %w", projectID, branch, err)
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("resolving commit SHA for project %d branch %s: no commits returned", projectID, branch)
+	}
+	return data[0].ID, nil
+}
+
+// fetchTree retrieves the recursive file tree for a ref (commit SHA or branch) with pagination.
+func (g *GitLabFetcher) fetchTree(ctx context.Context, projectID int, ref, token string) ([]string, error) {
 	var allPaths []string
 	page := 1
 
 	for {
-		apiPath := fmt.Sprintf("/projects/%d/repository/tree?recursive=true&per_page=100&page=%d&ref=%s", projectID, page, branch)
+		apiPath := fmt.Sprintf("/projects/%d/repository/tree?recursive=true&per_page=100&page=%d&ref=%s", projectID, page, url.QueryEscape(ref))
 		body, headers, err := g.gitlabAPI(ctx, apiPath, token)
 		if err != nil {
 			return nil, err
@@ -177,10 +257,11 @@ func (g *GitLabFetcher) fetchTree(ctx context.Context, projectID int, branch, to
 	return allPaths, nil
 }
 
-// fetchFileContent retrieves a single file's raw content.
-func (g *GitLabFetcher) fetchFileContent(ctx context.Context, projectID int, filePath, branch, token string) ([]byte, error) {
+// fetchFileContent retrieves a single file's raw content, pinned to the given
+// ref (a commit SHA when resolved, else a branch).
+func (g *GitLabFetcher) fetchFileContent(ctx context.Context, projectID int, filePath, ref, token string) ([]byte, error) {
 	encodedFilePath := url.PathEscape(filePath)
-	apiPath := fmt.Sprintf("/projects/%d/repository/files/%s/raw?ref=%s", projectID, encodedFilePath, branch)
+	apiPath := fmt.Sprintf("/projects/%d/repository/files/%s/raw?ref=%s", projectID, encodedFilePath, url.QueryEscape(ref))
 	body, _, err := g.gitlabAPI(ctx, apiPath, token)
 	if err != nil {
 		return nil, err
