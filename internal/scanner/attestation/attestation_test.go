@@ -252,15 +252,103 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 		}()
 		findings := collectFindings(ch)
 
-		// Should have INFO findings: API verified, workflow found, SHA256SUMS, cosign
-		foundAPIVerified := false
+		// Should have INFO finding with the reworded presence-only message
+		foundMetadataPresent := false
 		for _, f := range findings {
-			if contains(f.Message, "attestation verified") {
-				foundAPIVerified = true
+			if f.RuleID == "att-gh-attestation-present" && contains(f.Message, "GitHub attestation metadata present") {
+				foundMetadataPresent = true
 			}
 		}
-		if !foundAPIVerified {
-			t.Errorf("expected API verification INFO finding, got: %+v", findings)
+		if !foundMetadataPresent {
+			t.Errorf("expected 'GitHub attestation metadata present' finding with RuleID att-gh-attestation-present, got: %+v", findings)
+		}
+	})
+
+	t.Run("API returns zero attestations", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resp := map[string]interface{}{
+				"attestations": []interface{}{},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+		}))
+		defer server.Close()
+
+		origBase := AttestationAPIBase
+		AttestationAPIBase = server.URL
+		defer func() { AttestationAPIBase = origBase }()
+
+		repo := &fetch.Repo{
+			Platform: "github",
+			Owner:    "test",
+			Name:     "repo",
+			SHA:      "abc123",
+			Files:    map[string][]byte{},
+		}
+		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
+		ch := make(chan scan.Finding, 100)
+		errs := make(chan scan.RuntimeError, 4)
+		go func() {
+			Run(context.Background(), repo, opts, ch, errs)
+			close(ch)
+			close(errs)
+		}()
+		findings := collectFindings(ch)
+
+		// No attestation metadata → should get "No GitHub attestation found"
+		foundNoAttestation := false
+		foundMetadataPresent := false
+		for _, f := range findings {
+			if contains(f.Message, "No GitHub attestation found") && f.Severity == scan.SevMedium {
+				foundNoAttestation = true
+			}
+			if f.RuleID == "att-gh-attestation-present" {
+				foundMetadataPresent = true
+			}
+		}
+		if !foundNoAttestation {
+			t.Errorf("expected MEDIUM 'No GitHub attestation found' finding, got: %+v", findings)
+		}
+		if foundMetadataPresent {
+			t.Errorf("did not expect att-gh-attestation-present finding when zero attestations returned, got: %+v", findings)
+		}
+	})
+
+	t.Run("empty SHA short-circuits without API call", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("unexpected API call when SHA is empty")
+		}))
+		defer server.Close()
+
+		origBase := AttestationAPIBase
+		AttestationAPIBase = server.URL
+		defer func() { AttestationAPIBase = origBase }()
+
+		repo := &fetch.Repo{
+			Platform: "github",
+			Owner:    "test",
+			Name:     "repo",
+			SHA:      "",
+			Files:    map[string][]byte{},
+		}
+		opts := scan.Options{Paranoia: scan.ParanoiaStrict}
+		ch := make(chan scan.Finding, 100)
+		errs := make(chan scan.RuntimeError, 4)
+		go func() {
+			Run(context.Background(), repo, opts, ch, errs)
+			close(ch)
+			close(errs)
+		}()
+		findings := collectFindings(ch)
+
+		foundEmptySHA := false
+		for _, f := range findings {
+			if contains(f.Message, "No SHA available for attestation verification") && f.Severity == scan.SevInfo {
+				foundEmptySHA = true
+			}
+		}
+		if !foundEmptySHA {
+			t.Errorf("expected INFO 'No SHA available for attestation verification' finding, got: %+v", findings)
 		}
 	})
 

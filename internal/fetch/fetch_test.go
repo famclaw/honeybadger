@@ -269,6 +269,67 @@ func TestGitHubFetcherWithMock(t *testing.T) {
 	}
 }
 
+func TestGitHubFetcherFileCountCap(t *testing.T) {
+	t.Setenv("HONEYBADGER_MAX_FILES", "1")
+
+	b64Content := base64.StdEncoding.EncodeToString([]byte("package main\n"))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test-owner/test-repo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"default_branch": "main",
+			"created_at":     time.Now().AddDate(0, -1, 0).Format(time.RFC3339),
+			"pushed_at":      time.Now().AddDate(0, 0, -1).Format(time.RFC3339),
+		})
+	})
+	// No /commits/ handler: SHA resolution 404s and the fetcher falls back to the branch ref.
+	mux.HandleFunc("/repos/test-owner/test-repo/git/trees/main", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"tree": []map[string]string{
+				{"path": "a.go", "type": "blob"},
+				{"path": "b.go", "type": "blob"},
+				{"path": "c.go", "type": "blob"},
+			},
+		})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/contents/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"content": b64Content, "encoding": "base64"})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/contributors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+	})
+	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	fetcher := &GitHubFetcher{BaseURL: server.URL}
+	repo, err := fetcher.Fetch(context.Background(), "https://github.com/test-owner/test-repo", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+
+	if len(repo.Files) != 1 {
+		t.Errorf("len(Files) = %d, want 1 (cap), got keys: %v", len(repo.Files), fileKeys(repo.Files))
+	}
+	truncated := false
+	for _, cw := range repo.CoverageWarnings {
+		if cw.Type == "coverage-incomplete" && cw.Severity == "HIGH" && strings.Contains(cw.Message, "1-file cap") {
+			truncated = true
+		}
+	}
+	if !truncated {
+		t.Errorf("expected HIGH file-count-cap coverage warning, got: %+v", repo.CoverageWarnings)
+	}
+}
+
 func TestGitHubFetcherAuth(t *testing.T) {
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

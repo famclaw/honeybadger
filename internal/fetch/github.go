@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -61,7 +62,20 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 	hasLicense := repoData["license"] != nil && repoData["license"] != false
 	createdAt, _ := time.Parse(time.RFC3339, jsonString(repoData, "created_at"))
 	pushedAt, _ := time.Parse(time.RFC3339, jsonString(repoData, "pushed_at"))
-	sha, _ := repoData["sha"].(string) // may not be in repo endpoint
+
+	// Resolve the default-branch tip commit SHA so every tree/content fetch
+	// pins to an immutable ref instead of a mutable branch. The /repos endpoint
+	// does not expose a top-level sha, so resolve it from the branch tip.
+	sha, _ := repoData["sha"].(string)
+	if sha == "" {
+		sha, _ = g.resolveCommitSHA(ctx, owner, repoName, defaultBranch, token)
+	}
+	// ref is what every tree/contents call targets: the commit SHA when it was
+	// resolved, otherwise (as a fallback) the mutable branch ref.
+	ref := defaultBranch
+	if sha != "" {
+		ref = sha
+	}
 
 	// 2. Recursive file tree
 	repo := &Repo{
@@ -73,7 +87,18 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 		Branch:   defaultBranch,
 		Files:    make(map[string][]byte),
 	}
-	treePaths, err := g.fetchTree(ctx, owner, repoName, defaultBranch, token, repo)
+	if sha == "" {
+		// Fallback means content was fetched against a mutable branch ref, which
+		// can move between the tree listing and the content fetch. Flag it.
+		repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+			Type:     "coverage-incomplete",
+			Severity: "MEDIUM",
+			Check:    "github-tree",
+			Message:  fmt.Sprintf("Could not resolve the commit SHA for %s/%s branch %q; content fetched against the mutable branch ref", owner, repoName, defaultBranch),
+		})
+	}
+
+	treePaths, err := g.fetchTree(ctx, owner, repoName, ref, token, repo)
 	if err != nil {
 		return nil, fmt.Errorf("github: fetching file tree: %w", err)
 	}
@@ -81,6 +106,11 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 	// 3. File contents
 	hasSecurityMD := false
 	maxBytes := maxFileBytes()
+
+	// Enumerate the scannable candidates (non-binary, subpath-filtered) first so
+	// we can cap the number of per-file downloads; a huge tree must not trigger
+	// unbounded content API calls.
+	candidates := make([]string, 0, len(treePaths))
 	for _, path := range treePaths {
 		if isBinaryExtension(path) {
 			continue
@@ -88,13 +118,27 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 		if opts.SubPath != "" && !strings.HasPrefix(path, opts.SubPath) {
 			continue
 		}
+		candidates = append(candidates, path)
+	}
+	maxFiles := maxFileCount()
+	if len(candidates) > maxFiles {
+		repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+			Type:     "coverage-incomplete",
+			Severity: "HIGH",
+			Check:    "github-tree",
+			Message:  fmt.Sprintf("Repository has %d scannable files, exceeding the %d-file cap; only the first %d were fetched and scanned", len(candidates), maxFiles, maxFiles),
+		})
+		candidates = candidates[:maxFiles]
+	}
+
+	for _, path := range candidates {
 		if strings.ToUpper(filepath.Base(path)) == "SECURITY.MD" {
 			hasSecurityMD = true
 		}
-		content, err := g.fetchFileContent(ctx, owner, repoName, path, token)
+		content, err := g.fetchFileContent(ctx, owner, repoName, path, ref, token)
 		if err != nil {
-			// Skip files that fail to fetch (e.g., too large, 403)
-			// Report oversized files as coverage-incomplete
+			// A file present in the tree but not fetchable means the scan is
+			// coverage-incomplete. Report it rather than dropping it silently.
 			if isOversizedErr(err, maxBytes) {
 				repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
 					Type:     "coverage-incomplete",
@@ -102,6 +146,14 @@ func (g *GitHubFetcher) Fetch(ctx context.Context, url string, opts FetchOptions
 					Check:    "github-tree",
 					File:     path,
 					Message:  fmt.Sprintf("File %s exceeds %d-byte size cap and was not fetched", path, maxBytes),
+				})
+			} else {
+				repo.CoverageWarnings = append(repo.CoverageWarnings, CoverageWarning{
+					Type:     "coverage-incomplete",
+					Severity: "MEDIUM",
+					Check:    "github-file",
+					File:     path,
+					Message:  fmt.Sprintf("File %s is in the tree but could not be fetched and was not scanned: %v", path, err),
 				})
 			}
 			continue
@@ -155,10 +207,30 @@ func (g *GitHubFetcher) fetchRepoMetadata(ctx context.Context, owner, repo, toke
 	return data, nil
 }
 
-// fetchTree retrieves the recursive file tree for a branch.
+// resolveCommitSHA resolves the default-branch tip commit SHA via the
+// /repos/{owner}/{repo}/commits/{branch} endpoint.
+func (g *GitHubFetcher) resolveCommitSHA(ctx context.Context, owner, repo, branch, token string) (string, error) {
+	path := fmt.Sprintf("/repos/%s/%s/commits/%s", owner, repo, branch)
+	body, _, err := g.githubAPI(ctx, path, token)
+	if err != nil {
+		return "", fmt.Errorf("resolving commit SHA for %s/%s@%s: %w", owner, repo, branch, err)
+	}
+	var data struct {
+		SHA string `json:"sha"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return "", fmt.Errorf("decoding commit SHA for %s/%s@%s: %w", owner, repo, branch, err)
+	}
+	if data.SHA == "" {
+		return "", fmt.Errorf("resolving commit SHA for %s/%s@%s: empty sha in response", owner, repo, branch)
+	}
+	return data.SHA, nil
+}
+
+// fetchTree retrieves the recursive file tree for a ref (commit SHA or branch).
 // Sets treeTruncated on the repo if the GitHub API truncated the tree response.
-func (g *GitHubFetcher) fetchTree(ctx context.Context, owner, repoName, branch, token string, repo *Repo) ([]string, error) {
-	path := fmt.Sprintf("/repos/%s/%s/git/trees/%s?recursive=1", owner, repoName, branch)
+func (g *GitHubFetcher) fetchTree(ctx context.Context, owner, repoName, ref, token string, repo *Repo) ([]string, error) {
+	path := fmt.Sprintf("/repos/%s/%s/git/trees/%s?recursive=1", owner, repoName, ref)
 	body, _, err := g.githubAPI(ctx, path, token)
 	if err != nil {
 		return nil, err
@@ -190,9 +262,10 @@ func (g *GitHubFetcher) fetchTree(ctx context.Context, owner, repoName, branch, 
 	return paths, nil
 }
 
-// fetchFileContent retrieves a single file's content via the contents API.
-func (g *GitHubFetcher) fetchFileContent(ctx context.Context, owner, repo, filePath, token string) ([]byte, error) {
-	apiPath := fmt.Sprintf("/repos/%s/%s/contents/%s", owner, repo, filePath)
+// fetchFileContent retrieves a single file's content via the contents API,
+// pinned to the given ref (a commit SHA when resolved, else a branch).
+func (g *GitHubFetcher) fetchFileContent(ctx context.Context, owner, repo, filePath, ref, token string) ([]byte, error) {
+	apiPath := fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", owner, repo, filePath, url.QueryEscape(ref))
 	body, _, err := g.githubAPI(ctx, apiPath, token)
 	if err != nil {
 		return nil, err

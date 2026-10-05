@@ -85,11 +85,16 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Opt
 			Attestations []json.RawMessage `json:"attestations"`
 		}
 		if err := json.Unmarshal(body, &result); err == nil && len(result.Attestations) > 0 {
+			// Presence-only: the GitHub attestation API answered with one or more
+			// attestation bundles for this digest. We do not verify the artifact's
+			// signature or identity here — that would require Cosign — so the
+			// finding says "metadata present", not "verified".
 			out <- scan.Finding{
 				Type:     "finding",
 				Severity: scan.SevInfo,
 				Check:    "attestation",
-				Message:  fmt.Sprintf("GitHub attestation verified for SHA %s", repo.SHA),
+				RuleID:   "att-gh-attestation-present",
+				Message:  "GitHub attestation metadata present (presence only — artifact signature/identity not verified)",
 			}
 			return
 		}

@@ -468,6 +468,10 @@ func run(cfg runConfig) (int, error) {
 	}
 
 	// 11. Emit final result
+	// Attested mirrors the attestation scanner's GitHub-metadata finding: true
+	// only when that finding is present in the emitted set, never a hardcoded
+	// value, so CLI and MCP report the same fact.
+	attested := attestationPresent(allFindings)
 	result := engine.ResultEvent{
 		Type:              "result",
 		Verdict:           verdict,
@@ -476,7 +480,7 @@ func run(cfg runConfig) (int, error) {
 		FindingCounts:     findingCounts,
 		CVECount:          cveCount,
 		CVEMaxSeverity:    cveMaxSev,
-		Attested:          false,
+		Attested:          attested,
 		LLMModel:          cfg.LLMModel,
 		LLMUsed:           llmUsed,
 		Paranoia:          string(paranoia),
@@ -514,6 +518,19 @@ func run(cfg runConfig) (int, error) {
 func serveMCP(rulesDir string) error {
 	s := newMCPServer(rulesDir)
 	return server.ServeStdio(s)
+}
+
+// attestationPresent reports whether the attestation scanner emitted the
+// GitHub-attestation-metadata-present finding for this scan. The result
+// event's Attested flag mirrors exactly that finding so CLI and MCP agree on
+// the same fact; it is never a hardcoded value.
+func attestationPresent(findings []scan.Finding) bool {
+	for _, f := range findings {
+		if f.Check == "attestation" && f.RuleID == "att-gh-attestation-present" {
+			return true
+		}
+	}
+	return false
 }
 
 func envOrDefault(key, fallback string) string {

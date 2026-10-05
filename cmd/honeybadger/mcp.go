@@ -188,6 +188,19 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 		}
 	}
 
+	// 5c. Merge coverage-incomplete findings after suppression so they cannot
+	// be suppressed, mirroring the CLI. These are meta-level guarantees about
+	// scan completeness (truncated trees, unfetchable files, oversized files).
+	for _, cw := range repo.CoverageWarnings {
+		allFindings = append(allFindings, scan.Finding{
+			Type:     cw.Type,
+			Severity: cw.Severity,
+			Check:    cw.Check,
+			File:     cw.File,
+			Message:  cw.Message,
+		})
+	}
+
 	// 6. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
@@ -244,6 +257,9 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	}
 
 	// 9. Build result
+	// Attested mirrors the attestation scanner's GitHub-metadata finding: true
+	// only when that finding is present in the emitted set, never hardcoded.
+	attested := attestationPresent(allFindings)
 	result := map[string]any{
 		"type":               "result",
 		"verdict":            verdict,
@@ -252,7 +268,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 		"finding_counts":     findingCounts,
 		"cve_count":          cveCount,
 		"cve_max_severity":   cveMaxSev,
-		"attested":           false,
+		"attested":           attested,
 		"llm_model":          llmModel,
 		"llm_used":           llmUsed,
 		"paranoia":           string(paranoia),
