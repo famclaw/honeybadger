@@ -80,10 +80,17 @@ func checkAttestationWorkflow(repo *fetch.Repo, opts scan.Options, out chan<- sc
 	}
 
 	if found {
+		// RuleID att-gh-workflow-configured is the source-level signal that
+		// build-attestation infrastructure is present; it drives the result
+		// event's Attested flag (see attestationPresent). The cryptographic
+		// attestation API check is unavailable for source scans, so a
+		// configured attestation workflow is the strongest "attested" evidence
+		// we can emit from a source tree.
 		out <- scan.Finding{
 			Type:     "finding",
 			Severity: scan.SevInfo,
 			Check:    "attestation",
+			RuleID:   "att-gh-workflow-configured",
 			Message:  "Build attestation workflow configured (actions/attest-build-provenance)",
 		}
 	} else {

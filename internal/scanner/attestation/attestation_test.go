@@ -211,6 +211,37 @@ jobs:
 	}
 }
 
+func TestRunAttestationWorkflowRuleID(t *testing.T) {
+	repo := &fetch.Repo{
+		Platform: "github",
+		Owner:    "test",
+		Name:     "repo",
+		SHA:      "abc123",
+		Files: map[string][]byte{
+			".github/workflows/release.yml": []byte("uses: actions/attest-build-provenance@v1"),
+		},
+	}
+	opts := scan.Options{Paranoia: scan.ParanoiaStrict, Offline: true}
+	ch := make(chan scan.Finding, 100)
+	errs := make(chan scan.RuntimeError, 4)
+	go func() {
+		Run(context.Background(), repo, opts, ch, errs)
+		close(ch)
+		close(errs)
+	}()
+	findings := collectFindings(ch)
+
+	foundWorkflow := false
+	for _, f := range findings {
+		if f.RuleID == "att-gh-workflow-configured" && f.Severity == scan.SevInfo {
+			foundWorkflow = true
+		}
+	}
+	if !foundWorkflow {
+		t.Errorf("expected finding with RuleID att-gh-workflow-configured, got: %+v", findings)
+	}
+}
+
 func TestRunAttestationWithMockAPI(t *testing.T) {
 	// The GitHub attestation check is skipped whenever only a commit SHA is
 	// available (no sha256: artifact digest), so no attestation API call is made.
@@ -262,6 +293,17 @@ func TestRunAttestationWithMockAPI(t *testing.T) {
 			if f.RuleID == "att-gh-attestation-present" {
 				t.Errorf("did not expect att-gh-attestation-present when the digest is unavailable: %+v", f)
 			}
+		}
+		// Even though the cryptographic check is skipped, the configured
+		// build-attestation workflow is still emitted and drives Attested=true.
+		foundWorkflow := false
+		for _, f := range findings {
+			if f.RuleID == "att-gh-workflow-configured" && f.Severity == scan.SevInfo {
+				foundWorkflow = true
+			}
+		}
+		if !foundWorkflow {
+			t.Errorf("expected INFO att-gh-workflow-configured finding (fixture configures the attestation workflow), got: %+v", findings)
 		}
 	})
 

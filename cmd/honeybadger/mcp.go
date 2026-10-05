@@ -257,8 +257,9 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	}
 
 	// 9. Build result
-	// Attested mirrors the attestation scanner's GitHub-metadata finding: true
-	// only when that finding is present in the emitted set, never hardcoded.
+	// Attested mirrors the attestation scanner's configured-workflow finding
+	// (att-gh-workflow-configured): true only when that finding is present in
+	// the emitted set, never hardcoded.
 	attested := attestationPresent(allFindings)
 	result := map[string]any{
 		"type":               "result",
