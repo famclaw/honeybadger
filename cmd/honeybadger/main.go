@@ -376,6 +376,7 @@ func run(cfg runConfig) (int, error) {
 			Severity: cw.Severity,
 			Check:    cw.Check,
 			File:     cw.File,
+			FileRole: scan.RoleUnknown,
 			Message:  cw.Message,
 		})
 	}

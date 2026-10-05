@@ -172,20 +172,27 @@ func TestCommentEnglishSafeRepo(t *testing.T) {
 		}
 	}
 
-	// Apply file role adjustments to drop matches in test fixtures and rule corpus, etc.
+	// Apply file role adjustments. Findings are no longer dropped; instead the
+	// phrase in a Go comment is retained but downgraded and tagged with its role.
 	findings = scan.ApplyFileRoles(findings, repo.Files)
 
-	// We expect no findings with rule ID "ss-override-english"
+	// We expect the ss-override-english finding to be present, but tagged as a
+	// comment (the phrase lives in a // line) and downgraded to INFO.
 	var found bool
 	for _, f := range findings {
 		if f.RuleID == "ss-override-english" {
 			found = true
-			t.Errorf("Found ss-override-english finding in comment-safe repo: %v", f)
+			if f.FileRole != scan.RoleComment {
+				t.Errorf("ss-override-english FileRole = %q, want %q", f.FileRole, scan.RoleComment)
+			}
+			if f.Severity != scan.SevInfo {
+				t.Errorf("ss-override-english Severity = %q, want %q", f.Severity, scan.SevInfo)
+			}
 			break
 		}
 	}
-	if found {
-		t.Fatal("CommentEnglishSafeRepo should not trigger ss-override-english rule")
+	if !found {
+		t.Fatal("CommentEnglishSafeRepo should produce an ss-override-english finding (comment, INFO)")
 	}
 }
 

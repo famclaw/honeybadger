@@ -1,0 +1,51 @@
+# .honeybadgerignore
+#
+# Narrowly scoped self-scan suppressions for this repository's own intentional
+# examples. HoneyBadger's tests, rule fixtures, rule corpus YAML, and docs
+# deliberately contain attack patterns (reverse shells, curl|bash, crypto
+# mining, data-exfil paths, etc.) so the scanners can be exercised against
+# known-bad input. The self-scan (make self-check) would otherwise flag this
+# repo's own example content.
+#
+# Each entry below suppresses exactly one (rule_id, file) pair observed in the
+# failing self-scan. No wildcards, no global rule suppressions, no sha256
+# blobs. Do not extend this file; if a new intentional example is added, add
+# one exact pair for it.
+mcp-concealment internal/testfixture/fixtures.go
+sc-base64-eval internal/scanner/supplychain/supplychain_test.go
+sc-crypto-mining README.md
+sc-crypto-mining internal/rules/rules_test.go
+sc-crypto-mining internal/scan/markdown_test.go
+sc-crypto-mining internal/scanner/supplychain/supplychain_test.go
+sc-crypto-mining rules/supplychain/patterns/crypto_mining.yaml
+# temp_readme.md is an intentional demo/doc artifact documenting HoneyBadger's
+# detection capabilities; its "What it checks" table intentionally names the
+# attack patterns the scanners detect.
+sc-crypto-mining temp_readme.md
+sc-curl-pipe-bash README.md
+sc-curl-pipe-bash internal/rules/rules_test.go
+sc-curl-pipe-bash internal/scan/fileclass_test.go
+sc-curl-pipe-bash internal/scan/markdown_test.go
+sc-curl-pipe-bash internal/scanner/skillsafety/evaluate_test.go
+sc-curl-pipe-bash internal/scanner/skillsafety/extract_test.go
+sc-curl-pipe-bash internal/scanner/supplychain/supplychain_test.go
+sc-curl-pipe-bash internal/testfixture/fixtures.go
+sc-curl-pipe-bash temp_readme.md
+sc-dynamic-require internal/scanner/supplychain/supplychain_test.go
+sc-etc-access internal/scanner/capability/capability_test.go
+sc-etc-access internal/scanner/supplychain/supplychain_test.go
+sc-eval-remote-fetch internal/scanner/supplychain/supplychain_test.go
+sc-hardcoded-ip internal/scanner/supplychain/supplychain_test.go
+sc-home-dir-glob internal/scanner/supplychain/supplychain_test.go
+sc-path-traversal internal/scanner/supplychain/supplychain_test.go
+sc-postinstall-hook internal/scanner/supplychain/supplychain_test.go
+sc-postinstall-hook internal/testfixture/fixtures.go
+sc-reverse-shell internal/scanner/supplychain/supplychain_test.go
+sc-reverse-shell rules/supplychain/patterns/reverse_shell.yaml
+sc-shell-profile-write internal/scanner/supplychain/supplychain_test.go
+sc-ssh-dir-access internal/scanner/skillsafety/evaluate_test.go
+sc-ssh-dir-access internal/scanner/skillsafety/extract_test.go
+sc-ssh-dir-access internal/scanner/supplychain/supplychain_test.go
+sc-ssh-dir-access rules/skillsafety/exfil_intent/sensitive_paths.yaml
+sc-webhook-exfil internal/scanner/supplychain/supplychain_test.go
+sc-wget-pipe-bash internal/scanner/supplychain/supplychain_test.go

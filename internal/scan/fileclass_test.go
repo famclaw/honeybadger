@@ -20,22 +20,22 @@ func TestClassifyFile(t *testing.T) {
 		want    FileRole
 	}{
 		{"go source", "internal/scanner/supplychain/supplychain.go", nil, RoleCode},
-		{"go test", "internal/scanner/supplychain/supplychain_test.go", nil, RoleTest},
-		{"testfixture dir", "internal/testfixture/fixtures.go", nil, RoleTest},
-		{"testdata dir", "internal/scanner/cve/testdata/deps.json", nil, RoleTest},
-		{"js test", "src/foo.test.ts", nil, RoleTest},
-		{"python test", "pkg/test_helper.py", nil, RoleTest},
-		{"readme", "README.md", nil, RoleDoc},
-		{"changelog", "CHANGELOG.md", nil, RoleDoc},
-		{"docs dir", "docs/INSTALLATION.md", nil, RoleDoc},
-		{"superpowers plan", "docs/superpowers/plans/2026-04-05-x.md", nil, RoleDoc},
-		{"license", "LICENSE", nil, RoleDoc},
+		{"go test", "internal/scanner/supplychain/supplychain_test.go", nil, RoleUnknown},
+		{"testfixture dir", "internal/testfixture/fixtures.go", nil, RoleUnknown},
+		{"testdata dir", "internal/scanner/cve/testdata/deps.json", nil, RoleUnknown},
+		{"js test", "src/foo.test.ts", nil, RoleUnknown},
+		{"python test", "pkg/test_helper.py", nil, RoleUnknown},
+		{"readme", "README.md", nil, RoleProse},
+		{"changelog", "CHANGELOG.md", nil, RoleProse},
+		{"docs dir", "docs/INSTALLATION.md", nil, RoleProse},
+		{"superpowers plan", "docs/superpowers/plans/2026-04-05-x.md", nil, RoleProse},
+		{"license", "LICENSE", nil, RoleProse},
 		{"skill manifest is not doc", "SKILL.md", nil, RoleCode},
-		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleTest},
-		{"ci workflow", ".github/workflows/release.yml", nil, RoleConfig},
-		{"json config", "config.json", nil, RoleConfig},
-		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleRules},
-		{"non-rule yaml is config", "config/app.yaml", []byte("server:\n  port: 8080\n"), RoleConfig},
+		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleUnknown},
+		{"ci workflow", ".github/workflows/release.yml", nil, RoleUnknown},
+		{"json config", "config.json", nil, RoleUnknown},
+		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleUnknown},
+		{"non-rule yaml is config", "config/app.yaml", []byte("server:\n  port: 8080\n"), RoleUnknown},
 		{"plain source", "main.py", nil, RoleCode},
 	}
 	for _, c := range cases {
@@ -49,8 +49,8 @@ func TestClassifyFile(t *testing.T) {
 }
 
 func TestClassifyFileBackslashPaths(t *testing.T) {
-	if got := ClassifyFile(`internal\scanner\foo_test.go`, nil); got != RoleTest {
-		t.Errorf("backslash path: got %v, want RoleTest", got)
+	if got := ClassifyFile(`internal\scanner\foo_test.go`, nil); got != RoleUnknown {
+		t.Errorf("backslash path: got %v, want RoleUnknown", got)
 	}
 }
 
@@ -59,23 +59,21 @@ func TestAdjustSeverity(t *testing.T) {
 		role    FileRole
 		raw     string
 		wantSev string
-		wantOK  bool
 	}{
-		{RoleCode, SevCritical, SevCritical, true},
-		{RoleConfig, SevHigh, SevHigh, true},
-		{RoleTest, SevCritical, "", false},
-		{RoleRules, SevCritical, "", false},
-		{RoleDoc, SevCritical, SevMedium, true},
-		{RoleDoc, SevHigh, SevLow, true},
-		{RoleDoc, SevMedium, SevInfo, true},
-		{RoleDoc, SevLow, "", false},
-		{RoleDoc, SevInfo, "", false},
+		{RoleCode, SevCritical, SevCritical},
+		{RoleUnknown, SevHigh, SevHigh},
+		{RoleProse, SevCritical, SevMedium},
+		{RoleProse, SevHigh, SevLow},
+		{RoleProse, SevMedium, SevInfo},
+		{RoleProse, SevLow, SevInfo},
+		{RoleProse, SevInfo, SevInfo},
+		{RoleComment, SevCritical, SevInfo},
+		{RoleComment, SevMedium, SevInfo},
 	}
 	for _, c := range cases {
-		gotSev, gotOK := AdjustSeverity(c.raw, c.role)
-		if gotSev != c.wantSev || gotOK != c.wantOK {
-			t.Errorf("AdjustSeverity(%s, %v) = (%q, %v), want (%q, %v)",
-				c.raw, c.role, gotSev, gotOK, c.wantSev, c.wantOK)
+		got := AdjustSeverity(c.raw, c.role)
+		if got != c.wantSev {
+			t.Errorf("AdjustSeverity(%q, %q) = %q, want %q", c.raw, c.role, got, c.wantSev)
 		}
 	}
 }
@@ -96,22 +94,28 @@ func TestApplyFileRoles(t *testing.T) {
 	}
 	got := ApplyFileRoles(findings, files)
 
-	// test-file and rule-file findings dropped; doc downgraded; code + no-file kept.
-	if len(got) != 3 {
-		t.Fatalf("got %d findings, want 3: %+v", len(got), got)
+	// No drops: all 5 findings are retained with FileRole and adjusted severity.
+	if len(got) != 5 {
+		t.Fatalf("got %d findings, want 5: %+v", len(got), got)
 	}
-	bySev := map[string]string{}
+	byMsg := map[string]Finding{}
 	for _, f := range got {
-		bySev[f.Message] = f.Severity
+		byMsg[f.Message] = f
 	}
-	if bySev["doc match"] != SevMedium {
-		t.Errorf("doc match severity = %q, want MEDIUM", bySev["doc match"])
+	if f := byMsg["doc match"]; f.FileRole != RoleProse || f.Severity != SevMedium {
+		t.Errorf("doc match: role=%q sev=%q, want prose/MEDIUM", f.FileRole, f.Severity)
 	}
-	if bySev["real code"] != SevHigh {
-		t.Errorf("real code severity = %q, want HIGH", bySev["real code"])
+	if f := byMsg["test fixture"]; f.FileRole != RoleUnknown || f.Severity != SevHigh {
+		t.Errorf("test fixture: role=%q sev=%q, want unknown/HIGH", f.FileRole, f.Severity)
 	}
-	if bySev["no file"] != SevHigh {
-		t.Errorf("no-file finding severity = %q, want HIGH (unchanged)", bySev["no file"])
+	if f := byMsg["own rule"]; f.FileRole != RoleUnknown || f.Severity != SevCritical {
+		t.Errorf("own rule: role=%q sev=%q, want unknown/CRITICAL", f.FileRole, f.Severity)
+	}
+	if f := byMsg["real code"]; f.FileRole != RoleCode || f.Severity != SevHigh {
+		t.Errorf("real code: role=%q sev=%q, want code/HIGH", f.FileRole, f.Severity)
+	}
+	if f := byMsg["no file"]; f.FileRole != RoleUnknown || f.Severity != SevHigh {
+		t.Errorf("no file: role=%q sev=%q, want unknown/HIGH", f.FileRole, f.Severity)
 	}
 }
 
@@ -126,18 +130,49 @@ func TestApplyFileRolesMarkdown(t *testing.T) {
 	}
 	got := ApplyFileRoles(findings, files)
 
-	bySev := map[string]string{}
+	if len(got) != 3 {
+		t.Fatalf("got %d findings, want 3: %+v", len(got), got)
+	}
+	byMsg := map[string]Finding{}
 	for _, f := range got {
-		bySev[f.Message] = f.Severity
+		byMsg[f.Message] = f
 	}
-	if _, present := bySev["prose match"]; present {
-		t.Error("prose match in markdown should be dropped")
+	if f := byMsg["prose match"]; f.FileRole != RoleProse || f.Severity != SevMedium {
+		t.Errorf("prose match: role=%q sev=%q, want prose/MEDIUM", f.FileRole, f.Severity)
 	}
-	if bySev["code-block match"] != SevInfo {
-		t.Errorf("code-block match = %q, want INFO", bySev["code-block match"])
+	if f := byMsg["code-block match"]; f.FileRole != RoleProse || f.Severity != SevInfo {
+		t.Errorf("code-block match: role=%q sev=%q, want prose/INFO", f.FileRole, f.Severity)
 	}
-	if bySev["no line info"] != SevLow {
-		t.Errorf("no-line markdown finding = %q, want LOW (downgraded)", bySev["no line info"])
+	if f := byMsg["no line info"]; f.FileRole != RoleProse || f.Severity != SevLow {
+		t.Errorf("no line info: role=%q sev=%q, want prose/LOW", f.FileRole, f.Severity)
+	}
+}
+
+func TestIsRuleYAMLFile(t *testing.T) {
+	rule := []byte(sampleRuleYAML)
+	plain := []byte("server:\n  port: 8080\n")
+	cases := []struct {
+		name    string
+		path    string
+		content []byte
+		want    bool
+	}{
+		{"lowercase yaml rule", "rules/supplychain/patterns/reverse_shell.yaml", rule, true},
+		{"uppercase YAML rule", "rules/FOO.YAML", rule, true},
+		{"uppercase YML rule", "rules/Bar.YML", rule, true},
+		{"mixed case Yaml rule", "rules/Baz.Yaml", rule, true},
+		{"backslash uppercase rule", `rules\FOO.YAML`, rule, true},
+		{"non-rule yaml", "config/app.yaml", plain, false},
+		{"non-rule uppercase yaml", "config/APP.YAML", plain, false},
+		{"non-yaml extension", "rules/FOO.txt", rule, false},
+		{"empty content", "rules/FOO.YAML", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsRuleYAMLFile(c.path, c.content); got != c.want {
+				t.Errorf("IsRuleYAMLFile(%q) = %v, want %v", c.path, got, c.want)
+			}
+		})
 	}
 }
 
