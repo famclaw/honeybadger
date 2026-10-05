@@ -380,18 +380,6 @@ func run(cfg runConfig) (int, error) {
 	allFindings = outcome.Effective
 	suppressedCount = len(outcome.Suppressed)
 
-	// Report applied and ignored sources
-	if len(outcome.Applied) > 0 || len(outcome.Ignored) > 0 {
-		if err := emitter.Emit(engine.SuppressionEvent{
-			Type:            "suppression_summary",
-			AppliedSources:  outcome.Applied,
-			IgnoredSources:  outcome.Ignored,
-			SuppressedCount: suppressedCount,
-		}); err != nil {
-			return 1, fmt.Errorf("writing suppression summary: %w", err)
-		}
-	}
-
 	// Merge coverage-incomplete findings after ApplyFileRoles and
 	// .honeybadgerignore filtering so they cannot be suppressed. These
 	// are meta-level guarantees about scan completeness, not per-file threats.
@@ -515,6 +503,19 @@ func run(cfg runConfig) (int, error) {
 	}
 	if err := emitter.Emit(result); err != nil {
 		return 1, fmt.Errorf("writing output: %w", err)
+	}
+
+	// Emit suppression summary after the result event to preserve the
+	// established NDJSON stream order for downstream positional consumers.
+	if len(outcome.Applied) > 0 || len(outcome.Ignored) > 0 {
+		if err := emitter.Emit(engine.SuppressionEvent{
+			Type:            "suppression_summary",
+			AppliedSources:  outcome.Applied,
+			IgnoredSources:  outcome.Ignored,
+			SuppressedCount: suppressedCount,
+		}); err != nil {
+			return 1, fmt.Errorf("writing suppression summary: %w", err)
+		}
 	}
 
 	// Write audit if --db provided
