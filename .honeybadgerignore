@@ -18,6 +18,10 @@ sc-crypto-mining internal/rules/rules_test.go
 sc-crypto-mining internal/scan/markdown_test.go
 sc-crypto-mining internal/scanner/supplychain/supplychain_test.go
 sc-crypto-mining rules/supplychain/patterns/crypto_mining.yaml
+# temp_readme.md is an intentional demo/doc artifact documenting HoneyBadger's
+# detection capabilities; its "What it checks" table intentionally names the
+# attack patterns the scanners detect.
+sc-crypto-mining temp_readme.md
 sc-curl-pipe-bash README.md
 sc-curl-pipe-bash internal/rules/rules_test.go
 sc-curl-pipe-bash internal/scan/fileclass_test.go
@@ -26,6 +30,7 @@ sc-curl-pipe-bash internal/scanner/skillsafety/evaluate_test.go
 sc-curl-pipe-bash internal/scanner/skillsafety/extract_test.go
 sc-curl-pipe-bash internal/scanner/supplychain/supplychain_test.go
 sc-curl-pipe-bash internal/testfixture/fixtures.go
+sc-curl-pipe-bash temp_readme.md
 sc-dynamic-require internal/scanner/supplychain/supplychain_test.go
 sc-etc-access internal/scanner/capability/capability_test.go
 sc-etc-access internal/scanner/supplychain/supplychain_test.go
