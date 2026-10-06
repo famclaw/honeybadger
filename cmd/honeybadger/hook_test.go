@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -20,11 +21,13 @@ func TestScanSkillHooks(t *testing.T) {
 		t.Skip("jq required by hook scripts")
 	}
 
-	stub := "#!/bin/bash\necho 1 > \"$HB_MARKER\"\ncat \"$HB_VERDICT_FILE\"\n"
+	stub := "#!/bin/bash\necho 1 > \"$HB_MARKER\"\ncat \"$HB_VERDICT_FILE\"\nexit \"${HB_EXIT_CODE:-0}\"\n"
 	verdicts := map[string]string{
-		"PASS": `{"verdict":"PASS","reasoning":"clean"}`,
-		"WARN": `{"verdict":"WARN","reasoning":"warning"}`,
-		"FAIL": `{"verdict":"FAIL","reasoning":"secret found"}`,
+		"PASS":      `{"verdict":"PASS","reasoning":"clean"}`,
+		"WARN":      `{"verdict":"WARN","reasoning":"warning"}`,
+		"FAIL":      `{"verdict":"FAIL","reasoning":"secret found"}`,
+		"MALFORMED": "this is not json {{{",
+		"EMPTY":     ``,
 	}
 
 	for _, dir := range []string{"examples/claude-code", "examples/codex-cli"} {
@@ -45,22 +48,27 @@ func TestScanSkillHooks(t *testing.T) {
 				name        string
 				filePath    string
 				verdict     string
+				exitCode    int
 				withStub    bool
 				wantCode    int
 				wantBlocked bool
 				wantInvoked bool
 				wantWarn    bool
 			}{
-				{"safe dir passes", "/skills/demo/SKILL.md", "PASS", true, 0, false, true, false},
-				{"fail blocks", "/skills/demo/SKILL.md", "FAIL", true, 2, true, true, false},
-				{"warn passes", "/skills/demo/SKILL.md", "WARN", true, 0, false, true, false},
-				{"non-skill path skips", "/tmp/notes.txt", "", true, 0, false, false, false},
-				{"honeybadger missing", "/skills/demo/SKILL.md", "", false, 0, false, false, true},
+				{"safe dir passes", "/skills/demo/SKILL.md", "PASS", 0, true, 0, false, true, false},
+				{"fail blocks", "/skills/demo/SKILL.md", "FAIL", 2, true, 2, true, true, false},
+				{"warn allowed", "/skills/demo/SKILL.md", "WARN", 1, true, 0, false, true, true},
+				{"malformed blocks", "/skills/demo/SKILL.md", "MALFORMED", 3, true, 2, true, true, false},
+				{"empty blocks", "/skills/demo/SKILL.md", "EMPTY", 3, true, 2, true, true, false},
+				{"verdict status mismatch blocks", "/skills/demo/SKILL.md", "PASS", 2, true, 2, true, true, false},
+				{"non-skill path skips", "/tmp/notes.txt", "", 0, true, 0, false, false, false},
+				{"honeybadger missing", "/skills/demo/SKILL.md", "", 0, false, 0, false, false, true},
 			}
 
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					os.Remove(marker)
+					os.Remove(verdictFile)
 					if tc.verdict != "" {
 						if err := os.WriteFile(verdictFile, []byte(verdicts[tc.verdict]), 0644); err != nil {
 							t.Fatal(err)
@@ -76,6 +84,7 @@ func TestScanSkillHooks(t *testing.T) {
 					cmd.Env = []string{
 						"HB_MARKER=" + marker,
 						"HB_VERDICT_FILE=" + verdictFile,
+						"HB_EXIT_CODE=" + strconv.Itoa(tc.exitCode),
 						"PATH=" + pathVal,
 						"HOME=" + root,
 					}
