@@ -40,7 +40,7 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 |---|---|---|---|
 | engine | Verdict logic, tier/sandbox detection, scanner list builder | `BuildScannerList`, `ComputeVerdict` | scan, report, fetch, scanner |
 | fetch | Repo routing and fetching | `Route`, `Fetcher`, `Repo` | — |
-| ignore | .honeybadgerignore parser and suppression | `Parse`, `Set.Match` | scan |
+| ignore | .honeybadgerignore parser, trust-boundary policy, and suppression | `Parse`, `LoadPolicyFromContent`, `Apply`, `Policy` | scan |
 | report | Output formatting (NDJSON, text, LLM) | `NewNDJSONEmitter`, `NewTextEmitter`, `CallLLM` | scan, fetch |
 | rules | Embedded + user YAML rule loading and compilation | `Load`, `RuleSet`, `Rule` | — |
 | scan | Core types, finding struct, severity constants | `Finding`, `ScanFunc`, `RunAll` | fetch, rules |
@@ -70,7 +70,7 @@ The process starts with `cmd/honeybadger/main.go` parsing flags and routing to e
 
 ### Rules (YAML)
 
-Rules live in `rules/` at repo root (`rules/supplychain/`, `rules/skillsafety/`, `rules/mcptool/`). They load via `internal/rules/` with `Load(dir)` and merge embedded rules with `~/.honeybadger/rules/` (or `HONEYBADGER_RULES_DIR`). `.honeybadgerignore` suppresses findings by rule ID, glob, or SHA256.
+Rules live in `rules/` at repo root (`rules/supplychain/`, `rules/skillsafety/`, `rules/mcptool/`). They load via `internal/rules/` with `Load(dir)` and merge embedded rules with `~/.honeybadger/rules/` (or `HONEYBADGER_RULES_DIR`). `.honeybadgerignore` suppresses findings by rule ID, glob, or SHA256 — but a target's own `.honeybadgerignore` is untrusted by default (trust boundary; see the "Trust Boundary" section in `README.md`). Suppressions are loaded via `ignore.LoadPolicyFromContent` and applied via `ignore.Apply`.
 
 ### Configuration
 

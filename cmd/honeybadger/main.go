@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -46,6 +47,8 @@ func main() {
 	rulesDir := flag.String("rules-dir", "", "custom rules directory")
 	toolManifest := flag.String("tool-manifest", "", "path to MCP tools/list JSON for tool-definition analysis")
 	toolBaseline := flag.String("tool-baseline", "", "path to approved MCP tools/list JSON for rug-pull diffing")
+	ignoreFile := flag.String("ignore-file", "", "path to operator-supplied .honeybadgerignore policy")
+	trustTargetIgnore := flag.Bool("trust-target-ignore", false, "trust target-authored .honeybadgerignore (default: false)")
 	// --mcp-server and --version are handled before flag.Parse (see below)
 
 	// Extract subcommand before parsing flags.
@@ -153,6 +156,8 @@ func main() {
 		RulesDir:          *rulesDir,
 		ToolManifest:      *toolManifest,
 		ToolBaseline:      *toolBaseline,
+		IgnoreFile:        *ignoreFile,
+		TrustTargetIgnore: *trustTargetIgnore,
 	}
 	exitCode, err := run(cfg)
 	if err != nil {
@@ -183,6 +188,8 @@ type runConfig struct {
 	RulesDir          string
 	ToolManifest      string
 	ToolBaseline      string
+	IgnoreFile        string
+	TrustTargetIgnore bool
 }
 
 func run(cfg runConfig) (int, error) {
@@ -356,16 +363,36 @@ func run(cfg runConfig) (int, error) {
 
 	// 7b. Apply .honeybadgerignore suppression before emitting.
 	var suppressedCount int
-	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
-		ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore")
-		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to parse .honeybadgerignore: %v\n", parseErr)
-		} else {
-			var suppressed []ignore.SuppressedFinding
-			allFindings, suppressed = ignoreSet.Filter(allFindings)
-			suppressedCount = len(suppressed)
-		}
+
+	// Load suppression policy.
+	// The target .honeybadgerignore content is resolved from the fetched repo,
+	// with a filesystem fallback for local-path scans so the target policy is
+	// not silently skipped when it was not captured in repo.Files.
+	targetIgnoreContent := resolveTargetIgnoreContent(repo)
+
+	// Determine if we should trust target ignore rules based on either:
+	// 1. Explicit --trust-target-ignore flag
+	// 2. HONEYBADGER_TRUST_TARGET_IGNORE=1 environment variable
+	trustTargetIgnore := cfg.TrustTargetIgnore || os.Getenv("HONEYBADGER_TRUST_TARGET_IGNORE") == "1"
+
+	// Load policy with either content from repo or fall back to filesystem.
+	// Only the operator-supplied --ignore-file can make this fatal; a malformed
+	// target .honeybadgerignore is untrusted by default and degrades to the
+	// warning below instead of aborting.
+	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, trustTargetIgnore)
+	if err != nil {
+		return 1, ignorePolicyLoadError(cfg.IgnoreFile, err)
 	}
+	if len(targetIgnoreContent) > 0 && policy.Target == nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to parse target .honeybadgerignore; continuing without target suppressions\n")
+	}
+
+	// Apply the policy to findings
+	outcome := ignore.Apply(policy, allFindings)
+
+	// Use the effective findings for reporting and verdict calculation
+	allFindings = outcome.Effective
+	suppressedCount = len(outcome.Suppressed)
 
 	// Merge coverage-incomplete findings after ApplyFileRoles and
 	// .honeybadgerignore filtering so they cannot be suppressed. These
@@ -496,13 +523,16 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// Emit suppression summary if any findings were suppressed
-	if suppressedCount > 0 {
+	// Emit suppression summary after the result event to preserve the
+	// established NDJSON stream order for downstream positional consumers.
+	if len(outcome.Applied) > 0 || len(outcome.Ignored) > 0 {
 		if err := emitter.Emit(engine.SuppressionEvent{
 			Type:            "suppression_summary",
+			AppliedSources:  outcome.Applied,
+			IgnoredSources:  outcome.Ignored,
 			SuppressedCount: suppressedCount,
 		}); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
+			return 1, fmt.Errorf("writing suppression summary: %w", err)
 		}
 	}
 
@@ -515,6 +545,45 @@ func run(cfg runConfig) (int, error) {
 
 	// 12. Exit code
 	return engine.ExitCodeForVerdict(verdict), nil
+}
+
+// resolveTargetIgnoreContent returns the target .honeybadgerignore content for
+// a fetched repo. It prefers the content captured in repo.Files during fetch and
+// falls back to reading the file from disk for local-path scans. The fallback
+// guards against a local scan (e.g. with --path) leaving the repo-root
+// .honeybadgerignore out of repo.Files while the file still exists on disk;
+// without it the target policy would be silently dropped even when
+// --trust-target-ignore is set. It returns nil when no content is available.
+func resolveTargetIgnoreContent(repo *fetch.Repo) []byte {
+	if repo == nil {
+		return nil
+	}
+	if repo.Files != nil {
+		if content, exists := repo.Files[".honeybadgerignore"]; exists {
+			return content
+		}
+	}
+	if repo.Platform == "local" && repo.URL != "" {
+		if content, err := os.ReadFile(filepath.Join(repo.URL, ".honeybadgerignore")); err == nil {
+			return content
+		}
+	}
+	return nil
+}
+
+// ignorePolicyLoadError formats the operator-facing error for a failed ignore
+// policy load. LoadPolicyFromContent only returns an error when the
+// operator-supplied --ignore-file is missing or malformed, so this is always
+// about the operator file, never the target's own .honeybadgerignore (which is
+// untrusted by default and degrades to a warning). The message makes that
+// asymmetry explicit and actionable: an operator who accidentally pointed
+// --ignore-file at the target's file (or a malformed file) sees why the scan
+// aborted and how it differs from the target source.
+func ignorePolicyLoadError(operatorFile string, err error) error {
+	return fmt.Errorf(
+		"operator policy file (--ignore-file %q) failed to load; it is trusted operator input and must parse. "+
+			"The target's own .honeybadgerignore is a separate, untrusted-by-default source and only produces a warning, not this error. "+
+			"Underlying error: %w", operatorFile, err)
 }
 
 func serveMCP(rulesDir string) error {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/famclaw/honeybadger/internal/scan"
@@ -99,7 +100,31 @@ func (e *TextEmitter) emitOne(v any) error {
 
 	case "suppression_summary":
 		count, _ := m["suppressed_count"].(float64)
-		return e.writef("[suppressed] %d finding(s) suppressed by .honeybadgerignore\n", int(count))
+		appliedSources, _ := m["applied_sources"].([]any)
+		ignoredSources, _ := m["ignored_sources"].([]any)
+
+		// Display applied sources
+		if len(appliedSources) > 0 {
+			sources := make([]string, len(appliedSources))
+			for i, src := range appliedSources {
+				s, _ := src.(string)
+				sources[i] = s
+			}
+			if int(count) > 0 {
+				fmt.Fprintf(e.w, "[suppressed] %d finding(s) via: %s\n", int(count), strings.Join(sources, ", "))
+			} else {
+				fmt.Fprintf(e.w, "[suppression-applied] no findings matched via: %s\n", strings.Join(sources, ", "))
+			}
+		}
+
+		// Display ignored sources
+		if len(ignoredSources) > 0 {
+			for _, src := range ignoredSources {
+				fmt.Fprintf(e.w, "[suppression-ignored] %s: untrusted target\n", src)
+			}
+		}
+
+		return nil
 
 	case "runtime_error":
 		scanner, _ := m["scanner"].(string)

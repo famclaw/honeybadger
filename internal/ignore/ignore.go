@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -27,6 +28,33 @@ type Set struct {
 type SuppressedFinding struct {
 	Finding   scan.Finding
 	MatchedBy Rule
+}
+
+// Outcome represents the results of applying a policy to findings.
+type Outcome struct {
+	// Effective findings after suppression
+	Effective []scan.Finding
+
+	// Suppressed findings
+	Suppressed []SuppressedFinding
+
+	// Applied suppression sources (e.g., "target", "operator")
+	Applied []string
+
+	// Ignored suppression sources (e.g., "target", "operator")
+	Ignored []string
+}
+
+// Policy represents a combined suppression policy.
+type Policy struct {
+	// Target ignore rules (from .honeybadgerignore in target repo)
+	Target *Set
+
+	// Operator ignore rules (from operator-supplied policy)
+	Operator *Set
+
+	// Whether to trust target ignore rules
+	TrustTarget bool
 }
 
 // Parse reads .honeybadgerignore content.
@@ -110,4 +138,130 @@ func (s *Set) Filter(findings []scan.Finding) ([]scan.Finding, []SuppressedFindi
 		}
 	}
 	return kept, suppressed
+}
+
+// LoadPolicy loads a suppression policy from target directory and operator policy file.
+func LoadPolicy(targetDir, operatorPolicyFile string, trustTarget bool) (*Policy, error) {
+	p := &Policy{
+		TrustTarget: trustTarget,
+	}
+
+	// Load target ignore rules from .honeybadgerignore in target directory
+	targetIgnorePath := filepath.Join(targetDir, ".honeybadgerignore")
+	if _, err := os.Stat(targetIgnorePath); err == nil {
+		content, err := os.ReadFile(targetIgnorePath)
+		if err != nil {
+			return nil, fmt.Errorf("reading target ignore file: %w", err)
+		}
+		// Parse target content directly rather than calling LoadPolicyFromContent
+		// to avoid duplicate parsing of operator policy
+		set, parseErr := Parse(content, ".honeybadgerignore")
+		if parseErr != nil {
+			// A malformed target .honeybadgerignore is untrusted input:
+			// leaving Target nil prevents a DoS via an attacker-controlled
+			// file and means no target suppressions will be applied.
+			p.Target = nil
+		} else {
+			p.Target = set
+		}
+	}
+
+	// Load operator ignore rules from operator policy file if provided
+	if operatorPolicyFile != "" {
+		content, err := os.ReadFile(operatorPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading operator policy file: %w", err)
+		}
+		p.Operator, err = Parse(content, operatorPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("parsing operator policy file: %w", err)
+		}
+	}
+
+	return p, nil
+}
+
+// LoadPolicyFromContent loads a suppression policy using explicit content from repo files.
+// This allows passing the actual content from repo.Files instead of reading from filesystem.
+func LoadPolicyFromContent(targetContent []byte, operatorPolicyFile string, trustTarget bool) (*Policy, error) {
+	p := &Policy{
+		TrustTarget: trustTarget,
+	}
+
+	// Load target ignore rules from provided content
+	if len(targetContent) > 0 {
+		set, parseErr := Parse(targetContent, ".honeybadgerignore")
+		if parseErr != nil {
+			p.Target = nil
+		} else {
+			p.Target = set
+		}
+	}
+
+	// Load operator ignore rules from operator policy file if provided
+	if operatorPolicyFile != "" {
+		content, err := os.ReadFile(operatorPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading operator policy file: %w", err)
+		}
+		p.Operator, err = Parse(content, operatorPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("parsing operator policy file: %w", err)
+		}
+	}
+
+	return p, nil
+}
+
+// Apply applies a suppression policy to findings.
+func Apply(policy *Policy, findings []scan.Finding) *Outcome {
+	outcome := &Outcome{
+		Effective:  make([]scan.Finding, 0),
+		Suppressed: make([]SuppressedFinding, 0),
+		Applied:    make([]string, 0),
+		Ignored:    make([]string, 0),
+	}
+
+	// Track which findings are suppressed
+	var suppressedFindings []SuppressedFinding
+	keptFindings := make([]scan.Finding, 0)
+
+	// Apply target ignore rules only if trust is enabled
+	if policy.TrustTarget && policy.Target != nil {
+		kept, suppressed := policy.Target.Filter(findings)
+		keptFindings = kept
+		suppressedFindings = append(suppressedFindings, suppressed...)
+		// Record "target" in Applied whenever a trusted target policy is in
+		// effect, even if it suppresses zero findings. This keeps an auditor
+		// able to distinguish "no target ignore file" from "target ignore file
+		// present, trusted, but no matches" (which would otherwise appear in
+		// neither Applied nor Ignored and be dropped by the emission guard).
+		outcome.Applied = append(outcome.Applied, "target")
+	} else if policy.Target != nil {
+		// If target is not trusted, we don't apply target rules, so all findings stay
+		keptFindings = findings
+		outcome.Ignored = append(outcome.Ignored, "target")
+	} else {
+		keptFindings = findings
+	}
+
+	// Apply operator rules if present
+	if policy.Operator != nil {
+		kept, suppressed := policy.Operator.Filter(keptFindings)
+		keptFindings = kept
+		suppressedFindings = append(suppressedFindings, suppressed...)
+		// Record "operator" in Applied whenever an operator policy is in
+		// effect, even if it suppresses zero findings. This mirrors the
+		// trusted-target source and keeps an auditor able to distinguish
+		// "no operator policy" from "operator policy present, applied, but no
+		// matches" (which would otherwise appear in neither Applied nor
+		// Ignored and be dropped by the emission guard).
+		outcome.Applied = append(outcome.Applied, "operator")
+	}
+
+	// Set the final results
+	outcome.Effective = keptFindings
+	outcome.Suppressed = suppressedFindings
+
+	return outcome
 }
