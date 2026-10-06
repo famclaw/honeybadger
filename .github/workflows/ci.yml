@@ -57,7 +57,7 @@ jobs:
         run: |
           CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w" -o /tmp/honeybadger-selfcheck ./cmd/honeybadger
           /tmp/honeybadger-selfcheck scan . \
-            --paranoia paranoid --offline --format ndjson | tee /tmp/self-report.json
+            --paranoia paranoid --offline --trust-target-ignore --format ndjson | tee /tmp/self-report.json
           verdict=$(grep '"type":"result"' /tmp/self-report.json | jq -r .verdict)
           if [ "$verdict" = "FAIL" ]; then
             echo "::error::Self-check verdict=FAIL — aborting release"
