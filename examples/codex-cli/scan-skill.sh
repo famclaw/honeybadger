@@ -1,21 +1,3 @@
-# HoneyBadger + OpenAI Codex CLI: Pre-Install Hook
-
-Block unsafe skills before installation in Codex CLI. Skills live in
-`~/.codex/skills/`. The hook scans skill files on change and blocks on FAIL.
-
-## Install HoneyBadger
-
-```bash
-go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
-```
-
-## Set up the hook
-
-### Step 1: Create the hook script
-
-Save as `~/.codex/hooks/scan-skill.sh`:
-
-```bash
 #!/bin/bash
 # HoneyBadger pre-install skill scanner for Codex CLI
 # Blocks skills that fail security scanning.
@@ -57,30 +39,3 @@ case "$verdict" in
         exit 0
         ;;
 esac
-```
-
-```bash
-chmod +x ~/.codex/hooks/scan-skill.sh
-```
-
-### Step 2: Register the hook
-
-Add to `~/.codex/config.json`:
-
-```json
-{
-  "hooks": {
-    "pre_install": {
-      "command": "~/.codex/hooks/scan-skill.sh"
-    }
-  }
-}
-```
-
-## Usage
-
-```bash
-# Codex CLI discovers honeybadger via the hook
-codex skills install github.com/someone/some-skill
-# → HoneyBadger scans automatically before installation
-```
