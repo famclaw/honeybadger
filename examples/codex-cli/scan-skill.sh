@@ -1,5 +1,5 @@
 #!/bin/bash
-# HoneyBadger pre-install skill scanner for Claude Code
+# HoneyBadger pre-install skill scanner for Codex CLI
 # Blocks skills that fail security scanning.
 
 set -eo pipefail
@@ -54,7 +54,7 @@ case "$verdict" in
         fi
         echo "BLOCKED: HoneyBadger scan FAILED for $skill_dir" >&2
         echo "$result" | jq -r '.reasoning // "Security scan failed"' >&2
-        exit 2  # Claude Code hook convention: exit 2 = block
+        exit 2  # Codex CLI hook convention: exit 2 = block
         ;;
     *)
         echo "BLOCKED: HoneyBadger returned a malformed or empty verdict for $skill_dir" >&2

@@ -451,3 +451,54 @@ func TestClaudeCodeMDRuntimeAccuracy(t *testing.T) {
 		})
 	}
 }
+
+// --- Hook script doc drift (docs must mirror the canonical examples) ---
+
+// TestDocs_HookScriptsMatchExamples asserts that the fenced hook script in each
+// integration doc matches the canonical examples/*.sh file exactly.
+func TestDocs_HookScriptsMatchExamples(t *testing.T) {
+	cases := []struct {
+		doc     string
+		example string
+	}{
+		{"CLAUDE_CODE.md", "examples/claude-code/scan-skill.sh"},
+		{"integrations/claude-code.md", "examples/claude-code/scan-skill.sh"},
+		{"integrations/codex-cli.md", "examples/codex-cli/scan-skill.sh"},
+	}
+	for _, c := range cases {
+		t.Run(c.doc, func(t *testing.T) {
+			got := normalizeHook(hookScriptBlock(t, readDoc(t, c.doc)))
+			want := normalizeHook(readSource(t, c.example))
+			if got != want {
+				t.Errorf("hook block in %s drifts from %s", c.doc, c.example)
+			}
+		})
+	}
+}
+
+// hookScriptBlock returns the fenced bash block that is the scan-skill hook.
+func hookScriptBlock(t *testing.T, doc string) string {
+	t.Helper()
+	var block string
+	for _, section := range strings.Split(doc, "```bash") {
+		if i := strings.Index(section, "```"); i > 0 &&
+			strings.Contains(section[:i], "input=$(cat)") &&
+			strings.Contains(section[:i], "honeybadger scan") {
+			block = section[:i]
+		}
+	}
+	if block == "" {
+		t.Fatal("no scan-skill hook bash block found in doc")
+	}
+	return block
+}
+
+// normalizeHook trims CRLF and per-line trailing whitespace for comparison.
+func normalizeHook(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	return strings.Trim(strings.Join(lines, "\n"), "\n")
+}
