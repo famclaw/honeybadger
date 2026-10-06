@@ -364,10 +364,13 @@ func run(cfg runConfig) (int, error) {
 	// 2. HONEYBADGER_TRUST_TARGET_IGNORE=1 environment variable
 	trustTargetIgnore := cfg.TrustTargetIgnore || os.Getenv("HONEYBADGER_TRUST_TARGET_IGNORE") == "1"
 
-	// Load policy with either content from repo or fall back to filesystem
+	// Load policy with either content from repo or fall back to filesystem.
+	// Only the operator-supplied --ignore-file can make this fatal; a malformed
+	// target .honeybadgerignore is untrusted by default and degrades to the
+	// warning below instead of aborting.
 	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, trustTargetIgnore)
 	if err != nil {
-		return 1, fmt.Errorf("loading ignore policy: %w", err)
+		return 1, ignorePolicyLoadError(cfg.IgnoreFile, err)
 	}
 	if len(targetIgnoreContent) > 0 && policy.Target == nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to parse target .honeybadgerignore; continuing without target suppressions\n")
@@ -551,6 +554,21 @@ func resolveTargetIgnoreContent(repo *fetch.Repo) []byte {
 		}
 	}
 	return nil
+}
+
+// ignorePolicyLoadError formats the operator-facing error for a failed ignore
+// policy load. LoadPolicyFromContent only returns an error when the
+// operator-supplied --ignore-file is missing or malformed, so this is always
+// about the operator file, never the target's own .honeybadgerignore (which is
+// untrusted by default and degrades to a warning). The message makes that
+// asymmetry explicit and actionable: an operator who accidentally pointed
+// --ignore-file at the target's file (or a malformed file) sees why the scan
+// aborted and how it differs from the target source.
+func ignorePolicyLoadError(operatorFile string, err error) error {
+	return fmt.Errorf(
+		"operator policy file (--ignore-file %q) failed to load; it is trusted operator input and must parse. "+
+			"The target's own .honeybadgerignore is a separate, untrusted-by-default source and only produces a warning, not this error. "+
+			"Underlying error: %w", operatorFile, err)
 }
 
 func serveMCP(rulesDir string) error {
