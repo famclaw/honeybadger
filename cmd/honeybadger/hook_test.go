@@ -23,11 +23,13 @@ func TestScanSkillHooks(t *testing.T) {
 
 	stub := "#!/bin/bash\necho 1 > \"$HB_MARKER\"\ncat \"$HB_VERDICT_FILE\"\nexit \"${HB_EXIT_CODE:-0}\"\n"
 	verdicts := map[string]string{
-		"PASS":      `{"verdict":"PASS","reasoning":"clean"}`,
-		"WARN":      `{"verdict":"WARN","reasoning":"warning"}`,
-		"FAIL":      `{"verdict":"FAIL","reasoning":"secret found"}`,
+		"PASS":      `{"type":"result","verdict":"PASS","reasoning":"clean"}`,
+		"WARN":      `{"type":"result","verdict":"WARN","reasoning":"warning"}`,
+		"FAIL":      `{"type":"result","verdict":"FAIL","reasoning":"secret found"}`,
 		"MALFORMED": "this is not json {{{",
 		"EMPTY":     ``,
+		"PASS_WITH_SUMMARY": `{"type":"result","verdict":"PASS","reasoning":"clean"}
+{"type":"suppression_summary","count":0}`,
 	}
 
 	for _, dir := range []string{"examples/claude-code", "examples/codex-cli"} {
@@ -63,6 +65,7 @@ func TestScanSkillHooks(t *testing.T) {
 				{"verdict status mismatch blocks", "/skills/demo/SKILL.md", "PASS", 2, true, 2, true, true, false},
 				{"non-skill path skips", "/tmp/notes.txt", "", 0, true, 0, false, false, false},
 				{"honeybadger missing", "/skills/demo/SKILL.md", "", 0, false, 0, false, false, true},
+				{"result then summary passes", "/skills/demo/SKILL.md", "PASS_WITH_SUMMARY", 0, true, 0, false, true, false},
 			}
 
 			for _, tc := range cases {
