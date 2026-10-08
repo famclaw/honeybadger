@@ -291,12 +291,20 @@ honeybadger/
 ├── cmd/honeybadger/
 │   ├── main.go              # CLI entry point — full pipeline wiring
 │   ├── mcp.go               # MCP server mode — JSON-RPC over stdio
+│   ├── main_test.go         # attestation-present unit tests
 │   ├── mcp_test.go          # MCP server tests via in-process client
 │   ├── integration_test.go  # CLI + MCP integration tests (build tag: integration)
-│   └── e2e_test.go          # E2E stdio MCP server subprocess tests
+│   ├── e2e_test.go          # E2E stdio MCP server subprocess tests
+│   ├── hook_test.go         # skill-hook exit-code contract tests (Unix/jq)
+│   ├── resolve_target_ignore_test.go  # target .honeybadgerignore filesystem-fallback tests
+│   ├── scan_fixture_test.go           # suppression-scenario scan fixture tests
+│   ├── suppression_order_test.go      # NDJSON suppression_summary-after-result order (build tag: integration)
+│   ├── ignore_behavior_test.go        # ignore-policy behavior tests
+│   └── ignore_policy_error_test.go    # operator policy load error-message tests
 ├── internal/
 │   ├── engine/
 │   │   ├── engine.go        # Verdict computation, tier/sandbox detection, scanner list builder
+│   │   ├── events.go        # NDJSON event envelopes (progress, sandbox, health, result)
 │   │   └── engine_test.go
 │   ├── fetch/
 │   │   ├── fetch.go         # Repo type, Route(), Fetcher interface
@@ -317,7 +325,15 @@ honeybadger/
 │   │   ├── text.go          # Human-readable text emitter
 │   │   ├── text_test.go
 │   │   ├── llm.go           # LLM prompt assembly + verdict calling
-│   │   └── llm_test.go
+│   │   ├── llm_test.go
+│   │   ├── sarif.go         # SARIF 2.1.0 emitter
+│   │   └── sarif_test.go
+│   ├── rules/
+│   │   ├── rules.go         # RuleSet loading (embedded + user YAML, by-ID merge)
+│   │   ├── types.go         # Rule, PatternDef, CompiledPattern types
+│   │   ├── compile.go       # Rule validation + regex compilation
+│   │   ├── eval.go          # MatchLine / HasPackage rule evaluation
+│   │   └── rules_test.go
 │   ├── scan/
 │   │   ├── finding.go       # Finding struct, severity constants, ParanoiaLevel, Options
 │   │   ├── finding_test.go
@@ -327,8 +343,9 @@ honeybadger/
 │   │   ├── fileclass.go     # File-role classifier (Code/Test/Doc/Config/Rules), finding re-weighting
 │   │   ├── fileclass_test.go
 │   │   ├── markdown.go      # Markdown code-block vs prose discrimination
-│   │   └── markdown_test.go
-│   │   ├── binary.go        # Shared binary detection functions
+│   │   ├── markdown_test.go
+│   │   ├── event.go         # Event interface + RuntimeError (non-verdict scanner failures)
+│   │   └── binary.go        # Shared binary detection functions
 │   ├── scanner/
 │   │   ├── secrets/
 │   │   │   ├── secrets.go       # Secrets scanner (gitleaks-powered)
