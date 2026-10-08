@@ -43,7 +43,7 @@ fi
 # non-zero scan exit reaches the verdict logic instead of aborting the hook
 # under `set -e` before we can classify the result.
 scan_status=0
-result=$(honeybadger scan "$skill_dir" --paranoia family --format ndjson --offline 2>/dev/null | tail -1) || scan_status=$?
+result=$(honeybadger scan "$skill_dir" --paranoia family --format ndjson --offline 2>/dev/null | jq -c 'select(.type=="result")' | tail -1) || scan_status=$?
 
 # Parse the verdict defensively: malformed or empty output yields an empty verdict.
 verdict=$(printf '%s' "$result" | jq -r '.verdict // empty' 2>/dev/null) || true
@@ -104,5 +104,5 @@ Add to `~/.codex/config.json`:
 ```bash
 # Codex CLI discovers honeybadger via the hook
 codex skills install github.com/someone/some-skill
-# → HoneyBadger scans automatically before installation
+# → **UNVERIFIED (real-harness behavior)** HoneyBadger scans automatically before installation (pre_install hook + codex skills install; script-level behavior is test-covered, but the real harness trigger has not been executed)
 ```
