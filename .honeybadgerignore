@@ -23,6 +23,7 @@ sc-crypto-mining rules/supplychain/patterns/crypto_mining.yaml
 # attack patterns the scanners detect.
 sc-crypto-mining temp_readme.md
 sc-curl-pipe-bash README.md
+sc-curl-pipe-bash cmd/honeybadger/mcp_ignore_test.go
 sc-curl-pipe-bash internal/rules/rules_test.go
 sc-curl-pipe-bash internal/scan/fileclass_test.go
 sc-curl-pipe-bash internal/scan/markdown_test.go
