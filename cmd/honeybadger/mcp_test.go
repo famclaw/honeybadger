@@ -251,7 +251,13 @@ func TestMCPScanAppliesFileRolesAndIgnore(t *testing.T) {
 	writeTestFile(t, dirB, ".honeybadgerignore", "cap-no-skill-md\n")
 
 	scanA := callScan(t, c, ctx, dirA, "family")
-	scanB := callScan(t, c, ctx, dirB, "family")
+	// Dir B relies on the target's own .honeybadgerignore, so it must opt in to
+	// trust; the default-off trust gate would otherwise leave findings live.
+	scanB := callScanArgs(t, c, ctx, map[string]any{
+		"repo_url":            dirB,
+		"paranoia":            "family",
+		"trust_target_ignore": true,
+	})
 
 	totalA := sumFindingCounts(scanA.resultMap)
 	totalB := sumFindingCounts(scanB.resultMap)
@@ -287,12 +293,19 @@ type mcpScanResult struct {
 // JSON result, failing the test on a protocol or tool error.
 func callScan(t *testing.T, c *mcpclient.Client, ctx context.Context, dir, paranoia string) mcpScanResult {
 	t.Helper()
-	req := mcp.CallToolRequest{}
-	req.Params.Name = "honeybadger_scan"
-	req.Params.Arguments = map[string]any{
+	return callScanArgs(t, c, ctx, map[string]any{
 		"repo_url": dir,
 		"paranoia": paranoia,
-	}
+	})
+}
+
+// callScanArgs invokes honeybadger_scan with arbitrary arguments and parses the
+// JSON result, failing the test on a protocol or tool error.
+func callScanArgs(t *testing.T, c *mcpclient.Client, ctx context.Context, args map[string]any) mcpScanResult {
+	t.Helper()
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "honeybadger_scan"
+	req.Params.Arguments = args
 	result, err := c.CallTool(ctx, req)
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)

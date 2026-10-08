@@ -44,6 +44,12 @@ func newMCPServer(rulesDir string) *server.MCPServer {
 		mcp.WithString("path",
 			mcp.Description("Subdirectory within repo to scan"),
 		),
+		mcp.WithBoolean("trust_target_ignore",
+			mcp.Description("Trust a target-authored .honeybadgerignore (default false)"),
+		),
+		mcp.WithString("ignore_file",
+			mcp.Description("Operator-supplied .honeybadgerignore policy path"),
+		),
 	)
 
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -64,6 +70,8 @@ func handleScan(ctx context.Context, req mcp.CallToolRequest, rulesDir string) (
 	installedSHA := req.GetString("installed_sha", "")
 	installedToolHash := req.GetString("installed_tool_hash", "")
 	subPath := req.GetString("path", "")
+	ignoreFile := req.GetString("ignore_file", "")
+	trustTargetIgnore := req.GetBool("trust_target_ignore", false)
 
 	githubToken := os.Getenv("GITHUB_TOKEN")
 	gitlabToken := os.Getenv("GITLAB_TOKEN")
@@ -71,7 +79,7 @@ func handleScan(ctx context.Context, req mcp.CallToolRequest, rulesDir string) (
 	llmKey := os.Getenv("HONEYBADGER_LLM_KEY")
 	llmModel := os.Getenv("HONEYBADGER_LLM_MODEL")
 
-	result, err := runScan(ctx, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel, rulesDir)
+	result, err := runScan(ctx, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel, rulesDir, ignoreFile, trustTargetIgnore)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("scan failed: %v", err)), nil
 	}
@@ -85,7 +93,7 @@ func handleScan(ctx context.Context, req mcp.CallToolRequest, rulesDir string) (
 }
 
 // runScan executes the full scan pipeline and returns the result map.
-func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel, rulesDir string) (map[string]any, error) {
+func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedToolHash, subPath, githubToken, gitlabToken, llmEndpoint, llmKey, llmModel, rulesDir string, ignoreFile string, trustTargetIgnore bool) (map[string]any, error) {
 	start := time.Now()
 
 	// Load rules: flag > env var > default
@@ -180,13 +188,18 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	// mirrors the CLI post-scan step so MCP results do not diverge from CLI.
 	allFindings = scan.ApplyFileRoles(allFindings, repo.Files)
 
-	// 5b. Apply .honeybadgerignore suppression, mirroring the CLI.
-	// On parse error, proceed without suppression (the CLI only warns).
-	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
-		if ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore"); parseErr == nil {
-			allFindings, _ = ignoreSet.Filter(allFindings)
-		}
+	// 5b. Apply .honeybadgerignore suppression using the same trust-gated
+	// policy as the CLI. A target-authored .honeybadgerignore is untrusted by
+	// default: it only suppresses findings when trustTargetIgnore is set. Only
+	// the operator-supplied ignoreFile is trusted operator input; a malformed
+	// target file degrades to policy.Target==nil rather than aborting.
+	targetIgnoreContent := resolveTargetIgnoreContent(repo)
+	policy, perr := ignore.LoadPolicyFromContent(targetIgnoreContent, ignoreFile, trustTargetIgnore)
+	if perr != nil {
+		return nil, ignorePolicyLoadError(ignoreFile, perr)
 	}
+	outcome := ignore.Apply(policy, allFindings)
+	allFindings = outcome.Effective
 
 	// 5c. Merge coverage-incomplete findings after suppression so they cannot
 	// be suppressed, mirroring the CLI. These are meta-level guarantees about
@@ -282,6 +295,17 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 
 	if len(runtimeErrors) > 0 {
 		result["runtime_errors"] = runtimeErrors
+	}
+
+	// Report which suppression sources were applied vs ignored so an operator
+	// can audit that a target-authored .honeybadgerignore did not silently
+	// suppress findings without trust. Mirrors the CLI suppression_summary.
+	if len(outcome.Applied) > 0 || len(outcome.Ignored) > 0 {
+		result["suppression_summary"] = map[string]any{
+			"applied":          outcome.Applied,
+			"ignored":          outcome.Ignored,
+			"suppressed_count": len(outcome.Suppressed),
+		}
 	}
 
 	return result, nil
