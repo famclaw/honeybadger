@@ -19,14 +19,6 @@ import (
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/report"
 	"github.com/famclaw/honeybadger/internal/scan"
-	"github.com/famclaw/honeybadger/internal/scanner/attestation"
-	"github.com/famclaw/honeybadger/internal/scanner/capability"
-	"github.com/famclaw/honeybadger/internal/scanner/cve"
-	"github.com/famclaw/honeybadger/internal/scanner/mcptool"
-	"github.com/famclaw/honeybadger/internal/scanner/meta"
-	"github.com/famclaw/honeybadger/internal/scanner/secrets"
-	"github.com/famclaw/honeybadger/internal/scanner/skillsafety"
-	"github.com/famclaw/honeybadger/internal/scanner/supplychain"
 )
 
 // ComputeVerdict determines the final verdict from findings, paranoia, and optional LLM verdict.
@@ -116,8 +108,10 @@ func VerdictRank(v string) int {
 		return 0
 	case "WARN":
 		return 1
-	case "FAIL":
+	case "INCOMPLETE":
 		return 2
+	case "FAIL":
+		return 3
 	default:
 		return -1
 	}
@@ -130,6 +124,8 @@ func ExitCodeForVerdict(verdict string) int {
 		return 0
 	case "WARN":
 		return 1
+	case "INCOMPLETE":
+		return 4
 	case "FAIL":
 		return 2
 	default:
@@ -263,22 +259,9 @@ func CheckToolHash(repo *fetch.Repo, expectedHash string) []scan.Finding {
 
 // BuildScannerList returns the scanners to run based on paranoia level.
 func BuildScannerList(opts scan.Options) []scan.ScanFunc {
-	switch opts.Paranoia {
-	case scan.ParanoiaOff:
-		return nil
-	case scan.ParanoiaMinimal:
-		return []scan.ScanFunc{secrets.Run, cve.Run}
-	case scan.ParanoiaFamily:
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, capability.Run, skillsafety.Run, mcptool.Run}
-	case scan.ParanoiaStrict:
-		// Same scanners as paranoid — the behavioral difference between strict
-		// and paranoid lives in ComputeVerdict, which escalates WARN → FAIL
-		// for both levels.
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, capability.Run, skillsafety.Run, attestation.Run, mcptool.Run}
-	case scan.ParanoiaParanoid:
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, capability.Run, skillsafety.Run, attestation.Run, mcptool.Run}
-	default:
-		// Default to family
-		return []scan.ScanFunc{secrets.Run, cve.Run, supplychain.Run, meta.Run, capability.Run, skillsafety.Run, mcptool.Run}
+	out := make([]scan.ScanFunc, 0)
+	for _, s := range scannersFor(opts) {
+		out = append(out, s.Run)
 	}
+	return out
 }
