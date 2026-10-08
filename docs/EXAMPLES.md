@@ -81,6 +81,8 @@ Note: When scanning private repositories via SSH URL, you must have SSH keys pro
 | `installed_sha` | string | No | SHA256 of currently installed version archive |
 | `installed_tool_hash` | string | No | SHA256 of installed MCP tool definitions |
 | `path` | string | No | Subdirectory within repo to scan |
+| `trust_target_ignore` | bool | No | Trust a target-authored `.honeybadgerignore` (default: `false`) |
+| `ignore_file` | string | No | Operator-supplied `.honeybadgerignore` policy path |
 
 ### Response example
 ```json
