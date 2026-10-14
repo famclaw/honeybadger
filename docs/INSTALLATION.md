@@ -6,7 +6,7 @@ PicoClaw, or NanoBot.
 ## Prerequisites
 
 ```bash
-# Install HoneyBadger binary (requires Go 1.22+)
+# Install HoneyBadger binary (requires Go 1.26.4+)
 go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
 # Verify
@@ -137,28 +137,30 @@ To inject environment variables for the skill in OpenClaw config:
 
 ## Verify the release binary
 
-Release binaries are signed with cosign (keyless, Sigstore). Verify before
-using any downloaded binary:
+The release `SHA256SUMS` checksums file is signed with cosign (keyless,
+Sigstore); individual binaries are checked against the signed checksums file.
+Verify before using any downloaded binary:
 
 ```bash
-# Download binary and signature bundle
+# Download the signed checksums file and its signature bundle
 curl -fsSL \
-  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
-  -o honeybadger-linux-amd64
+  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS \
+  -o SHA256SUMS
 curl -fsSL \
-  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64.bundle \
-  -o honeybadger-linux-amd64.bundle
+  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS.bundle \
+  -o SHA256SUMS.bundle
 
-# Verify cosign signature
-cosign verify-blob honeybadger-linux-amd64 \
-  --bundle honeybadger-linux-amd64.bundle \
+# Verify the cosign signature on the checksums file
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.bundle \
   --certificate-identity-regexp ".*famclaw/honeybadger.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-# Verify SHA256
+# Download your binary and check it against the verified checksums file
 curl -fsSL \
-  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS | \
-  grep honeybadger-linux-amd64 | sha256sum --check
+  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
+  -o honeybadger-linux-amd64
+sha256sum --check --ignore-missing SHA256SUMS
 ```
 
 ## With PicoClaw

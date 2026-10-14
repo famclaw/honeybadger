@@ -210,13 +210,24 @@ export HONEYBADGER_LLM_MODEL=llama3.1:8b
 
 ## Verify the release binary
 
+The release `SHA256SUMS` checksums file is cosign-signed (keyless, Sigstore);
+binaries are checked against the verified checksums file:
+
 ```bash
-cosign verify-blob honeybadger \
-  --bundle honeybadger.bundle \
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS \
+  -o SHA256SUMS
+curl -fsSL \
+  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS.bundle \
+  -o SHA256SUMS.bundle
+
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.bundle \
   --certificate-identity-regexp ".*famclaw/honeybadger.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 curl -fsSL \
-  https://github.com/famclaw/honeybadger/releases/latest/download/SHA256SUMS | \
-  grep honeybadger-linux-amd64 | sha256sum --check
+  https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
+  -o honeybadger-linux-amd64
+sha256sum --check --ignore-missing SHA256SUMS
 ```

@@ -184,9 +184,6 @@ release:
     cosign verify ghcr.io/famclaw/honeybadger:{{ .Version }} \
       --certificate-identity-regexp ".*famclaw/honeybadger.*" \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
-
-    # GitHub attestation
-    gh attestation verify honeybadger-linux-amd64 --repo famclaw/honeybadger
     ```
   footer: |
     ---

@@ -15,7 +15,7 @@ HoneyBadger performs static analysis only -- it reads source code and metadata b
 
 ## Install
 
-    # Go install (requires Go 1.22+)
+    # Go install (requires Go 1.26.4+)
     go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
     # Binary download (Linux amd64)
@@ -207,7 +207,7 @@ suppressions in their own files.
 | Typosquat | supplychain | Edit-distance check against popular package names |
 | SKILL.md fields | meta | Required fields and format validation |
 | Capability drift | capability | Declared `requires.*` vs actual code: network/filesystem/bins/env reads (family+) |
-| Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
+| Build provenance | attestation | Build-attestation workflow + release-artifact presence checks (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
 | Prompt injection | skillsafety | Override phrases in 11 languages, across SKILL.md and any referenced text files (family+) |
 | Homoglyphs | skillsafety | Mixed-script words (Latin+Cyrillic/Greek/Armenian) (family+) |
@@ -381,7 +381,7 @@ honeybadger/
 │   │   │   ├── scanner_test.go
 │   │   │   └── unicode_test.go
 │   │   ├── attestation/
-│   │   │   ├── attestation.go   # Attestation verification scanner
+│   │   │   ├── attestation.go   # Build-provenance / attestation scanner
 │   │   │   └── attestation_test.go
 │   │   └── mcptool/
 │   │       ├── mcptool.go           # MCP tool scanner entry point
@@ -445,7 +445,7 @@ honeybadger/
 
 ## Status
 
-**v0.5.1 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.5.1)
+**v0.6.2 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.6.2)
 
 Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
 attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
