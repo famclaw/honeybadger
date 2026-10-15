@@ -135,7 +135,7 @@ func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Findin
 				Severity: scan.SevInfo,
 				Check:    "attestation",
 				File:     path,
-				Message:  "SHA256SUMS/checksums file present for release verification",
+				Message: "SHA256SUMS/checksums file present (release-verification artifact; contents not validated by this check)",
 			}
 			return
 		}
@@ -219,7 +219,7 @@ func checkCommittedBinaries(repo *fetch.Repo, opts scan.Options, out chan<- scan
 				Severity: sev,
 				Check:    "attestation",
 				RuleID:   "att-bin-no-provenance",
-				Message:  fmt.Sprintf("Binary %s has no build provenance (no SHA256SUMS/cosign)", path),
+				Message: fmt.Sprintf("Binary %s in bin/ has no build-provenance artifacts in the scanned files (no SHA256SUMS/cosign found)", path),
 			}
 		}
 	}

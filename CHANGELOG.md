@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## v0.6.2 -- 2026-07-15
+
+### Added
+
+- skillsafety: hardened famclaw skill vetting (env allowlist and overbroad-trigger rules) (#75).
+
+### Fixed
+
+- Self-references in comments and text are now classified as describe-not-contain in
+  the paranoid self-scan, so rule corpora and docs no longer self-trigger
+  (fewer false positives); self-check added to CI (#76).
+
+## v0.6.1 -- 2026-07-14
+
+### Fixed
+
+- Release-pipeline build-provenance attestation now targets the `SHA256SUMS`
+  checksums file (`subject-path: dist/SHA256SUMS`) instead of the per-binary
+  glob `dist/honeybadger-*` (#73).
+
+## v0.6.0 -- 2026-07-13
+
 ### Added
 - SARIF 2.1.0 output emitter (`--format sarif`, #69)
 - rules CLI list/explain commands (#70)

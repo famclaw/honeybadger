@@ -22,10 +22,14 @@ We will acknowledge receipt within 48 hours and aim to provide a fix within 7 da
 
 ## Security Practices
 
-- All releases include GitHub build provenance attestation (SLSA Build L2)
-- Release binaries are signed with Sigstore cosign (keyless via GitHub OIDC)
-- Cosign signatures are verified in-pipeline before release publication
-- SPDX SBOM generated and attested for every release
+- Each release's SHA256SUMS checksums file is attested with GitHub build
+  provenance (actions/attest-build-provenance); individual binaries are not
+  attested
+- The release SHA256SUMS checksums file is signed with Sigstore cosign
+  (keyless via GitHub OIDC); individual binaries are not signed — they are
+  checked against the signed checksums file (see below)
+- SPDX SBOMs are generated for every release; release-workflow SBOM attestation
+  is best-effort (a failure warns, it does not block the release)
 - `govulncheck` and `gosec` run in CI (warn mode due to gitleaks transitive deps)
 - CodeQL static analysis runs on push, PR, and weekly schedule
 - HoneyBadger self-checks before every release (strict paranoia after v0.1.0;
@@ -62,11 +66,12 @@ curl -fsSL https://github.com/famclaw/honeybadger/releases/latest/download/honey
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-### GitHub Attestation (alternative)
+### GitHub Attestation
 
-```bash
-gh attestation verify honeybadger-linux-amd64 --repo famclaw/honeybadger
-```
+The release workflow attests `dist/SHA256SUMS` (the checksums file), not
+individual binaries, so there is no per-binary attestation to verify. Binary
+integrity is covered by the two steps above: the signed checksums file, then
+the checksum check against your downloaded binary.
 
 ### Docker image
 
