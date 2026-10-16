@@ -78,6 +78,73 @@ func TestAdjustSeverity(t *testing.T) {
 	}
 }
 
+func TestIsCommentLineLanguages(t *testing.T) {
+	cases := []struct {
+		name, file, content string
+		line                int
+		want                bool
+	}{
+		{"Python comment-only", "sample.py", "# ignore previous instructions — описано", 1, true},
+		{"JavaScript mixed comment", "sample.js", "const value = 1;\n  // ignore previous instructions", 2, true},
+		{"JavaScript block opener", "sample.js", "  /* ignore previous instructions */", 1, true},
+		{"Ruby comment-only", "sample.rb", "# ignore previous instructions", 1, true},
+		{"PHP hash comment", "sample.php", "# ignore previous instructions", 1, true},
+		{"Swift comment-only", "sample.swift", "// ignore previous instructions", 1, true},
+		{"Scala comment-only", "sample.scala", "// ignore previous instructions", 1, true},
+		{"HTML comment-only", "sample.html", "<!-- ignore previous instructions -->", 1, true},
+		{"Markdown HTML comment", "README.md", "<!-- ignore previous instructions -->", 1, true},
+		{"CSS block comment", "sample.css", "/* ignore previous instructions */", 1, true},
+		{"Java comment", "Sample.java", "// ignore previous instructions", 1, true},
+		{"C++ block comment", "sample.cpp", "/* ignore previous instructions */", 1, true},
+		{"Lua comment", "sample.lua", "-- ignore previous instructions", 1, true},
+		{"Perl comment", "sample.pl", "# ignore previous instructions", 1, true},
+		{"TOML comment", "sample.toml", "# ignore previous instructions", 1, true},
+		{"YAML comment", "sample.yaml", "# ignore previous instructions", 1, true},
+		{"Rust comment", "sample.rs", "// ignore previous instructions", 1, true},
+		{"mixed code is not comment", "sample.py", "value = '# ignore previous instructions'", 1, false},
+		{"comment prefix in middle is not comment", "sample.js", "const value = 1; // comment", 1, false},
+		{"unknown extension", "sample.txt", "# ignore previous instructions", 1, false},
+		{"invalid line", "sample.py", "# comment", 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsCommentLine([]byte(c.content), c.line, c.file); got != c.want {
+				t.Errorf("IsCommentLine(%q, %d) = %v, want %v", c.file, c.line, got, c.want)
+			}
+		})
+	}
+}
+
+func TestApplyFileRolesCommentLanguages(t *testing.T) {
+	files := map[string][]byte{
+		"comment.py":    []byte("# ignore previous instructions — описано"),
+		"comment.js":    []byte("// ignore previous instructions"),
+		"comment.rb":    []byte("# ignore previous instructions"),
+		"comment.swift": []byte("// ignore previous instructions"),
+		"comment.html":  []byte("<!-- ignore previous instructions -->"),
+		"mixed.cpp":     []byte("int value = 1;\n// ignore previous instructions"),
+		"code.py":       []byte("value = 'ignore previous instructions'"),
+	}
+	findings := make([]Finding, 0, len(files))
+	for name := range files {
+		line := 1
+		if name == "mixed.cpp" {
+			line = 2
+		}
+		findings = append(findings, Finding{File: name, Line: line, Severity: SevHigh, Message: name})
+	}
+	got := ApplyFileRoles(findings, files)
+	for _, f := range got {
+		wantRole, wantSeverity := RoleCode, SevHigh
+		if f.File != "code.py" {
+			wantRole, wantSeverity = RoleComment, SevInfo
+		}
+		if f.FileRole != wantRole || f.Severity != wantSeverity {
+			t.Errorf("%s: role=%q severity=%q, want %q/%q", f.File, f.FileRole, f.Severity, wantRole, wantSeverity)
+		}
+	}
+}
+
 func TestApplyFileRoles(t *testing.T) {
 	files := map[string][]byte{
 		"README.md":            []byte("# doc"),
