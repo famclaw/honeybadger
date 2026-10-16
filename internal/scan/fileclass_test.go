@@ -87,6 +87,8 @@ func TestIsCommentLineLanguages(t *testing.T) {
 		{"Python comment-only", "sample.py", "# ignore previous instructions — описано", 1, true},
 		{"JavaScript mixed comment", "sample.js", "const value = 1;\n  // ignore previous instructions", 2, true},
 		{"JavaScript block opener", "sample.js", "  /* ignore previous instructions */", 1, true},
+		{"block comment followed by code", "sample.js", "/* comment */ int x = 5;", 1, false},
+		{"multiline block comment opener", "sample.js", "/* comment starts\ncontinues */", 1, true},
 		{"Ruby comment-only", "sample.rb", "# ignore previous instructions", 1, true},
 		{"PHP hash comment", "sample.php", "# ignore previous instructions", 1, true},
 		{"Swift comment-only", "sample.swift", "// ignore previous instructions", 1, true},

@@ -94,6 +94,13 @@ func IsCommentLine(content []byte, lineNumber int, fileName string) bool {
 	if prefixes, ok := commentPrefixes[ext]; ok {
 		for _, prefix := range prefixes {
 			if bytes.HasPrefix(line, []byte(prefix)) {
+				// A block comment followed by code is not a pure comment line.
+				if bytes.Equal([]byte(prefix), []byte("/*")) {
+					if end := bytes.Index(line[len(prefix):], []byte("*/")); end >= 0 &&
+						len(bytes.TrimSpace(line[len(prefix)+end+2:])) > 0 {
+						return false
+					}
+				}
 				return true
 			}
 		}
