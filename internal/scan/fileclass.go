@@ -101,6 +101,12 @@ func IsCommentLine(content []byte, lineNumber int, fileName string) bool {
 						return false
 					}
 				}
+				if bytes.Equal([]byte(prefix), []byte("<!--")) {
+					if end := bytes.Index(line[len(prefix):], []byte("-->")); end >= 0 &&
+						len(bytes.TrimSpace(line[len(prefix)+end+3:])) > 0 {
+						return false
+					}
+				}
 				return true
 			}
 		}
