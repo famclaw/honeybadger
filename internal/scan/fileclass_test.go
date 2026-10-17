@@ -25,6 +25,8 @@ func TestResolveStyleSQLSelectFromProbe(t *testing.T) {
 		{"extensionless SQL select from", "query", "SELECT value FROM t;\n", DashFamily},
 		{"Lua local declaration and function", "sample.lua", "local x = 1\nfunction f() return x end\n", DashFamily},
 		{"Lua function form", "sample.lua", "function f()\n  return 1\nend\n", DashFamily},
+		{"Go short declaration", "sample.go", "package main\nfunc main() { x := 1; _ = x }\n", CFamily},
+		{"Makefile immediate assignment", "Makefile", "# build note\nCC := gcc\n", HashFamily},
 		{"create table", "schema", "CREATE TABLE users (id int);\n", DashFamily},
 	}
 	for _, c := range cases {
@@ -127,8 +129,9 @@ func TestIsCommentLineLanguages(t *testing.T) {
 		{"C++ block comment", "sample.cpp", "/* ignore previous instructions */", 1, true},
 		{"Lua comment", "sample.lua", "-- ignore previous instructions", 1, true},
 		{"Perl comment", "sample.pl", "# ignore previous instructions", 1, true},
-		{"TOML comment", "sample.toml", "# ignore previous instructions\n# another note", 1, true},
-		{"YAML comment", "sample.yaml", "# ignore previous instructions\n# another note", 1, true},
+		{"TOML comment", "sample.toml", "# ignore previous instructions", 1, true},
+		{"YAML comment", "sample.yaml", "# ignore previous instructions", 1, true},
+		{"YML comment", "sample.yml", "# ignore previous instructions", 1, true},
 		{"Rust comment", "sample.rs", "// ignore previous instructions", 1, true},
 		{"mixed code is not comment", "sample.py", "value = '# ignore previous instructions'", 1, false},
 		{"comment prefix in middle is not comment", "sample.js", "const value = 1; // comment", 1, false},
@@ -197,6 +200,9 @@ func TestApplyFileRolesCommentLanguages(t *testing.T) {
 		"comment.rb":    []byte("# ignore previous instructions"),
 		"comment.swift": []byte("// ignore previous instructions"),
 		"comment.html":  []byte("<!-- ignore previous instructions -->"),
+		"config.yaml":   []byte("# ignore previous instructions"),
+		"config.toml":   []byte("# ignore previous instructions"),
+		"Makefile":      []byte("# ignore previous instructions\nCC := gcc"),
 		"mixed.cpp":     []byte("int value = 1;\n// ignore previous instructions"),
 		"code.py":       []byte("value = 'ignore previous instructions'"),
 	}

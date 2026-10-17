@@ -59,6 +59,7 @@ var extensionStyle = map[string]CommentStyle{
 	".js": CFamily, ".jsx": CFamily, ".ts": CFamily, ".tsx": CFamily, ".css": CFamily,
 	".sh": HashFamily, ".bash": HashFamily, ".zsh": HashFamily, ".fish": HashFamily,
 	".py": HashFamily, ".rb": HashFamily, ".pl": HashFamily,
+	".yaml": HashFamily, ".yml": HashFamily, ".toml": HashFamily,
 	".php": PHPFamily, ".lua": DashFamily, ".html": HTMLFamily,
 	".bas": SemicolonFamily, ".asm": SemicolonFamily,
 }
@@ -91,6 +92,14 @@ func ResolveStyle(content []byte, fileName string) CommentStyle {
 		}
 	}
 	probe := strings.ToLower(string(content))
+	base := strings.ToLower(path.Base(fileName))
+	if (base == "makefile" || base == "gnumakefile") && strings.Contains(probe, ":=") {
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(string(line)), "#") {
+				return HashFamily
+			}
+		}
+	}
 	switch {
 	case strings.Contains(probe, "<?php") || strings.Contains(probe, "<?="):
 		return PHPFamily
@@ -447,7 +456,7 @@ func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 		}
 
 		// Comment line in source code — described, not present.
-		if role == RoleCode && f.Line > 0 {
+		if (role == RoleCode || role == RoleUnknown) && f.Line > 0 {
 			style, ok := styleCache[f.File]
 			if !ok {
 				style = ResolveStyle(content, f.File)
