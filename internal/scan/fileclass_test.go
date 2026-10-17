@@ -12,6 +12,31 @@ patterns:
   - regex: 'foo'
 `
 
+func TestResolveStyleSQLSelectFromProbe(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		content string
+		want    CommentStyle
+	}{
+		{"C selectFromCache is not SQL", "sample.c", "void selectFromCache() {\n  --x;\n  // valid C comment\n}\n", CFamily},
+		{"SQL select from same line", "query.sql", "SELECT value FROM t;\n", DashFamily},
+		{"SQL select and from on separate lines", "query", "SELECT value\nFROM t;\n", Unknown},
+		{"extensionless SQL select from", "query", "SELECT value FROM t;\n", DashFamily},
+		{"Lua local declaration and function", "sample.lua", "local x = 1\nfunction f() return x end\n", DashFamily},
+		{"Lua function form", "sample.lua", "function f()\n  return 1\nend\n", DashFamily},
+		{"create table", "schema", "CREATE TABLE users (id int);\n", DashFamily},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ResolveStyle([]byte(c.content), c.file)
+			if got != c.want {
+				t.Errorf("ResolveStyle(%q) = %v, want %v", c.file, got, c.want)
+			}
+		})
+	}
+}
+
 func TestClassifyFile(t *testing.T) {
 	cases := []struct {
 		name    string

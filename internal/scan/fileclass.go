@@ -3,6 +3,7 @@ package scan
 import (
 	"bytes"
 	"path"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -62,6 +63,9 @@ var extensionStyle = map[string]CommentStyle{
 	".bas": SemicolonFamily, ".asm": SemicolonFamily,
 }
 
+// sqlSelectFromPattern requires a SELECT ... FROM shape on one line.
+var sqlSelectFromPattern = regexp.MustCompile(`(?i)\bselect\b[^\r\n;]*\bfrom\b`)
+
 // ResolveStyle uses content signals first and the extension only as a final tie-break.
 func ResolveStyle(content []byte, fileName string) CommentStyle {
 	lines := bytes.Split(content, []byte{'\n'})
@@ -100,7 +104,7 @@ func ResolveStyle(content []byte, fileName string) CommentStyle {
 		return CFamily
 	case strings.Contains(probe, "local ") && strings.Contains(probe, "function ") && strings.Contains(probe, "end"):
 		return DashFamily
-	case (strings.Contains(probe, "select") && strings.Contains(probe, "from")) || strings.Contains(probe, "create table"):
+	case sqlSelectFromPattern.MatchString(probe) || strings.Contains(probe, "create table"):
 		return DashFamily
 	case strings.Contains(probe, "def ") && strings.Contains(probe, "#"):
 		return HashFamily
