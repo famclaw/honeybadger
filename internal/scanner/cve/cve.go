@@ -31,8 +31,9 @@ type osvBatchRequest struct {
 }
 
 type osvVuln struct {
-	ID       string `json:"id"`
-	Summary  string `json:"summary"`
+	ID       string   `json:"id"`
+	Aliases  []string `json:"aliases"`
+	Summary  string   `json:"summary"`
 	Severity []struct {
 		Type  string `json:"type"`
 		Score string `json:"score"`
@@ -79,6 +80,27 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		return
 	}
 
+	// Resolve the two public exploitation feeds once per scan.
+	cveIDs := make([]string, 0)
+	for _, result := range vulns.Results {
+		for _, vuln := range result.Vulns {
+			if strings.HasPrefix(vuln.ID, "CVE-") {
+				cveIDs = append(cveIDs, vuln.ID)
+			}
+			for _, alias := range vuln.Aliases {
+				if strings.HasPrefix(alias, "CVE-") {
+					cveIDs = append(cveIDs, alias)
+				}
+			}
+		}
+	}
+	intel, feedErrors := lookupExploitation(ctx, cveIDs)
+	for _, message := range feedErrors {
+		if errs != nil {
+			errs <- scan.NewRuntimeError("cve", message)
+		}
+	}
+
 	// Cache for full vuln records fetched via /v1/vulns/{id}.
 	recordCache := make(map[string]*osvVuln)
 	var cacheMu sync.Mutex
@@ -89,6 +111,17 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		}
 		dep := deps[i]
 		for _, vuln := range result.Vulns {
+			var exploited bool
+			var epss *scan.EPSS
+			for _, id := range append([]string{vuln.ID}, vuln.Aliases...) {
+				if info, ok := intel[id]; ok {
+					exploited = exploited || info.exploited
+					if info.epss != nil {
+						value := *info.epss
+						epss = &value
+					}
+				}
+			}
 			// If the batch response lacks CVSS data, fetch the full record.
 			if !hasCVSS(&vuln) {
 				if fullRecord := cacheOrFetchVuln(ctx, vuln.ID, recordCache, &cacheMu); fullRecord != nil {
@@ -106,6 +139,7 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 				severity = scan.SevMedium
 				reason = "severity_unknown"
 			}
+			severity, reason = gradeSeverity(severity, reason, exploited, epss)
 
 			out <- scan.Finding{
 				Type:      "cve",
@@ -119,6 +153,8 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 				FixedIn:   extractFixedVersion(vuln),
 				Message:   vuln.Summary,
 				Reason:    reason,
+				Exploited: exploited,
+				EPSS:      epss,
 				References: []string{
 					fmt.Sprintf("https://osv.dev/vulnerability/%s", vuln.ID),
 				},

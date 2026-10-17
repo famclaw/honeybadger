@@ -37,6 +37,14 @@ type Finding struct {
 	FixedIn     string   `json:"fixed_in,omitempty"`
 	Ecosystem   string   `json:"ecosystem,omitempty"`
 	Reason      string   `json:"reason,omitempty"` // e.g. "severity_unknown"
+	Exploited   bool     `json:"exploited,omitempty"`
+	EPSS        *EPSS    `json:"epss,omitempty"`
+}
+
+// EPSS contains FIRST's estimated probability and percentile for exploitation.
+type EPSS struct {
+	Score      float64 `json:"score"`
+	Percentile float64 `json:"percentile"`
 }
 
 // ParanoiaLevel controls which scanners run and how aggressively.

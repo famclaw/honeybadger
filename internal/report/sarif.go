@@ -93,6 +93,12 @@ func (se *SarifEmitter) emitFindings(findings []scan.Finding) error {
 				"fixed_in":      finding.FixedIn,
 			},
 		}
+		if finding.Exploited {
+			result.Properties["exploited"] = true
+		}
+		if finding.EPSS != nil {
+			result.Properties["epss"] = finding.EPSS
+		}
 
 		// Set SARIF level based on severity.
 		result.Level = se.severityToLevel(finding.Severity)
