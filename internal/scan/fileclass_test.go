@@ -102,8 +102,8 @@ func TestIsCommentLineLanguages(t *testing.T) {
 		{"C++ block comment", "sample.cpp", "/* ignore previous instructions */", 1, true},
 		{"Lua comment", "sample.lua", "-- ignore previous instructions", 1, true},
 		{"Perl comment", "sample.pl", "# ignore previous instructions", 1, true},
-		{"TOML comment", "sample.toml", "# ignore previous instructions", 1, true},
-		{"YAML comment", "sample.yaml", "# ignore previous instructions", 1, true},
+		{"TOML comment", "sample.toml", "# ignore previous instructions\n# another note", 1, true},
+		{"YAML comment", "sample.yaml", "# ignore previous instructions\n# another note", 1, true},
 		{"Rust comment", "sample.rs", "// ignore previous instructions", 1, true},
 		{"mixed code is not comment", "sample.py", "value = '# ignore previous instructions'", 1, false},
 		{"comment prefix in middle is not comment", "sample.js", "const value = 1; // comment", 1, false},
@@ -114,6 +114,40 @@ func TestIsCommentLineLanguages(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			if got := IsCommentLine([]byte(c.content), c.line, c.file); got != c.want {
 				t.Errorf("IsCommentLine(%q, %d) = %v, want %v", c.file, c.line, got, c.want)
+			}
+		})
+	}
+}
+
+func TestContentFirstCommentCorpus(t *testing.T) {
+	cases := []struct {
+		name, file, content string
+		line                int
+		want                bool
+	}{
+		{"extensionless Makefile", "Makefile", "# build rules\n# second note\nall:\n", 1, true},
+		{"extensionless Dockerfile", "Dockerfile", "# image note\n# second note\nFROM alpine\n", 1, true},
+		{"extensionless entrypoint", "entrypoint", "#!/bin/sh\n# startup note\n# more\n", 2, true},
+		{"extensionless configure", "configure", "# configure note\n# second note\n", 1, true},
+		{"extensionless Justfile", "Justfile", "# task note\n# second note\nbuild:\n", 1, true},
+		{"unlisted Kotlin", "src.kt", "fun main() {\n // note\n // more\n}\n", 2, true},
+		{"unlisted C sharp", "src.cs", "class App {\n // note\n // more\n}\n", 2, true},
+		{"unlisted Zig", "src.zig", "pub fn main() {\n // note\n // more\n}\n", 2, true},
+		{"unlisted Haskell", "src.hs", "main = do\n -- note\n -- more\n", 2, true},
+		{"unlisted Elixir", "src.ex", "defmodule App do\n # note\n # more\nend\n", 2, true},
+		{"unlisted Nim", "src.nim", "proc main() =\n # note\n # more\n", 2, true},
+		{"C preprocessor stays code", "Sample.c", "#include <evil.h>\n", 1, false},
+		{"shebang second line", "run", "echo ok\n#!/bin/sh\n", 2, false},
+		{"SQL dash comment", "query.sql", "SELECT value FROM table;\n-- note\n", 2, true},
+		{"shell double dash is code", "run.sh", "#!/bin/sh\n-- end-of-options\n", 2, false},
+		{"semicolon unknown stays code", "payload.unknown", "; rm -rf /\n", 1, false},
+		{"block close followed by code", "extensionless", "/* note */ int x;\n", 1, false},
+		{"HTML close followed by code", "extensionless", "<!-- note --> run();\n", 1, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsCommentLine([]byte(c.content), c.line, c.file); got != c.want {
+				t.Errorf("IsCommentLine(%q,%d)=%v want %v", c.file, c.line, got, c.want)
 			}
 		})
 	}
