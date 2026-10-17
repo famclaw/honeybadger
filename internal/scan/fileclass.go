@@ -3,6 +3,7 @@ package scan
 import (
 	"bytes"
 	"path"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -38,45 +39,139 @@ var knownScanners = map[string]bool{
 	"mcptool": true, "attestation": true,
 }
 
-// commentPrefixes maps file extensions to a list of comment prefixes that,
-// when at the start of a line (after whitespace), indicate the line is a comment.
-var commentPrefixes = map[string][]string{
-	".go":    {"//"},
-	".sh":    {"#"},
-	".bash":  {"#"},
-	".zsh":   {"#"},
-	".fish":  {"#"},
-	".py":    {"#"},
-	".js":    {"//", "/*"},
-	".jsx":   {"//", "/*"},
-	".ts":    {"//", "/*"},
-	".tsx":   {"//", "/*"},
-	".rb":    {"#"},
-	".php":   {"//", "#", "/*"},
-	".swift": {"//"},
-	".scala": {"//"},
-	".html":  {"<!--"},
-	".md":    {"<!--"},
-	".css":   {"/*"},
-	".java":  {"//", "/*"},
-	".c":     {"//", "/*"},
-	".h":     {"//", "/*"},
-	".cc":    {"//", "/*"},
-	".cpp":   {"//", "/*"},
-	".hpp":   {"//", "/*"},
-	".lua":   {"--"},
-	".pl":    {"#"},
-	".toml":  {"#"},
-	".yaml":  {"#"},
-	".yml":   {"#"},
-	".rs":    {"//"},
+// CommentStyle is the per-file language family used for ambiguous line markers.
+type CommentStyle uint8
+
+const (
+	Unknown CommentStyle = iota
+	CFamily
+	HashFamily
+	DashFamily
+	HTMLFamily
+	PHPFamily
+	SemicolonFamily
+)
+
+// extensionStyle is only a tiebreaker when content does not identify a style.
+var extensionStyle = map[string]CommentStyle{
+	".c": CFamily, ".h": CFamily, ".cc": CFamily, ".cpp": CFamily, ".hpp": CFamily,
+	".java": CFamily, ".go": CFamily, ".rs": CFamily, ".swift": CFamily, ".scala": CFamily,
+	".js": CFamily, ".jsx": CFamily, ".ts": CFamily, ".tsx": CFamily, ".css": CFamily,
+	".sh": HashFamily, ".bash": HashFamily, ".zsh": HashFamily, ".fish": HashFamily,
+	".py": HashFamily, ".rb": HashFamily, ".pl": HashFamily,
+	".yaml": HashFamily, ".yml": HashFamily, ".toml": HashFamily,
+	".php": PHPFamily, ".lua": DashFamily, ".html": HTMLFamily,
+	".bas": SemicolonFamily, ".asm": SemicolonFamily,
 }
 
-// IsCommentLine reports whether the line at the given lineNumber (1-based) in
-// the given content is a comment line. It uses a simple heuristic: trims
-// leading whitespace and checks if the line starts with any known comment
-// prefix for the file's extension.
+// sqlSelectFromPattern requires a SELECT ... FROM shape on one line.
+var sqlSelectFromPattern = regexp.MustCompile(`(?i)\bselect\b[^\r\n;]*\bfrom\b`)
+
+// ResolveStyle uses content signals first and the extension only as a final tie-break.
+func ResolveStyle(content []byte, fileName string) CommentStyle {
+	lines := bytes.Split(content, []byte{'\n'})
+	if len(lines) > 0 {
+		first := strings.TrimSpace(string(lines[0]))
+		if strings.HasPrefix(first, "#!") {
+			fields := strings.Fields(strings.TrimPrefix(first, "#!"))
+			if len(fields) == 0 {
+				return Unknown
+			}
+			interpreter := strings.ToLower(path.Base(fields[0]))
+			if interpreter == "env" && len(fields) > 1 {
+				interpreter = strings.ToLower(path.Base(fields[1]))
+			}
+			switch {
+			case strings.Contains(interpreter, "sh"), strings.Contains(interpreter, "python"), strings.Contains(interpreter, "ruby"), strings.Contains(interpreter, "perl"), strings.Contains(interpreter, "awk"):
+				return HashFamily
+			case interpreter == "node" || interpreter == "deno" || interpreter == "bun":
+				return CFamily
+			default:
+				return Unknown
+			}
+		}
+	}
+	probe := strings.ToLower(string(content))
+	base := strings.ToLower(path.Base(fileName))
+	if (base == "makefile" || base == "gnumakefile") && strings.Contains(probe, ":=") {
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(string(line)), "#") {
+				return HashFamily
+			}
+		}
+	}
+	switch {
+	case strings.Contains(probe, "<?php") || strings.Contains(probe, "<?="):
+		return PHPFamily
+	case strings.Contains(probe, "<?xml") || strings.Contains(probe, "<!doctype") || strings.Contains(probe, "<html"):
+		return HTMLFamily
+	case strings.Contains(probe, "#include") || strings.Contains(probe, "#define") || strings.Contains(probe, "#ifdef") || strings.Contains(probe, "#pragma"):
+		return CFamily
+	case strings.Contains(probe, ":=") || (strings.Contains(probe, "func ") && strings.Contains(probe, "package ")):
+		return CFamily
+	case strings.Contains(probe, "fn ") && strings.Contains(probe, "->") && !strings.Contains(probe, "func "):
+		return CFamily
+	case strings.Contains(probe, "local ") && strings.Contains(probe, "function ") && strings.Contains(probe, "end"):
+		return DashFamily
+	case sqlSelectFromPattern.MatchString(probe) || strings.Contains(probe, "create table"):
+		return DashFamily
+	case strings.Contains(probe, "def ") && strings.Contains(probe, "#"):
+		return HashFamily
+	}
+	var hashes, slashes, dashes int
+	for _, b := range lines {
+		l := strings.TrimSpace(string(b))
+		if strings.HasPrefix(l, "#") {
+			hashes++
+		}
+		if strings.HasPrefix(l, "//") {
+			slashes++
+		}
+		if strings.HasPrefix(l, "--") {
+			dashes++
+		}
+	}
+	if hashes > 1 && slashes == 0 {
+		return HashFamily
+	}
+	if slashes > 0 && hashes == 0 && strings.ContainsAny(probe, "{}") {
+		return CFamily
+	}
+	if dashes > 0 && hashes == 0 && slashes == 0 {
+		return DashFamily
+	}
+	if hashes > 0 && slashes > 0 {
+		return Unknown
+	}
+	if style, ok := extensionStyle[strings.ToLower(path.Ext(fileName))]; ok {
+		return style
+	}
+	return Unknown
+}
+
+func openersFor(style CommentStyle) []string {
+	switch style {
+	case CFamily:
+		return []string{"//"}
+	case HashFamily:
+		return []string{"#"}
+	case DashFamily:
+		return []string{"--"}
+	case PHPFamily:
+		return []string{"#", "//"}
+	case SemicolonFamily:
+		return []string{";"}
+	default:
+		return nil
+	}
+}
+
+// IsCommentLine applies content-decisive markers before style-resolved markers.
 func IsCommentLine(content []byte, lineNumber int, fileName string) bool {
+	return isCommentLineWithStyle(content, lineNumber, ResolveStyle(content, fileName))
+}
+
+func isCommentLineWithStyle(content []byte, lineNumber int, style CommentStyle) bool {
 	if lineNumber < 1 {
 		return false
 	}
@@ -84,31 +179,32 @@ func IsCommentLine(content []byte, lineNumber int, fileName string) bool {
 	if lineNumber > len(lines) {
 		return false
 	}
-	line := lines[lineNumber-1]
-	// Trim leading whitespace
-	line = bytes.TrimSpace(line)
+	line := bytes.TrimSpace(lines[lineNumber-1])
 	if len(line) == 0 {
 		return false
 	}
-	ext := path.Ext(fileName)
-	if prefixes, ok := commentPrefixes[ext]; ok {
-		for _, prefix := range prefixes {
-			if bytes.HasPrefix(line, []byte(prefix)) {
-				// A block comment followed by code is not a pure comment line.
-				if bytes.Equal([]byte(prefix), []byte("/*")) {
-					if end := bytes.Index(line[len(prefix):], []byte("*/")); end >= 0 &&
-						len(bytes.TrimSpace(line[len(prefix)+end+2:])) > 0 {
-						return false
-					}
-				}
-				if bytes.Equal([]byte(prefix), []byte("<!--")) {
-					if end := bytes.Index(line[len(prefix):], []byte("-->")); end >= 0 &&
-						len(bytes.TrimSpace(line[len(prefix)+end+3:])) > 0 {
-						return false
-					}
-				}
-				return true
-			}
+	l := string(line)
+	if lineNumber == 1 && strings.HasPrefix(l, "#!") {
+		return true
+	}
+	if strings.HasPrefix(l, "<!--") {
+		if end := strings.Index(l, "-->"); end >= 0 {
+			return strings.TrimSpace(l[end+3:]) == ""
+		}
+		return true
+	}
+	if strings.HasPrefix(l, "/*") {
+		if end := strings.Index(l, "*/"); end >= 0 {
+			return strings.TrimSpace(l[end+2:]) == ""
+		}
+		return true
+	}
+	if l == "*/" || l == "-->" {
+		return true
+	}
+	for _, opener := range openersFor(style) {
+		if strings.HasPrefix(l, opener) {
+			return true
 		}
 	}
 	return false
@@ -336,6 +432,7 @@ func IsApplicationRepo(files map[string][]byte) bool {
 // classified as RoleComment and reduced to INFO.
 func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 	kept := make([]Finding, 0, len(findings))
+	styleCache := make(map[string]CommentStyle)
 	for i := range findings {
 		f := &findings[i]
 		if f.File == "" {
@@ -359,8 +456,15 @@ func ApplyFileRoles(findings []Finding, files map[string][]byte) []Finding {
 		}
 
 		// Comment line in source code — described, not present.
-		if role == RoleCode && f.Line > 0 && IsCommentLine(content, f.Line, f.File) {
-			role = RoleComment
+		if (role == RoleCode || role == RoleUnknown) && f.Line > 0 {
+			style, ok := styleCache[f.File]
+			if !ok {
+				style = ResolveStyle(content, f.File)
+				styleCache[f.File] = style
+			}
+			if isCommentLineWithStyle(content, f.Line, style) {
+				role = RoleComment
+			}
 		}
 
 		f.FileRole = role
