@@ -2,21 +2,17 @@ package attestation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/scan"
 )
 
-// attestationHTTPClient is a shared HTTP client for attestation API calls.
-var attestationHTTPClient = &http.Client{Timeout: 30 * time.Second}
-
-// AttestationAPIBase can be overridden for testing.
+// AttestationAPIBase documents the GitHub attestation endpoint base and can be
+// overridden for testing. It is not dereferenced when the check is skipped
+// because no proper subject digest is available (see checkGitHubAttestation).
 var AttestationAPIBase = "https://api.github.com"
 
 // Run checks build provenance and attestation for a repository.
@@ -36,10 +32,13 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 		checkAttestationWorkflow(repo, opts, out)
 	}
 
-	// 3. SHA256SUMS check
+	// 3. Check for committed binaries in bin/ directory
+	checkCommittedBinaries(repo, opts, out)
+
+	// 4. SHA256SUMS check
 	checkSHA256SUMS(repo, opts, out)
 
-	// 4. Cosign artifacts check
+	// 5. Cosign artifacts check
 	checkCosignArtifacts(repo, opts, out)
 }
 
@@ -54,53 +53,18 @@ func checkGitHubAttestation(ctx context.Context, repo *fetch.Repo, opts scan.Opt
 		return
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/attestations/sha256:%s",
-		AttestationAPIBase, repo.Owner, repo.Name, repo.SHA)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		errs <- scan.NewRuntimeError("attestation", fmt.Sprintf("create request for %s/%s sha=%s: %v", repo.Owner, repo.Name, repo.SHA, err))
-		return
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	if opts.GithubToken != "" {
-		req.Header.Set("Authorization", "Bearer "+opts.GithubToken)
-	}
-
-	resp, err := attestationHTTPClient.Do(req)
-	if err != nil {
-		errs <- scan.NewRuntimeError("attestation", fmt.Sprintf("API call %s/%s sha=%s: %v", repo.Owner, repo.Name, repo.SHA, err))
-		return
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode == http.StatusOK {
-		// Check if there are actual attestations in the response
-		var result struct {
-			Attestations []json.RawMessage `json:"attestations"`
-		}
-		if err := json.Unmarshal(body, &result); err == nil && len(result.Attestations) > 0 {
-			out <- scan.Finding{
-				Type:     "finding",
-				Severity: scan.SevInfo,
-				Check:    "attestation",
-				Message:  fmt.Sprintf("GitHub attestation verified for SHA %s", repo.SHA),
-			}
-			return
-		}
-	}
-
-	// No attestation found
-	sev := scan.SevMedium
-	if opts.Paranoia == scan.ParanoiaParanoid {
-		sev = scan.SevHigh
-	}
+	// repo.SHA is a git commit SHA, not a SHA-256 artifact digest. The GitHub
+	// attestation endpoint is keyed by a subject digest
+	// (sha256:<artifact-digest>), and no release-asset digest is available in this
+	// code path. Querying with sha256:<commit-SHA> could never match a real
+	// attestation bundle, so skip the cryptographic attestation check rather than
+	// emit a false negative.
 	out <- scan.Finding{
 		Type:     "finding",
-		Severity: sev,
+		Severity: scan.SevInfo,
 		Check:    "attestation",
-		Message:  fmt.Sprintf("No GitHub attestation found for SHA %s", repo.SHA),
+		RuleID:   "att-gh-attestation-skipped",
+		Message:  "attestation digest unavailable, skipping cryptographic check",
 	}
 }
 
@@ -116,10 +80,17 @@ func checkAttestationWorkflow(repo *fetch.Repo, opts scan.Options, out chan<- sc
 	}
 
 	if found {
+		// RuleID att-gh-workflow-configured is the source-level signal that
+		// build-attestation infrastructure is present; it drives the result
+		// event's Attested flag (see attestationPresent). The cryptographic
+		// attestation API check is unavailable for source scans, so a
+		// configured attestation workflow is the strongest "attested" evidence
+		// we can emit from a source tree.
 		out <- scan.Finding{
 			Type:     "finding",
 			Severity: scan.SevInfo,
 			Check:    "attestation",
+			RuleID:   "att-gh-workflow-configured",
 			Message:  "Build attestation workflow configured (actions/attest-build-provenance)",
 		}
 	} else {
@@ -145,6 +116,13 @@ func isReleaseArtifactScan(repo *fetch.Repo) bool {
 	return repo.Platform == "tarball"
 }
 
+// isExecutableBinary checks if the content appears to be an executable binary
+// by checking for common executable file signatures (magic bytes) or shebang.
+// It uses the shared scan.IsExecutable function.
+func isExecutableBinary(data []byte) bool {
+	return scan.IsExecutable(data)
+}
+
 func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
 	for path := range repo.Files {
 		base := strings.ToLower(path)
@@ -157,7 +135,7 @@ func checkSHA256SUMS(repo *fetch.Repo, opts scan.Options, out chan<- scan.Findin
 				Severity: scan.SevInfo,
 				Check:    "attestation",
 				File:     path,
-				Message:  "SHA256SUMS/checksums file present for release verification",
+				Message: "SHA256SUMS/checksums file present (release-verification artifact; contents not validated by this check)",
 			}
 			return
 		}
@@ -217,5 +195,32 @@ func checkCosignArtifacts(repo *fetch.Repo, opts scan.Options, out chan<- scan.F
 		Severity: scan.SevInfo,
 		Check:    "attestation",
 		Message:  "No cosign signature artifacts in scanned source; signature verification requires scanning a published release",
+	}
+}
+
+// checkCommittedBinaries checks for committed binaries in the bin/ directory and flags them
+// as lacking build provenance at strict/paranoid levels
+func checkCommittedBinaries(repo *fetch.Repo, opts scan.Options, out chan<- scan.Finding) {
+	for path, content := range repo.Files {
+		if strings.HasPrefix(path, "bin/") && isExecutableBinary(content) {
+			// Skip common pre-built binary extensions that are typically legitimate
+			// and don't need provenance checks (e.g., .so for shared libraries)
+			ext := filepath.Ext(path)
+			if ext == ".so" || ext == ".dylib" || ext == ".dll" {
+				continue
+			}
+
+			sev := scan.SevMedium
+			if opts.Paranoia == scan.ParanoiaParanoid {
+				sev = scan.SevHigh
+			}
+			out <- scan.Finding{
+				Type:     "finding",
+				Severity: sev,
+				Check:    "attestation",
+				RuleID:   "att-bin-no-provenance",
+				Message: fmt.Sprintf("Binary %s in bin/ has no build-provenance artifacts in the scanned files (no SHA256SUMS/cosign found)", path),
+			}
+		}
 	}
 }

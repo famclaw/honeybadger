@@ -1,0 +1,10 @@
+id: ss-famclaw-trigger-overbroad
+kind: pattern
+scanner: skillsafety
+category: trigger_injection
+severity: HIGH
+message: trigger.mode=always creates persistent injection surface
+signal: override_phrase
+patterns:
+  - regex: 'trigger:\s*mode:\s*always'
+    description: trigger.mode = always

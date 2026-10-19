@@ -12,6 +12,33 @@ patterns:
   - regex: 'foo'
 `
 
+func TestResolveStyleSQLSelectFromProbe(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		content string
+		want    CommentStyle
+	}{
+		{"C selectFromCache is not SQL", "sample.c", "void selectFromCache() {\n  --x;\n  // valid C comment\n}\n", CFamily},
+		{"SQL select from same line", "query.sql", "SELECT value FROM t;\n", DashFamily},
+		{"SQL select and from on separate lines", "query", "SELECT value\nFROM t;\n", Unknown},
+		{"extensionless SQL select from", "query", "SELECT value FROM t;\n", DashFamily},
+		{"Lua local declaration and function", "sample.lua", "local x = 1\nfunction f() return x end\n", DashFamily},
+		{"Lua function form", "sample.lua", "function f()\n  return 1\nend\n", DashFamily},
+		{"Go short declaration", "sample.go", "package main\nfunc main() { x := 1; _ = x }\n", CFamily},
+		{"Makefile immediate assignment", "Makefile", "# build note\nCC := gcc\n", HashFamily},
+		{"create table", "schema", "CREATE TABLE users (id int);\n", DashFamily},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ResolveStyle([]byte(c.content), c.file)
+			if got != c.want {
+				t.Errorf("ResolveStyle(%q) = %v, want %v", c.file, got, c.want)
+			}
+		})
+	}
+}
+
 func TestClassifyFile(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -20,22 +47,22 @@ func TestClassifyFile(t *testing.T) {
 		want    FileRole
 	}{
 		{"go source", "internal/scanner/supplychain/supplychain.go", nil, RoleCode},
-		{"go test", "internal/scanner/supplychain/supplychain_test.go", nil, RoleTest},
-		{"testfixture dir", "internal/testfixture/fixtures.go", nil, RoleTest},
-		{"testdata dir", "internal/scanner/cve/testdata/deps.json", nil, RoleTest},
-		{"js test", "src/foo.test.ts", nil, RoleTest},
-		{"python test", "pkg/test_helper.py", nil, RoleTest},
-		{"readme", "README.md", nil, RoleDoc},
-		{"changelog", "CHANGELOG.md", nil, RoleDoc},
-		{"docs dir", "docs/INSTALLATION.md", nil, RoleDoc},
-		{"superpowers plan", "docs/superpowers/plans/2026-04-05-x.md", nil, RoleDoc},
-		{"license", "LICENSE", nil, RoleDoc},
+		{"go test", "internal/scanner/supplychain/supplychain_test.go", nil, RoleUnknown},
+		{"testfixture dir", "internal/testfixture/fixtures.go", nil, RoleUnknown},
+		{"testdata dir", "internal/scanner/cve/testdata/deps.json", nil, RoleUnknown},
+		{"js test", "src/foo.test.ts", nil, RoleUnknown},
+		{"python test", "pkg/test_helper.py", nil, RoleUnknown},
+		{"readme", "README.md", nil, RoleProse},
+		{"changelog", "CHANGELOG.md", nil, RoleProse},
+		{"docs dir", "docs/INSTALLATION.md", nil, RoleProse},
+		{"superpowers plan", "docs/superpowers/plans/2026-04-05-x.md", nil, RoleProse},
+		{"license", "LICENSE", nil, RoleProse},
 		{"skill manifest is not doc", "SKILL.md", nil, RoleCode},
-		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleTest},
-		{"ci workflow", ".github/workflows/release.yml", nil, RoleConfig},
-		{"json config", "config.json", nil, RoleConfig},
-		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleRules},
-		{"non-rule yaml is config", "config/app.yaml", []byte("server:\n  port: 8080\n"), RoleConfig},
+		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleUnknown},
+		{"ci workflow", ".github/workflows/release.yml", nil, RoleUnknown},
+		{"json config", "config.json", nil, RoleUnknown},
+		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleUnknown},
+		{"non-rule yaml is config", "config/app.yaml", []byte("server:\n  port: 8080\n"), RoleUnknown},
 		{"plain source", "main.py", nil, RoleCode},
 	}
 	for _, c := range cases {
@@ -49,8 +76,8 @@ func TestClassifyFile(t *testing.T) {
 }
 
 func TestClassifyFileBackslashPaths(t *testing.T) {
-	if got := ClassifyFile(`internal\scanner\foo_test.go`, nil); got != RoleTest {
-		t.Errorf("backslash path: got %v, want RoleTest", got)
+	if got := ClassifyFile(`internal\scanner\foo_test.go`, nil); got != RoleUnknown {
+		t.Errorf("backslash path: got %v, want RoleUnknown", got)
 	}
 }
 
@@ -59,23 +86,142 @@ func TestAdjustSeverity(t *testing.T) {
 		role    FileRole
 		raw     string
 		wantSev string
-		wantOK  bool
 	}{
-		{RoleCode, SevCritical, SevCritical, true},
-		{RoleConfig, SevHigh, SevHigh, true},
-		{RoleTest, SevCritical, "", false},
-		{RoleRules, SevCritical, "", false},
-		{RoleDoc, SevCritical, SevMedium, true},
-		{RoleDoc, SevHigh, SevLow, true},
-		{RoleDoc, SevMedium, SevInfo, true},
-		{RoleDoc, SevLow, "", false},
-		{RoleDoc, SevInfo, "", false},
+		{RoleCode, SevCritical, SevCritical},
+		{RoleUnknown, SevHigh, SevHigh},
+		{RoleProse, SevCritical, SevMedium},
+		{RoleProse, SevHigh, SevLow},
+		{RoleProse, SevMedium, SevInfo},
+		{RoleProse, SevLow, SevInfo},
+		{RoleProse, SevInfo, SevInfo},
+		{RoleComment, SevCritical, SevInfo},
+		{RoleComment, SevMedium, SevInfo},
 	}
 	for _, c := range cases {
-		gotSev, gotOK := AdjustSeverity(c.raw, c.role)
-		if gotSev != c.wantSev || gotOK != c.wantOK {
-			t.Errorf("AdjustSeverity(%s, %v) = (%q, %v), want (%q, %v)",
-				c.raw, c.role, gotSev, gotOK, c.wantSev, c.wantOK)
+		got := AdjustSeverity(c.raw, c.role)
+		if got != c.wantSev {
+			t.Errorf("AdjustSeverity(%q, %q) = %q, want %q", c.raw, c.role, got, c.wantSev)
+		}
+	}
+}
+
+func TestIsCommentLineLanguages(t *testing.T) {
+	cases := []struct {
+		name, file, content string
+		line                int
+		want                bool
+	}{
+		{"Python comment-only", "sample.py", "# ignore previous instructions — описано", 1, true},
+		{"JavaScript mixed comment", "sample.js", "const value = 1;\n  // ignore previous instructions", 2, true},
+		{"JavaScript block opener", "sample.js", "  /* ignore previous instructions */", 1, true},
+		{"block comment followed by code", "sample.js", "/* comment */ int x = 5;", 1, false},
+		{"multiline block comment opener", "sample.js", "/* comment starts\ncontinues */", 1, true},
+		{"Ruby comment-only", "sample.rb", "# ignore previous instructions", 1, true},
+		{"PHP hash comment", "sample.php", "# ignore previous instructions", 1, true},
+		{"Swift comment-only", "sample.swift", "// ignore previous instructions", 1, true},
+		{"Scala comment-only", "sample.scala", "// ignore previous instructions", 1, true},
+		{"HTML comment-only", "sample.html", "<!-- ignore previous instructions -->", 1, true},
+		{"HTML comment followed by code", "sample.html", `<!-- note --><script>fetch("http://evil.com")</script>`, 1, false},
+		{"Markdown HTML comment", "README.md", "<!-- ignore previous instructions -->", 1, true},
+		{"Markdown HTML comment followed by code", "README.md", "<!-- comment --> code", 1, false},
+		{"CSS block comment", "sample.css", "/* ignore previous instructions */", 1, true},
+		{"Java comment", "Sample.java", "// ignore previous instructions", 1, true},
+		{"C++ block comment", "sample.cpp", "/* ignore previous instructions */", 1, true},
+		{"Lua comment", "sample.lua", "-- ignore previous instructions", 1, true},
+		{"Perl comment", "sample.pl", "# ignore previous instructions", 1, true},
+		{"TOML comment", "sample.toml", "# ignore previous instructions", 1, true},
+		{"YAML comment", "sample.yaml", "# ignore previous instructions", 1, true},
+		{"YML comment", "sample.yml", "# ignore previous instructions", 1, true},
+		{"Rust comment", "sample.rs", "// ignore previous instructions", 1, true},
+		{"mixed code is not comment", "sample.py", "value = '# ignore previous instructions'", 1, false},
+		{"comment prefix in middle is not comment", "sample.js", "const value = 1; // comment", 1, false},
+		{"unknown extension", "sample.txt", "# ignore previous instructions", 1, false},
+		{"invalid line", "sample.py", "# comment", 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsCommentLine([]byte(c.content), c.line, c.file); got != c.want {
+				t.Errorf("IsCommentLine(%q, %d) = %v, want %v", c.file, c.line, got, c.want)
+			}
+		})
+	}
+}
+
+func TestContentFirstCommentCorpus(t *testing.T) {
+	cases := []struct {
+		name, file, content string
+		line                int
+		want                bool
+	}{
+		{"extensionless Makefile", "Makefile", "# build rules\n# second note\nall:\n", 1, true},
+		{"extensionless Dockerfile", "Dockerfile", "# image note\n# second note\nFROM alpine\n", 1, true},
+		{"extensionless entrypoint", "entrypoint", "#!/bin/sh\n# startup note\n# more\n", 2, true},
+		{"extensionless configure", "configure", "# configure note\n# second note\n", 1, true},
+		{"extensionless Justfile", "Justfile", "# task note\n# second note\nbuild:\n", 1, true},
+		{"unlisted Kotlin", "src.kt", "fun main() {\n // note\n // more\n}\n", 2, true},
+		{"unlisted C sharp", "src.cs", "class App {\n // note\n // more\n}\n", 2, true},
+		{"unlisted Zig", "src.zig", "pub fn main() {\n // note\n // more\n}\n", 2, true},
+		{"unlisted Haskell", "src.hs", "main = do\n -- note\n -- more\n", 2, true},
+		{"unlisted Elixir", "src.ex", "defmodule App do\n # note\n # more\nend\n", 2, true},
+		{"unlisted Nim", "src.nim", "proc main() =\n # note\n # more\n", 2, true},
+		{"C preprocessor stays code", "Sample.c", "#include <evil.h>\n", 1, false},
+		{"shebang second line", "run", "echo ok\n#!/bin/sh\n", 2, false},
+		{"SQL dash comment", "query.sql", "SELECT value FROM table;\n-- note\n", 2, true},
+		{"shell double dash is code", "run.sh", "#!/bin/sh\n-- end-of-options\n", 2, false},
+		{"semicolon unknown stays code", "payload.unknown", "; rm -rf /\n", 1, false},
+		{"block close followed by code", "extensionless", "/* note */ int x;\n", 1, false},
+		{"HTML close followed by code", "extensionless", "<!-- note --> run();\n", 1, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsCommentLine([]byte(c.content), c.line, c.file); got != c.want {
+				t.Errorf("IsCommentLine(%q,%d)=%v want %v", c.file, c.line, got, c.want)
+			}
+		})
+	}
+}
+
+func TestApplyFileRolesHTMLCommentFollowedByCode(t *testing.T) {
+	content := []byte(`<!-- note --><script>fetch("http://evil.com")</script>`)
+	findings := []Finding{{File: "sample.html", Line: 1, Severity: SevHigh}}
+	got := ApplyFileRoles(findings, map[string][]byte{"sample.html": content})
+	if len(got) != 1 {
+		t.Fatalf("got %d findings, want 1", len(got))
+	}
+	if got[0].FileRole != RoleCode || got[0].Severity != SevHigh {
+		t.Errorf("HTML code after comment: role=%q severity=%q, want %q/%q", got[0].FileRole, got[0].Severity, RoleCode, SevHigh)
+	}
+}
+
+func TestApplyFileRolesCommentLanguages(t *testing.T) {
+	files := map[string][]byte{
+		"comment.py":    []byte("# ignore previous instructions — описано"),
+		"comment.js":    []byte("// ignore previous instructions"),
+		"comment.rb":    []byte("# ignore previous instructions"),
+		"comment.swift": []byte("// ignore previous instructions"),
+		"comment.html":  []byte("<!-- ignore previous instructions -->"),
+		"config.yaml":   []byte("# ignore previous instructions"),
+		"config.toml":   []byte("# ignore previous instructions"),
+		"Makefile":      []byte("# ignore previous instructions\nCC := gcc"),
+		"mixed.cpp":     []byte("int value = 1;\n// ignore previous instructions"),
+		"code.py":       []byte("value = 'ignore previous instructions'"),
+	}
+	findings := make([]Finding, 0, len(files))
+	for name := range files {
+		line := 1
+		if name == "mixed.cpp" {
+			line = 2
+		}
+		findings = append(findings, Finding{File: name, Line: line, Severity: SevHigh, Message: name})
+	}
+	got := ApplyFileRoles(findings, files)
+	for _, f := range got {
+		wantRole, wantSeverity := RoleCode, SevHigh
+		if f.File != "code.py" {
+			wantRole, wantSeverity = RoleComment, SevInfo
+		}
+		if f.FileRole != wantRole || f.Severity != wantSeverity {
+			t.Errorf("%s: role=%q severity=%q, want %q/%q", f.File, f.FileRole, f.Severity, wantRole, wantSeverity)
 		}
 	}
 }
@@ -96,22 +242,28 @@ func TestApplyFileRoles(t *testing.T) {
 	}
 	got := ApplyFileRoles(findings, files)
 
-	// test-file and rule-file findings dropped; doc downgraded; code + no-file kept.
-	if len(got) != 3 {
-		t.Fatalf("got %d findings, want 3: %+v", len(got), got)
+	// No drops: all 5 findings are retained with FileRole and adjusted severity.
+	if len(got) != 5 {
+		t.Fatalf("got %d findings, want 5: %+v", len(got), got)
 	}
-	bySev := map[string]string{}
+	byMsg := map[string]Finding{}
 	for _, f := range got {
-		bySev[f.Message] = f.Severity
+		byMsg[f.Message] = f
 	}
-	if bySev["doc match"] != SevMedium {
-		t.Errorf("doc match severity = %q, want MEDIUM", bySev["doc match"])
+	if f := byMsg["doc match"]; f.FileRole != RoleProse || f.Severity != SevMedium {
+		t.Errorf("doc match: role=%q sev=%q, want prose/MEDIUM", f.FileRole, f.Severity)
 	}
-	if bySev["real code"] != SevHigh {
-		t.Errorf("real code severity = %q, want HIGH", bySev["real code"])
+	if f := byMsg["test fixture"]; f.FileRole != RoleUnknown || f.Severity != SevHigh {
+		t.Errorf("test fixture: role=%q sev=%q, want unknown/HIGH", f.FileRole, f.Severity)
 	}
-	if bySev["no file"] != SevHigh {
-		t.Errorf("no-file finding severity = %q, want HIGH (unchanged)", bySev["no file"])
+	if f := byMsg["own rule"]; f.FileRole != RoleUnknown || f.Severity != SevCritical {
+		t.Errorf("own rule: role=%q sev=%q, want unknown/CRITICAL", f.FileRole, f.Severity)
+	}
+	if f := byMsg["real code"]; f.FileRole != RoleCode || f.Severity != SevHigh {
+		t.Errorf("real code: role=%q sev=%q, want code/HIGH", f.FileRole, f.Severity)
+	}
+	if f := byMsg["no file"]; f.FileRole != RoleUnknown || f.Severity != SevHigh {
+		t.Errorf("no file: role=%q sev=%q, want unknown/HIGH", f.FileRole, f.Severity)
 	}
 }
 
@@ -126,18 +278,49 @@ func TestApplyFileRolesMarkdown(t *testing.T) {
 	}
 	got := ApplyFileRoles(findings, files)
 
-	bySev := map[string]string{}
+	if len(got) != 3 {
+		t.Fatalf("got %d findings, want 3: %+v", len(got), got)
+	}
+	byMsg := map[string]Finding{}
 	for _, f := range got {
-		bySev[f.Message] = f.Severity
+		byMsg[f.Message] = f
 	}
-	if _, present := bySev["prose match"]; present {
-		t.Error("prose match in markdown should be dropped")
+	if f := byMsg["prose match"]; f.FileRole != RoleProse || f.Severity != SevMedium {
+		t.Errorf("prose match: role=%q sev=%q, want prose/MEDIUM", f.FileRole, f.Severity)
 	}
-	if bySev["code-block match"] != SevInfo {
-		t.Errorf("code-block match = %q, want INFO", bySev["code-block match"])
+	if f := byMsg["code-block match"]; f.FileRole != RoleProse || f.Severity != SevInfo {
+		t.Errorf("code-block match: role=%q sev=%q, want prose/INFO", f.FileRole, f.Severity)
 	}
-	if bySev["no line info"] != SevLow {
-		t.Errorf("no-line markdown finding = %q, want LOW (downgraded)", bySev["no line info"])
+	if f := byMsg["no line info"]; f.FileRole != RoleProse || f.Severity != SevLow {
+		t.Errorf("no line info: role=%q sev=%q, want prose/LOW", f.FileRole, f.Severity)
+	}
+}
+
+func TestIsRuleYAMLFile(t *testing.T) {
+	rule := []byte(sampleRuleYAML)
+	plain := []byte("server:\n  port: 8080\n")
+	cases := []struct {
+		name    string
+		path    string
+		content []byte
+		want    bool
+	}{
+		{"lowercase yaml rule", "rules/supplychain/patterns/reverse_shell.yaml", rule, true},
+		{"uppercase YAML rule", "rules/FOO.YAML", rule, true},
+		{"uppercase YML rule", "rules/Bar.YML", rule, true},
+		{"mixed case Yaml rule", "rules/Baz.Yaml", rule, true},
+		{"backslash uppercase rule", `rules\FOO.YAML`, rule, true},
+		{"non-rule yaml", "config/app.yaml", plain, false},
+		{"non-rule uppercase yaml", "config/APP.YAML", plain, false},
+		{"non-yaml extension", "rules/FOO.txt", rule, false},
+		{"empty content", "rules/FOO.YAML", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsRuleYAMLFile(c.path, c.content); got != c.want {
+				t.Errorf("IsRuleYAMLFile(%q) = %v, want %v", c.path, got, c.want)
+			}
+		})
 	}
 }
 

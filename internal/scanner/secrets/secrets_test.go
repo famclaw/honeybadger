@@ -26,7 +26,6 @@ func TestRunSecrets(t *testing.T) {
 	fakeGHToken := fakeSecret("ghp_", "x8Kj2mLp9Qr4sT7v", "W0yZ3bN6dF1hA5cE8gI")
 	fakeStripeKey := fakeSecret("sk_live_", "1234567890abcdef", "ghijklmn")
 
-
 	tests := []struct {
 		name            string
 		files           map[string][]byte

@@ -1,0 +1,13 @@
+id: sc-committed-binary
+kind: pattern
+scanner: supplychain
+category: binary_artifact
+severity: HIGH
+message: Prebuilt binary committed to repository — supply-chain risk if not reproducible
+patterns:
+  - regex: '\.bin/'
+    description: bin/ directory present
+  - regex: 'bin/[^/]+\.(exe|out|elf|mach-o|pe)$'
+    description: executable binary in bin/
+  - regex: 'bin/[^/]+$'
+    description: potential executable in bin/ (no extension)

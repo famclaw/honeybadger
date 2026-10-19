@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ func main() {
 	llmModel := envOrDefault("HONEYBADGER_LLM_MODEL", "")
 	githubToken := envOrDefault("GITHUB_TOKEN", "")
 	gitlabToken := envOrDefault("GITLAB_TOKEN", "")
+	// HONEYBADGER_MAX_FILE_BYTES is honored by the fetcher; see docs/coverage.md
 
 	// Define flags
 	paranoia := flag.String("paranoia", "family", "paranoia level: off|minimal|family|strict|paranoid")
@@ -45,6 +47,8 @@ func main() {
 	rulesDir := flag.String("rules-dir", "", "custom rules directory")
 	toolManifest := flag.String("tool-manifest", "", "path to MCP tools/list JSON for tool-definition analysis")
 	toolBaseline := flag.String("tool-baseline", "", "path to approved MCP tools/list JSON for rug-pull diffing")
+	ignoreFile := flag.String("ignore-file", "", "path to operator-supplied .honeybadgerignore policy")
+	trustTargetIgnore := flag.Bool("trust-target-ignore", false, "trust target-authored .honeybadgerignore (default: false)")
 	// --mcp-server and --version are handled before flag.Parse (see below)
 
 	// Extract subcommand before parsing flags.
@@ -85,14 +89,28 @@ func main() {
 			}
 			break
 		}
+		if arg == "rules" && subcommand == "" {
+			subcommand = "rules"
+			// Process rules subcommands
+			if len(args) > i+1 {
+				// Check for subcommands like "list" or "explain"
+				if args[i+1] == "list" || args[i+1] == "explain" {
+					// Set up remaining args for further processing
+					remaining = args[i+2:]
+				}
+			}
+			break
+		}
 	}
 
-	if subcommand != "scan" {
+	if subcommand != "scan" && subcommand != "rules" {
 		fmt.Fprintln(os.Stderr, "usage: honeybadger scan <repo-url> [flags]")
+		fmt.Fprintln(os.Stderr, "       honeybadger rules list")
+		fmt.Fprintln(os.Stderr, "       honeybadger rules explain <rule-id>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	if repoURL == "" {
+	if subcommand == "scan" && repoURL == "" {
 		fmt.Fprintln(os.Stderr, "error: scan requires a <repo-url> argument")
 		os.Exit(1)
 	}
@@ -100,6 +118,22 @@ func main() {
 	// Parse remaining flags after extracting subcommand and URL
 	if err := flag.CommandLine.Parse(remaining); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Handle rules subcommands
+	if subcommand == "rules" {
+		// Handle rules list and rules explain
+		if len(remaining) > 0 {
+			if remaining[0] == "list" {
+				os.Exit(handleRulesList(*rulesDir))
+			} else if remaining[0] == "explain" && len(remaining) > 1 {
+				os.Exit(handleRulesExplain(remaining[1], *rulesDir))
+			}
+		}
+		// Default help for rules
+		fmt.Fprintln(os.Stderr, "usage: honeybadger rules list")
+		fmt.Fprintln(os.Stderr, "       honeybadger rules explain <rule-id>")
 		os.Exit(1)
 	}
 
@@ -122,6 +156,8 @@ func main() {
 		RulesDir:          *rulesDir,
 		ToolManifest:      *toolManifest,
 		ToolBaseline:      *toolBaseline,
+		IgnoreFile:        *ignoreFile,
+		TrustTargetIgnore: *trustTargetIgnore,
 	}
 	exitCode, err := run(cfg)
 	if err != nil {
@@ -152,6 +188,8 @@ type runConfig struct {
 	RulesDir          string
 	ToolManifest      string
 	ToolBaseline      string
+	IgnoreFile        string
+	TrustTargetIgnore bool
 }
 
 func run(cfg runConfig) (int, error) {
@@ -181,27 +219,17 @@ func run(cfg runConfig) (int, error) {
 	switch cfg.Format {
 	case "text":
 		emitter = report.NewTextEmitter(os.Stdout)
+	case "sarif":
+		emitter = report.NewSarifEmitter(os.Stdout, Version, rs)
 	default:
 		emitter = report.NewNDJSONEmitter(os.Stdout)
 	}
 	defer emitter.Close()
 
-	// 3. Handle --force
-	if cfg.Force {
-		if err := emitter.Emit(engine.ResultEarlyEvent{
-			Type:      "result",
-			Verdict:   "PASS",
-			Reasoning: "Scan bypassed via --force flag",
-		}); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
-		}
-		return 0, nil
-	}
-
-	// 4. Tier detection
+	// 3. Tier detection
 	tier := engine.DetectTier(cfg.Offline)
 
-	// 5. Sandbox detection and event
+	// 4. Sandbox detection and event
 	sandboxAvailable, sandboxType, reason := engine.DetectSandbox()
 	effectiveParanoia := string(paranoia)
 
@@ -223,14 +251,18 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// 6. Fetch repo
-	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
-	}
-
 	fetcher, err := fetch.Route(cfg.RepoURL)
 	if err != nil {
 		return 1, fmt.Errorf("routing: %w", err)
+	}
+
+	// Fail-fast guard: offline mode must not contact any remote source. The
+	// remote/local split is decided by the routed fetcher so URL classification
+	// stays a single source of truth in the fetch package (covers https://,
+	// git@, and scheme-less github.com/... / gitlab.com/... forms; local paths
+	// and stdin are allowed).
+	if cfg.Offline && fetch.RequiresNetwork(fetcher) {
+		return 1, fmt.Errorf("--offline: target %q requires network access; supply a local path instead", cfg.RepoURL)
 	}
 
 	// Wire stdin reader for piped input
@@ -244,13 +276,22 @@ func run(cfg runConfig) (int, error) {
 		SubPath:     cfg.SubPath,
 	}
 
+	// Emit fetch progress only after routing and the offline guard have
+	// passed, so an offline remote rejection does not mislead the user with
+	// a progress line before the error.
+	if err := emitter.Emit(engine.NewProgressEvent("fetch", "Fetching repository...")); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
+	}
+
 	repo, err := fetcher.Fetch(ctx, cfg.RepoURL, fetchOpts)
 	if err != nil {
 		return 1, fmt.Errorf("fetching repo: %w", err)
 	}
 
 	// 13a. Update verification: --installed-sha
-	if cfg.InstalledSHA != "" {
+	// --force bypasses this audit cache so the scan always runs
+	// ("force scan even if already audited").
+	if cfg.InstalledSHA != "" && !cfg.Force {
 		archiveHash := engine.ComputeRepoHash(repo)
 		if archiveHash == cfg.InstalledSHA {
 			if err := emitter.Emit(engine.ResultEarlyEvent{
@@ -296,13 +337,15 @@ func run(cfg runConfig) (int, error) {
 	events := scan.RunAll(ctx, repo, scanOpts, scanners)
 
 	// Collect findings before emitting (suppression must happen first).
-	// Runtime errors are emitted directly and never enter verdict computation.
+	// Runtime errors are emitted and feed into verdict computation.
 	var allFindings []scan.Finding
+	var runtimeErrors []scan.RuntimeError
 	for ev := range events {
 		switch v := ev.(type) {
 		case scan.Finding:
 			allFindings = append(allFindings, v)
 		case scan.RuntimeError:
+			runtimeErrors = append(runtimeErrors, v)
 			if err := emitter.Emit(v); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to write runtime error: %v\n", err)
 			}
@@ -322,22 +365,54 @@ func run(cfg runConfig) (int, error) {
 
 	// 7b. Apply .honeybadgerignore suppression before emitting.
 	var suppressedCount int
-	if raw, ok := repo.Files[".honeybadgerignore"]; ok {
-		ignoreSet, parseErr := ignore.Parse(raw, ".honeybadgerignore")
-		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to parse .honeybadgerignore: %v\n", parseErr)
-		} else {
-			var suppressed []ignore.SuppressedFinding
-			allFindings, suppressed = ignoreSet.Filter(allFindings)
-			suppressedCount = len(suppressed)
-		}
+
+	// Load suppression policy.
+	// The target .honeybadgerignore content is resolved from the fetched repo,
+	// with a filesystem fallback for local-path scans so the target policy is
+	// not silently skipped when it was not captured in repo.Files.
+	targetIgnoreContent := resolveTargetIgnoreContent(repo)
+
+	// Determine if we should trust target ignore rules based on either:
+	// 1. Explicit --trust-target-ignore flag
+	// 2. HONEYBADGER_TRUST_TARGET_IGNORE=1 environment variable
+	trustTargetIgnore := cfg.TrustTargetIgnore || os.Getenv("HONEYBADGER_TRUST_TARGET_IGNORE") == "1"
+
+	// Load policy with either content from repo or fall back to filesystem.
+	// Only the operator-supplied --ignore-file can make this fatal; a malformed
+	// target .honeybadgerignore is untrusted by default and degrades to the
+	// warning below instead of aborting.
+	policy, err := ignore.LoadPolicyFromContent(targetIgnoreContent, cfg.IgnoreFile, trustTargetIgnore)
+	if err != nil {
+		return 1, ignorePolicyLoadError(cfg.IgnoreFile, err)
+	}
+	if len(targetIgnoreContent) > 0 && policy.Target == nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to parse target .honeybadgerignore; continuing without target suppressions\n")
+	}
+
+	// Apply the policy to findings
+	outcome := ignore.Apply(policy, allFindings)
+
+	// Use the effective findings for reporting and verdict calculation
+	allFindings = outcome.Effective
+	suppressedCount = len(outcome.Suppressed)
+
+	// Merge coverage-incomplete findings after ApplyFileRoles and
+	// .honeybadgerignore filtering so they cannot be suppressed. These
+	// are meta-level guarantees about scan completeness, not per-file threats.
+	for _, cw := range repo.CoverageWarnings {
+		allFindings = append(allFindings, scan.Finding{
+			Type:     cw.Type,
+			Severity: cw.Severity,
+			Check:    cw.Check,
+			File:     cw.File,
+			FileRole: scan.RoleUnknown,
+			Message:  cw.Message,
+		})
 	}
 
 	// Now emit the kept findings.
-	for _, f := range allFindings {
-		if err := emitter.Emit(f); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
-		}
+	if err := emitter.Emit(allFindings); err != nil {
+		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
 	// 8. Emit health event
@@ -359,7 +434,7 @@ func run(cfg runConfig) (int, error) {
 	// 9. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
-	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" {
+	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" && !cfg.Offline {
 		if err := emitter.Emit(engine.NewProgressEvent("llm", "Asking LLM for verdict...")); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 		}
@@ -389,7 +464,9 @@ func run(cfg runConfig) (int, error) {
 	}
 
 	// 10. Compute final verdict
-	verdict, reasoning, keyFinding := engine.ComputeVerdict(allFindings, paranoia, llmVerdict)
+	scannerNames := engine.BuildScannerNames(scanOpts)
+	checkResults := engine.NewCheckResultsFromErrors(scannerNames, runtimeErrors)
+	verdict, reasoning, keyFinding := engine.ComputeVerdictWithCheckStatus(allFindings, paranoia, llmVerdict, checkResults)
 
 	// Count findings by severity
 	findingCounts := map[string]int{
@@ -423,6 +500,11 @@ func run(cfg runConfig) (int, error) {
 	}
 
 	// 11. Emit final result
+	// Attested mirrors the attestation scanner's configured-workflow finding
+	// (att-gh-workflow-configured): true only when that finding is present in
+	// the emitted set, never a hardcoded value, so CLI and MCP report the same
+	// fact.
+	attested := attestationPresent(allFindings)
 	result := engine.ResultEvent{
 		Type:              "result",
 		Verdict:           verdict,
@@ -431,7 +513,7 @@ func run(cfg runConfig) (int, error) {
 		FindingCounts:     findingCounts,
 		CVECount:          cveCount,
 		CVEMaxSeverity:    cveMaxSev,
-		Attested:          false,
+		Attested:          attested,
 		LLMModel:          cfg.LLMModel,
 		LLMUsed:           llmUsed,
 		Paranoia:          string(paranoia),
@@ -445,13 +527,16 @@ func run(cfg runConfig) (int, error) {
 		return 1, fmt.Errorf("writing output: %w", err)
 	}
 
-	// Emit suppression summary if any findings were suppressed
-	if suppressedCount > 0 {
+	// Emit suppression summary after the result event to preserve the
+	// established NDJSON stream order for downstream positional consumers.
+	if len(outcome.Applied) > 0 || len(outcome.Ignored) > 0 {
 		if err := emitter.Emit(engine.SuppressionEvent{
 			Type:            "suppression_summary",
+			AppliedSources:  outcome.Applied,
+			IgnoredSources:  outcome.Ignored,
 			SuppressedCount: suppressedCount,
 		}); err != nil {
-			return 1, fmt.Errorf("writing output: %w", err)
+			return 1, fmt.Errorf("writing suppression summary: %w", err)
 		}
 	}
 
@@ -466,9 +551,64 @@ func run(cfg runConfig) (int, error) {
 	return engine.ExitCodeForVerdict(verdict), nil
 }
 
+// resolveTargetIgnoreContent returns the target .honeybadgerignore content for
+// a fetched repo. It prefers the content captured in repo.Files during fetch and
+// falls back to reading the file from disk for local-path scans. The fallback
+// guards against a local scan (e.g. with --path) leaving the repo-root
+// .honeybadgerignore out of repo.Files while the file still exists on disk;
+// without it the target policy would be silently dropped even when
+// --trust-target-ignore is set. It returns nil when no content is available.
+func resolveTargetIgnoreContent(repo *fetch.Repo) []byte {
+	if repo == nil {
+		return nil
+	}
+	if repo.Files != nil {
+		if content, exists := repo.Files[".honeybadgerignore"]; exists {
+			return content
+		}
+	}
+	if repo.Platform == "local" && repo.URL != "" {
+		if content, err := os.ReadFile(filepath.Join(repo.URL, ".honeybadgerignore")); err == nil {
+			return content
+		}
+	}
+	return nil
+}
+
+// ignorePolicyLoadError formats the operator-facing error for a failed ignore
+// policy load. LoadPolicyFromContent only returns an error when the
+// operator-supplied --ignore-file is missing or malformed, so this is always
+// about the operator file, never the target's own .honeybadgerignore (which is
+// untrusted by default and degrades to a warning). The message makes that
+// asymmetry explicit and actionable: an operator who accidentally pointed
+// --ignore-file at the target's file (or a malformed file) sees why the scan
+// aborted and how it differs from the target source.
+func ignorePolicyLoadError(operatorFile string, err error) error {
+	return fmt.Errorf(
+		"operator policy file (--ignore-file %q) failed to load; it is trusted operator input and must parse. "+
+			"The target's own .honeybadgerignore is a separate, untrusted-by-default source and only produces a warning, not this error. "+
+			"Underlying error: %w", operatorFile, err)
+}
+
 func serveMCP(rulesDir string) error {
 	s := newMCPServer(rulesDir)
 	return server.ServeStdio(s)
+}
+
+// attestationPresent reports whether the attestation scanner found configured
+// build-attestation infrastructure in the source (the GitHub
+// actions/attest-build-provenance workflow). The result event's Attested flag
+// mirrors exactly that finding so CLI and MCP agree on the same fact; it is
+// never a hardcoded value. The cryptographic attestation API check is not
+// available for source scans (a commit SHA is not a sha256: artifact digest),
+// so a configured attestation workflow is the strongest source-level signal.
+func attestationPresent(findings []scan.Finding) bool {
+	for _, f := range findings {
+		if f.Check == "attestation" && f.RuleID == "att-gh-workflow-configured" {
+			return true
+		}
+	}
+	return false
 }
 
 func envOrDefault(key, fallback string) string {
@@ -476,4 +616,79 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func handleRulesList(rulesDir string) int {
+	// Load rules
+	rs, err := rules.Load(rulesDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading rules: %v\n", err)
+		return 1
+	}
+
+	// Print rules in a tabular format
+	fmt.Printf("%-20s %-10s %-50s\n", "ID", "SEVERITY", "TITLE")
+	fmt.Printf("%-20s %-10s %-50s\n", "-------------------", "----------", "--------------------------------------------------")
+
+	for _, rule := range rs.All() {
+		title := rule.Message
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+		fmt.Printf("%-20s %-10s %-50s\n", rule.ID, rule.Severity, title)
+	}
+
+	return 0
+}
+
+func handleRulesExplain(ruleID string, rulesDir string) int {
+	// Load rules
+	rs, err := rules.Load(rulesDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading rules: %v\n", err)
+		return 1
+	}
+
+	// Find the specific rule
+	var targetRule *rules.Rule
+	for _, rule := range rs.All() {
+		if rule.ID == ruleID {
+			targetRule = rule
+			break
+		}
+	}
+
+	if targetRule == nil {
+		fmt.Fprintf(os.Stderr, "rule with ID '%s' not found\n", ruleID)
+		return 1
+	}
+
+	// Print rule details
+	fmt.Printf("ID: %s\n", targetRule.ID)
+	fmt.Printf("Scanner: %s\n", targetRule.Scanner)
+	fmt.Printf("Category: %s\n", targetRule.Category)
+	fmt.Printf("Severity: %s\n", targetRule.Severity)
+	fmt.Printf("Message: %s\n", targetRule.Message)
+	if targetRule.MoreInfoURL != "" {
+		fmt.Printf("More Info: %s\n", targetRule.MoreInfoURL)
+	}
+	if len(targetRule.References) > 0 {
+		fmt.Printf("References:\n")
+		for _, ref := range targetRule.References {
+			fmt.Printf("  - %s\n", ref)
+		}
+	}
+
+	// Print patterns if available
+	if len(targetRule.Patterns) > 0 {
+		fmt.Printf("Patterns:\n")
+		for i, pattern := range targetRule.Patterns {
+			fmt.Printf("  %d. %s\n", i+1, pattern.Description)
+			if pattern.Regex != "" {
+				fmt.Printf("     Regex: %s\n", pattern.Regex)
+			}
+		}
+	}
+
+	return 0
 }

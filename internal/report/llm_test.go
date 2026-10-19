@@ -15,8 +15,8 @@ import (
 
 func TestAssembleLLMPromptContainsExpectedFields(t *testing.T) {
 	repo := &fetch.Repo{
-		URL:   "https://github.com/example/plugin",
-		SHA:   "abc123",
+		URL: "https://github.com/example/plugin",
+		SHA: "abc123",
 		Files: map[string][]byte{
 			"go.mod":   []byte("module example\ngo 1.21\n"),
 			"main.go":  []byte("package main\nfunc main() {}\n"),

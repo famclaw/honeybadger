@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
+
+	"github.com/famclaw/honeybadger/internal/scan"
 )
 
 // TextEmitter writes human-readable output with severity markers.
@@ -21,6 +24,22 @@ func NewTextEmitter(w io.Writer) *TextEmitter {
 func (e *TextEmitter) Emit(v any) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	if fs, ok := v.([]scan.Finding); ok {
+		for _, f := range fs {
+			if err := e.emitOne(f); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return e.emitOne(v)
+}
+
+// emitOne is a helper that processes a single finding or event.
+// It assumes the mutex is already held.
+func (e *TextEmitter) emitOne(v any) error {
 	// Marshal to map to inspect the "type" field generically.
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -81,7 +100,31 @@ func (e *TextEmitter) Emit(v any) error {
 
 	case "suppression_summary":
 		count, _ := m["suppressed_count"].(float64)
-		return e.writef("[suppressed] %d finding(s) suppressed by .honeybadgerignore\n", int(count))
+		appliedSources, _ := m["applied_sources"].([]any)
+		ignoredSources, _ := m["ignored_sources"].([]any)
+
+		// Display applied sources
+		if len(appliedSources) > 0 {
+			sources := make([]string, len(appliedSources))
+			for i, src := range appliedSources {
+				s, _ := src.(string)
+				sources[i] = s
+			}
+			if int(count) > 0 {
+				fmt.Fprintf(e.w, "[suppressed] %d finding(s) via: %s\n", int(count), strings.Join(sources, ", "))
+			} else {
+				fmt.Fprintf(e.w, "[suppression-applied] no findings matched via: %s\n", strings.Join(sources, ", "))
+			}
+		}
+
+		// Display ignored sources
+		if len(ignoredSources) > 0 {
+			for _, src := range ignoredSources {
+				fmt.Fprintf(e.w, "[suppression-ignored] %s: untrusted target\n", src)
+			}
+		}
+
+		return nil
 
 	case "runtime_error":
 		scanner, _ := m["scanner"].(string)
@@ -134,7 +177,7 @@ func (e *TextEmitter) writeVerdict(m map[string]any) error {
 	)
 }
 
-// writef is called only from Emit (directly or via writeVerdict). Emit holds
+// writef is called only from emitOne (directly or via writeVerdict). emitOne holds
 // e.mu for the entire call, so this helper does not lock.
 func (e *TextEmitter) writef(format string, args ...any) error {
 	_, err := fmt.Fprintf(e.w, format, args...)

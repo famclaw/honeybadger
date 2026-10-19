@@ -184,15 +184,12 @@ release:
     cosign verify ghcr.io/famclaw/honeybadger:{{ .Version }} \
       --certificate-identity-regexp ".*famclaw/honeybadger.*" \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
-
-    # GitHub attestation
-    gh attestation verify honeybadger-linux-amd64 --repo famclaw/honeybadger
     ```
   footer: |
     ---
 
     **Full changelog**: https://github.com/famclaw/honeybadger/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-    **Supply chain security**: All binaries are signed with [Sigstore cosign](https://sigstore.dev) (keyless), attested with [GitHub build provenance](https://github.blog/security/supply-chain-security/introducing-npm-package-provenance/), and include SPDX SBOMs. Container images are signed and pushed to GHCR.
+    **Supply chain security**: The release checksums file (SHA256SUMS) is signed with [Sigstore cosign](https://sigstore.dev) (keyless) and attested with [GitHub build provenance](https://github.blog/security/supply-chain-security/introducing-npm-package-provenance/); binaries are verified against that signed checksums file. Each release includes SPDX SBOMs. Container images are signed and pushed to GHCR.
 
   extra_files: []

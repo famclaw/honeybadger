@@ -1,0 +1,12 @@
+id: ss-famclaw-trigger-overbroad-keywords
+kind: pattern
+scanner: skillsafety
+category: trigger_injection
+severity: MEDIUM
+message: trigger contains over-broad keyword that may match unintended inputs
+signal: override_phrase
+patterns:
+  - regex: 'trigger:\s*[\*"#]'
+    description: trigger with wildcard or catch-all pattern
+  - regex: 'trigger:\s*""'
+    description: trigger with empty string

@@ -26,13 +26,13 @@ func makeSkillMD(yaml string) []byte {
 
 func TestRunMeta(t *testing.T) {
 	tests := []struct {
-		name          string
-		files         map[string][]byte
-		paranoia      scan.ParanoiaLevel
-		wantCount     int            // expected number of findings (-1 to skip count check)
-		wantSeverity  string         // if set, at least one finding must have this severity
-		wantContains  string         // if set, at least one finding message must contain this
-		wantZero      bool           // if true, expect exactly zero findings
+		name         string
+		files        map[string][]byte
+		paranoia     scan.ParanoiaLevel
+		wantCount    int    // expected number of findings (-1 to skip count check)
+		wantSeverity string // if set, at least one finding must have this severity
+		wantContains string // if set, at least one finding message must contain this
+		wantZero     bool   // if true, expect exactly zero findings
 	}{
 		{
 			name: "valid SKILL.md with all fields and matching permissions",

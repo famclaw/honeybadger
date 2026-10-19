@@ -113,3 +113,50 @@ func TestOptionsHasToolFields(t *testing.T) {
 		t.Fatalf("ToolManifest/ToolBaseline not settable")
 	}
 }
+
+func TestFindingJSONShapeFileRole(t *testing.T) {
+	// (a) A classified finding carries a valid role in the JSON.
+	classified := Finding{
+		Type:     "finding",
+		Severity: SevHigh,
+		Check:    "secrets",
+		File:     "main.go",
+		FileRole: RoleCode,
+		Message:  "test",
+	}
+	data, err := json.Marshal(classified)
+	if err != nil {
+		t.Fatalf("Marshal classified: %v", err)
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("Unmarshal classified: %v", err)
+	}
+	fr, ok := m["file_role"]
+	if !ok {
+		t.Fatal("classified finding: expected file_role key in JSON, got omitted")
+	}
+	if fr != "code" {
+		t.Errorf("classified finding: file_role = %q, want %q", fr, "code")
+	}
+
+	// (b) An unclassified finding omits the file_role key entirely.
+	unclassified := Finding{
+		Type:     "finding",
+		Severity: SevLow,
+		Check:    "meta",
+		File:     "doc.md",
+		Message:  "unclassified",
+	}
+	data, err = json.Marshal(unclassified)
+	if err != nil {
+		t.Fatalf("Marshal unclassified: %v", err)
+	}
+	var m2 map[string]interface{}
+	if err := json.Unmarshal(data, &m2); err != nil {
+		t.Fatalf("Unmarshal unclassified: %v", err)
+	}
+	if _, ok := m2["file_role"]; ok {
+		t.Error("unclassified finding: file_role key present in JSON, expected omitted")
+	}
+}

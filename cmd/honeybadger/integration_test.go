@@ -17,6 +17,7 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/famclaw/honeybadger/internal/engine"
 	"github.com/famclaw/honeybadger/internal/fetch"
 	"github.com/famclaw/honeybadger/internal/testfixture"
 )
@@ -109,7 +110,10 @@ func TestCLI_ScanVerdicts(t *testing.T) {
 			dir := testfixture.WriteToDir(t, tt.repo)
 
 			cmd := exec.Command(testBinary, "scan", dir, "--paranoia", tt.paranoia, "--format", "ndjson", "--offline")
-			out, _ := cmd.CombinedOutput()
+			out, err := cmd.CombinedOutput()
+			if cmd.ProcessState == nil {
+				t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+			}
 			exitCode := cmd.ProcessState.ExitCode()
 
 			result := findResultEvent(t, out)
@@ -134,15 +138,88 @@ func TestCLI_ScanVerdicts(t *testing.T) {
 // CLI special mode tests
 // ---------------------------------------------------------------------------
 
-func TestCLI_ForceFlag(t *testing.T) {
-	cmd := exec.Command(testBinary, "scan", "anything", "--force", "--format", "ndjson")
+// Regression for issue #82: `honeybadger scan --force` must NOT bypass
+// analysis and report VERDICT: PASS.
+//
+// Previously the --force short-circuit emitted a bare PASS result with zero
+// findings and zero duration after performing no work at all -- indistinguishable
+// from a clean scan and strictly wrong for a security gate. The flag's own help
+// text reads "force scan even if already audited", so --force must run the
+// scanners. This test scans a repo containing a hardcoded secret: with --force
+// the scan must still run and FAIL. It FAILS against the buggy code (PASS, 0
+// findings, 0ms) and PASSES once the short-circuit is removed.
+func TestCLI_ForceFlagRunsAnalysis(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.SecretsRepo())
+
+	cmd := exec.Command(testBinary, "scan", dir,
+		"--force", "--paranoia", "family", "--format", "ndjson", "--offline")
+	out, err := cmd.CombinedOutput()
+	if cmd.ProcessState == nil {
+		t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+	}
+	result := findResultEvent(t, out)
+
+	verdict, _ := result["verdict"].(string)
+
+	// A repo with a hardcoded secret must never report PASS -- especially via
+	// --force, which is required to run the analysis.
+	if verdict == "PASS" {
+		t.Errorf("--force reported PASS for a repo containing secrets; "+
+			"analysis was bypassed\n%s", out)
+	}
+
+	// Real findings must be present -- the scan actually executed.
+	if findings := countFindings(t, out); findings == 0 {
+		t.Errorf("--force produced 0 findings; analysis did not run\n%s", out)
+	}
+
+	// A real scan takes a measurable amount of time. The buggy short-circuit
+	// emitted no duration_ms at all (Duration: 0ms).
+	if dur, ok := result["duration_ms"].(float64); !ok || dur == 0 {
+		t.Errorf("--force duration_ms = %v, expected > 0 (analysis did not run)\n%s",
+			result["duration_ms"], out)
+	}
+
+	// Exit code must reflect the real verdict, never a silent 0 pass. Since this
+	// repo contains a hardcoded secret, the scan must FAIL and the exit code must
+	// be non-zero. The check is on the exit code directly — not gated on
+	// `verdict != "PASS"` — because the --force bypass bug is itself what
+	// produces verdict "PASS"; gating on that clause would make this assertion
+	// dead (false exactly when the bug re-emerges).
+	if exit := cmd.ProcessState.ExitCode(); exit == 0 {
+		t.Errorf("--force exited 0 despite a repo containing secrets; expected non-zero\n%s", out)
+	}
+}
+
+// Regression companion: --force must also bypass the --installed-sha audit
+// cache so it truly "forces a scan even if already audited". This test proves
+// the cache is real (matching SHA without --force short-circuits to PASS) and
+// that --force defeats it (scan runs against a repo with a secret => FAIL).
+func TestCLI_ForceFlagBYPASSSSHACache(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.SecretsRepo())
+	installedSHA := engine.ComputeRepoHash(testfixture.SecretsRepo())
+
+	// Without --force, a matching installed SHA short-circuits to PASS (audit
+	// cache is real and performs hash-comparison work).
+	cmd := exec.Command(testBinary, "scan", dir,
+		"--installed-sha", installedSHA,
+		"--paranoia", "family", "--format", "ndjson", "--offline")
 	out, _ := cmd.CombinedOutput()
 	result := findResultEvent(t, out)
-	if result["verdict"] != "PASS" {
-		t.Errorf("--force verdict = %q, want PASS", result["verdict"])
+	if verdict, _ := result["verdict"].(string); verdict != "PASS" {
+		t.Errorf("matching --installed-sha without --force verdict = %q, want PASS "+
+			"(proves the audit cache hash matches)\n%s", verdict, out)
 	}
-	if cmd.ProcessState.ExitCode() != 0 {
-		t.Errorf("--force exit code = %d, want 0", cmd.ProcessState.ExitCode())
+
+	// With --force the cache is bypassed: the scan must run and FAIL.
+	cmdForced := exec.Command(testBinary, "scan", dir,
+		"--force", "--installed-sha", installedSHA,
+		"--paranoia", "family", "--format", "ndjson", "--offline")
+	outF, _ := cmdForced.CombinedOutput()
+	resultF := findResultEvent(t, outF)
+	if verdict, _ := resultF["verdict"].(string); verdict == "PASS" {
+		t.Errorf("--force with matching --installed-sha reported PASS; "+
+			"the audit cache should have been bypassed\n%s", outF)
 	}
 }
 
@@ -280,5 +357,150 @@ func TestCLI_SelfScanNoFalsePositive(t *testing.T) {
 					"must pass its own scan\noutput: %s", tier, out)
 			}
 		})
+	}
+}
+
+// Regression: the offline guard must reject every remote form that
+// fetch.Route routes to a network fetcher, not just URLs that happen to
+// contain "://" or start with "git@". The old string heuristic
+// (strings.Contains(url, "://") || strings.HasPrefix(url, "git@")) let
+// scheme-less github.com/owner/repo and gitlab.com/owner/repo through
+// even though fetch.Route routes them to remote fetchers. The guard must
+// route first and reject offline mode whenever the concrete fetcher is
+// remote, without ever calling Fetch on a remote in offline mode.
+func TestCLI_OfflineRejectsRemoteTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{"https github", "https://github.com/famclaw/honeybadger"},
+		{"git ssh github", "git@github.com:famclaw/honeybadger.git"},
+		{"scheme-less github", "github.com/famclaw/honeybadger"},
+		{"scheme-less gitlab", "gitlab.com/famclaw/honeybadger"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(testBinary, "scan", tt.url, "--offline", "--format", "ndjson")
+			out, err := cmd.CombinedOutput()
+			if cmd.ProcessState == nil {
+				t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+			}
+
+			// Should exit with code 1
+			if exitCode := cmd.ProcessState.ExitCode(); exitCode != 1 {
+				t.Errorf("expected exit code 1, got %d\noutput: %s", exitCode, out)
+			}
+
+			// Should contain error message about network access
+			outputStr := string(out)
+			if !strings.Contains(outputStr, "requires network access") {
+				t.Errorf("expected output to contain 'requires network access', got: %s", outputStr)
+			}
+
+			// Should not contain any verdict NDJSON event
+			if strings.Contains(outputStr, `"type":"result"`) {
+				t.Errorf("expected no verdict NDJSON event, but found one in output: %s", outputStr)
+			}
+		})
+	}
+}
+
+// Regression: `scan <remote> --offline` used to emit "Fetching repository..."
+// before fetch.Route and the offline RequiresNetwork guard ran, so the user
+// saw a misleading fetch-progress line before the "requires network access"
+// error. The fetch progress event must only be emitted after routing and the
+// guard pass (i.e. right before an actual fetch). An offline scan of a local
+// path is allowed and must keep emitting the progress line.
+func TestCLI_OfflineRemoteDoesNotEmitFetchProgress(t *testing.T) {
+	const progress = "Fetching repository"
+
+	t.Run("remote offline reports error without fetch progress", func(t *testing.T) {
+		cmd := exec.Command(testBinary, "scan", "github.com/famclaw/honeybadger", "--offline", "--format", "text")
+		out, err := cmd.CombinedOutput()
+		if cmd.ProcessState == nil {
+			t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+		}
+		if exitCode := cmd.ProcessState.ExitCode(); exitCode != 1 {
+			t.Errorf("expected exit code 1, got %d\noutput: %s", exitCode, out)
+		}
+		outputStr := string(out)
+		if !strings.Contains(outputStr, "requires network access") {
+			t.Errorf("expected 'requires network access' in output, got: %s", outputStr)
+		}
+		if strings.Contains(outputStr, progress) {
+			t.Errorf("offline remote scan must not emit fetch progress before failing, got: %s", outputStr)
+		}
+	})
+
+	t.Run("local offline preserves fetch progress", func(t *testing.T) {
+		dir := testfixture.WriteToDir(t, testfixture.CleanRepo())
+		cmd := exec.Command(testBinary, "scan", dir, "--offline", "--format", "text")
+		out, err := cmd.CombinedOutput()
+		if cmd.ProcessState == nil {
+			t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+		}
+		outputStr := string(out)
+		if !strings.Contains(outputStr, progress) {
+			t.Errorf("offline local-path scan should still emit fetch progress, got: %s", outputStr)
+		}
+	})
+}
+
+// Companion to TestCLI_OfflineRejectsRemoteTarget: the offline guard must
+// only reject remote targets. An offline scan of a local path is the
+// intended offline workflow and must complete with a verdict.
+func TestCLI_OfflineLocalPathSucceeds(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.CleanRepo())
+
+	cmd := exec.Command(testBinary, "scan", dir, "--offline", "--paranoia", "family", "--format", "ndjson")
+	out, err := cmd.CombinedOutput()
+	if cmd.ProcessState == nil {
+		t.Fatalf("honeybadger binary did not start: %v\noutput: %s", err, out)
+	}
+
+	outputStr := string(out)
+	if strings.Contains(outputStr, "requires network access") {
+		t.Errorf("offline scan of a local path must not be rejected, got: %s", out)
+	}
+
+	result := findResultEvent(t, out)
+	if verdict, _ := result["verdict"].(string); verdict == "" {
+		t.Errorf("expected a verdict for local-path offline scan, got: %s", out)
+	}
+}
+
+func TestCLI_OfflineWithLLM(t *testing.T) {
+	// Test local directory scan with --offline, --paranoia strict, --llm-endpoint
+	// Should not ask LLM for verdict but still produce a verdict
+
+	// Create a temporary directory with some content
+	tempDir, err := os.MkdirTemp("", "test-repo-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a simple go.mod file to make it look like a Go project
+	goModContent := `module test
+go 1.19
+`
+	err = os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte(goModContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write go.mod: %v", err)
+	}
+
+	cmd := exec.Command(testBinary, "scan", tempDir, "--offline", "--paranoia", "strict", "--llm", "http://127.0.0.1:9", "--format", "ndjson")
+	out, err := cmd.CombinedOutput()
+	outputStr := string(out)
+
+	// Should not contain "Asking LLM for verdict"
+	if strings.Contains(outputStr, "Asking LLM for verdict") {
+		t.Errorf("Expected output to not contain \"Asking LLM for verdict\", but found it in: %s", outputStr)
+	}
+
+	// Should still produce a verdict
+	if !strings.Contains(outputStr, "\"type\":\"result\"") {
+		t.Errorf("Expected output to contain verdict NDJSON event, but found none in: %s", outputStr)
 	}
 }

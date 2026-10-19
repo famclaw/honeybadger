@@ -15,7 +15,7 @@ HoneyBadger performs static analysis only -- it reads source code and metadata b
 
 ## Install
 
-    # Go install (requires Go 1.22+)
+    # Go install (requires Go 1.26.4+)
     go install github.com/famclaw/honeybadger/cmd/honeybadger@latest
 
     # Binary download (Linux amd64)
@@ -24,6 +24,21 @@ HoneyBadger performs static analysis only -- it reads source code and metadata b
 
     # Docker
     docker pull ghcr.io/famclaw/honeybadger:latest
+
+## Secure Installation Note
+
+For secure installation, we recommend downloading the binary first, inspecting it, and then executing it:
+
+```bash
+# Download the binary
+curl -fsSL https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 -o honeybadger
+
+# Inspect the downloaded file (optional but recommended)
+ls -la honeybadger
+
+# Make it executable
+chmod +x honeybadger
+```
 
 All platforms: [Releases](https://github.com/famclaw/honeybadger/releases/latest) —
 Linux (amd64, arm64, armv7), macOS (arm64, amd64).
@@ -34,19 +49,23 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
 ### CLI
 
     honeybadger scan <repo-url> [flags]
+    where <repo-url> supports HTTPS, SSH/git@ (e.g., git@github.com:user/repo), and local paths.
 
     Flags:
       --paranoia string      off|minimal|family|strict|paranoid (default: family)
-      --format string        ndjson|text (default: ndjson)
+      --format string        ndjson|text|sarif (default: ndjson)
       --llm string           LLM endpoint override
       --db string            Path to audit trail file
       --installed-sha string SHA256 of installed version
       --installed-tool-hash  SHA256 of installed MCP tool definitions
       --tool-manifest string  Path to MCP tools/list JSON for tool-definition analysis
       --tool-baseline string  Path to approved tools/list JSON for rug-pull diffing
+      --trust-target-ignore  Honor target .honeybadgerignore (default: off; target file is untrusted)
+      --ignore-file string   Operator-supplied suppression policy file (always applied; read failure aborts scan)
       --force                Skip scan, exit 0
       --offline              Skip network calls, scan local only
       --path string          Subdirectory within repo to scan
+        See [docs/sarif-output.md] for details on SARIF output.
 
 ### MCP Server
 
@@ -60,6 +79,77 @@ Speaks MCP JSON-RPC over stdio. Exposes `honeybadger_scan` tool.
 
 Reads from stdin and scans it as a single file (`SKILL.md` by default).
 Input is capped at 10 MB.
+
+#### SARIF Output
+
+HoneyBadger now supports generating SARIF (Static Analysis Results Interchange Format) 2.1.0 output for integration with security tools and CI/CD pipelines:
+
+    honeybadger scan <repo-url> --format sarif
+
+This format is compatible with various security platforms and CI/CD systems. The SARIF output includes detailed information about each finding, including rule IDs, severity levels, file locations, and additional metadata.
+
+##### Example Usage
+
+```bash
+honeybadger scan https://github.com/example/repo --format sarif
+```
+
+##### SARIF Output Structure
+
+The SARIF output includes:
+- **Version**: "2.1.0" 
+- **Schema**: "https://json.schemastore.org/sarif-2.1.0-rtm.5.json"
+- **Tool**: honeybadger driver with name and version
+- **Results**: Each finding becomes a SARIF result with:
+  - `ruleId`: The rule identifier
+  - `level`: Severity mapping (error, warning, note)
+  - `message.text`: Finding message
+  - `locations.physicalLocation.artifactLocation.uri`: File path
+  - `locations.physicalLocation.region.startLine`: Line number
+  - `properties`: Additional metadata including rule_id, more_info_url, references, package, version, ecosystem, cve_id, fixed_in
+
+##### Severity Mapping
+
+| HoneyBadger Severity | SARIF Level |
+|---------------------|-------------|
+| CRITICAL            | error       |
+| HIGH                | error       |
+| MEDIUM              | warning     |
+| LOW                 | note        |
+| INFO                | note        |
+
+#### Rules CLI
+
+HoneyBadger now supports listing and explaining detection rules:
+
+    honeybadger rules list
+    honeybadger rules explain <rule-id>
+
+This feature allows users to inspect the available detection rules, see their details, and understand what threats they are designed to catch.
+
+##### Example Usage
+
+```bash
+# List all available rules
+honeybadger rules list
+
+# Explain a specific rule
+honeybadger rules explain SECRET_IN_CODE
+```
+
+#### SSH/git@ Clone URLs
+
+HoneyBadger now supports scanning repositories using SSH/git@ clone URLs:
+
+    honeybadger scan git@github.com:user/repo.git
+
+This enables scanning private repositories or repositories that are only accessible via SSH without requiring token authentication.
+
+##### Example Usage
+
+```bash
+honeybadger scan git@github.com:user/repo.git
+```
 
 ### Suppressing findings
 
@@ -79,6 +169,30 @@ Suppressed findings are excluded from the verdict. A `suppression_summary`
 NDJSON event is emitted when findings are suppressed. In text mode, a summary
 line is printed after the verdict.
 
+#### Trust Boundary
+
+HoneyBadger implements a trust boundary for `.honeybadgerignore` files:
+
+- By default, scanning an untrusted target repository cannot let its own
+  `.honeybadgerignore` suppress security findings or turn FAIL/WARN into an
+  unqualified PASS.
+
+- To enable suppression from target `.honeybadgerignore` files, operators
+  must explicitly configure this via `--trust-target-ignore` flag or
+  `HONEYBADGER_TRUST_TARGET_IGNORE=1` environment variable.
+
+- Operators can provide an explicit operator-supplied policy via
+  `--ignore-file` flag, which is always applied regardless of target trust
+  settings.
+
+This prevents malicious packages from approving themselves by placing
+suppressions in their own files.
+
+### Rules CLI
+
+    honeybadger rules list
+    honeybadger rules explain <rule-id>
+
 ## What it checks
 
 | Check | Scanner | Description |
@@ -93,19 +207,29 @@ line is printed after the verdict.
 | Typosquat | supplychain | Edit-distance check against popular package names |
 | SKILL.md fields | meta | Required fields and format validation |
 | Capability drift | capability | Declared `requires.*` vs actual code: network/filesystem/bins/env reads (family+) |
-| Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
+| Build provenance | attestation | Build-attestation workflow + release-artifact presence checks (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
-| Prompt injection | skillsafety | Override phrases in 11 languages (family+) |
+| Prompt injection | skillsafety | Override phrases in 11 languages, across SKILL.md and any referenced text files (family+) |
 | Homoglyphs | skillsafety | Mixed-script words (Latin+Cyrillic/Greek/Armenian) (family+) |
 | Zero-width chars | skillsafety | Hidden Unicode characters in skill content (family+) |
 | RTL override | skillsafety | Right-to-left text direction manipulation (family+) |
 | Data exfil intent | skillsafety | Sensitive paths + external/webhook URLs correlation (family+) |
 | Multi-language hiding | skillsafety | Unexpected script blocks in primary-language skills (family+) |
-| MCP tool injection | mcptool | Prompt injection in MCP tool/param descriptions, titles, defaults, enums (family+) |
+| MCP tool injection | mcptool | Prompt injection in MCP tool/param descriptions, titles, defaults, enums, and the SKILL.md body (family+) |
+| MCP read-from-other-file | mcptool | SKILL.md directing the agent to read/see/consult a separate instruction file (family+) |
 | MCP tool obfuscation | mcptool | Zero-width / homoglyph / RTL / Tags-block chars in tool definitions (family+) |
 | MCP cross-tool shadowing | mcptool | One tool's description redefining another tool's behavior (family+) |
 | MCP capability mismatch | mcptool | Tool declares readOnlyHint but params/source show writes (family+) |
 | MCP rug pull | mcptool | Tool definitions changed since the approved baseline (family+) |
+
+## Binary Detection
+
+HoneyBadger implements robust binary file detection to prevent scanning of non-text content. Two approaches are used:
+
+1. **Null-byte detection** - Checks for null bytes (0x00) in the first 512 bytes of file content
+2. **UTF-8 validation** - Ensures content is valid UTF-8 encoded text
+
+Binary files are automatically skipped during scanning to avoid processing executables, libraries, or compiled code that wouldn't benefit from security scanning rules.
 
 ## Why HoneyBadger
 
@@ -156,6 +280,8 @@ Newline-delimited JSON streamed to stdout. Events: progress, finding, cve, healt
 Findings include rule metadata when available: `rule_id`, `more_info_url`, and `references` from the source YAML rule.
 In text mode, the severity tag shows `[SEVERITY rule_id]` and a `→ url` line links to further documentation.
 
+CVE severity is graded from the CVSS v3/v4 score, fetching the full osv.dev record when the batch response omits it. When no CVSS score is available, severity falls back to `MEDIUM` and the finding carries `reason: severity_unknown` so a fallback MEDIUM is distinguishable from a graded one.
+
 Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error.
 
 ## Project structure
@@ -165,12 +291,20 @@ honeybadger/
 ├── cmd/honeybadger/
 │   ├── main.go              # CLI entry point — full pipeline wiring
 │   ├── mcp.go               # MCP server mode — JSON-RPC over stdio
+│   ├── main_test.go         # attestation-present unit tests
 │   ├── mcp_test.go          # MCP server tests via in-process client
 │   ├── integration_test.go  # CLI + MCP integration tests (build tag: integration)
-│   └── e2e_test.go          # E2E stdio MCP server subprocess tests
+│   ├── e2e_test.go          # E2E stdio MCP server subprocess tests
+│   ├── hook_test.go         # skill-hook exit-code contract tests (Unix/jq)
+│   ├── resolve_target_ignore_test.go  # target .honeybadgerignore filesystem-fallback tests
+│   ├── scan_fixture_test.go           # suppression-scenario scan fixture tests
+│   ├── suppression_order_test.go      # NDJSON suppression_summary-after-result order (build tag: integration)
+│   ├── ignore_behavior_test.go        # ignore-policy behavior tests
+│   └── ignore_policy_error_test.go    # operator policy load error-message tests
 ├── internal/
 │   ├── engine/
 │   │   ├── engine.go        # Verdict computation, tier/sandbox detection, scanner list builder
+│   │   ├── events.go        # NDJSON event envelopes (progress, sandbox, health, result)
 │   │   └── engine_test.go
 │   ├── fetch/
 │   │   ├── fetch.go         # Repo type, Route(), Fetcher interface
@@ -182,7 +316,8 @@ honeybadger/
 │   │   └── tarball.go       # Tarball fetcher
 │   ├── ignore/
 │   │   ├── ignore.go        # .honeybadgerignore parser and finding filter
-│   │   └── ignore_test.go
+│   │   ├── ignore_test.go
+│   │   └── ignore_integration_test.go
 │   ├── report/
 │   │   ├── types.go         # Emitter interface
 │   │   ├── ndjson.go        # NDJSON streaming emitter
@@ -190,7 +325,15 @@ honeybadger/
 │   │   ├── text.go          # Human-readable text emitter
 │   │   ├── text_test.go
 │   │   ├── llm.go           # LLM prompt assembly + verdict calling
-│   │   └── llm_test.go
+│   │   ├── llm_test.go
+│   │   ├── sarif.go         # SARIF 2.1.0 emitter
+│   │   └── sarif_test.go
+│   ├── rules/
+│   │   ├── rules.go         # RuleSet loading (embedded + user YAML, by-ID merge)
+│   │   ├── types.go         # Rule, PatternDef, CompiledPattern types
+│   │   ├── compile.go       # Rule validation + regex compilation
+│   │   ├── eval.go          # MatchLine / HasPackage rule evaluation
+│   │   └── rules_test.go
 │   ├── scan/
 │   │   ├── finding.go       # Finding struct, severity constants, ParanoiaLevel, Options
 │   │   ├── finding_test.go
@@ -200,7 +343,9 @@ honeybadger/
 │   │   ├── fileclass.go     # File-role classifier (Code/Test/Doc/Config/Rules), finding re-weighting
 │   │   ├── fileclass_test.go
 │   │   ├── markdown.go      # Markdown code-block vs prose discrimination
-│   │   └── markdown_test.go
+│   │   ├── markdown_test.go
+│   │   ├── event.go         # Event interface + RuntimeError (non-verdict scanner failures)
+│   │   └── binary.go        # Shared binary detection functions
 │   ├── scanner/
 │   │   ├── secrets/
 │   │   │   ├── secrets.go       # Secrets scanner (gitleaks-powered)
@@ -223,8 +368,20 @@ honeybadger/
 │   │   │   ├── bins.go          # Executable invocation detection
 │   │   │   ├── env.go           # Environment variable read detection
 │   │   │   └── capability_test.go
+│   │   ├── skillsafety/
+│   │   │   ├── scanner.go       # Skill-safety scanner entry point (extract → evaluate → findings)
+│   │   │   ├── signals.go       # Structured signal extraction from skill files
+│   │   │   ├── extract.go       # Prompt-injection override-phrase extraction
+│   │   │   ├── evaluate.go      # Safety-rule evaluation over extracted signals
+│   │   │   ├── language.go      # Primary-language / script-block detection
+│   │   │   ├── unicode.go       # Zero-width / homoglyph / RTL codepoint detection
+│   │   │   ├── evaluate_test.go
+│   │   │   ├── extract_test.go
+│   │   │   ├── language_test.go
+│   │   │   ├── scanner_test.go
+│   │   │   └── unicode_test.go
 │   │   ├── attestation/
-│   │   │   ├── attestation.go   # Attestation verification scanner
+│   │   │   ├── attestation.go   # Build-provenance / attestation scanner
 │   │   │   └── attestation_test.go
 │   │   └── mcptool/
 │   │       ├── mcptool.go           # MCP tool scanner entry point
@@ -288,13 +445,13 @@ honeybadger/
 
 ## Status
 
-**v0.5.1 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.5.1)
+**v0.6.2 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.6.2)
 
 Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
 attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
 poisoning, cross-tool shadowing, capability mismatch, and rug-pull drift.
-Detection rules are YAML-defined and runtime-extensible. Binaries signed with
-Sigstore cosign, SPDX SBOMs attached to every release.
+Detection rules are YAML-defined and runtime-extensible. The release SHA256SUMS
+file is signed with Sigstore cosign; SPDX SBOMs attached to every release.
 
 File-role classification distinguishes a threat *described* in documentation
 or defined in a rule corpus from one *present* in executable code, so

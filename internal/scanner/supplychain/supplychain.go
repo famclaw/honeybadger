@@ -90,14 +90,14 @@ func Run(ctx context.Context, repo *fetch.Repo, opts scan.Options, out chan<- sc
 			continue
 		}
 
-		// Skip test files — regex patterns in tests are fixtures, not threats
-		if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "testdata/") || strings.Contains(path, "testfixture/") {
-			continue
-		}
-
 		lines := strings.Split(string(content), "\n")
 		for lineNum, line := range lines {
 			for _, p := range activePatterns {
+				// Skip the committed-binary rule for text files to avoid false positives
+				// on source code that mentions bin/ directories (e.g., in comments).
+				if p.ruleID == "sc-committed-binary" {
+					continue
+				}
 				if p.re.MatchString(line) {
 					out <- scan.Finding{
 						Type:        "finding",

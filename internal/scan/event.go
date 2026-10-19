@@ -11,8 +11,9 @@ func (RuntimeError) isEvent() {}
 
 // RuntimeError reports a scanner failure (panic, external service failure,
 // configuration load error, etc.) that is operationally distinct from a
-// security finding. RuntimeErrors do not affect verdict computation —
-// a panicking scanner cannot flip a clean repo to FAIL.
+// security finding. RuntimeErrors feed into check-status tracking:
+// a scanner that panics or fails causes its check to be marked FAIL,
+// which can downgrade an otherwise clean verdict to INCOMPLETE.
 type RuntimeError struct {
 	Type    string `json:"type"` // always "runtime_error"
 	Scanner string `json:"scanner"`

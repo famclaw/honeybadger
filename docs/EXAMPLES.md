@@ -29,6 +29,28 @@
 ### Write audit trail to SQLite
     honeybadger scan github.com/someone/some-skill --db ./audit.db
 
+### SARIF output
+    honeybadger scan github.com/someone/some-skill --format sarif
+
+### Rules CLI
+    honeybadger rules list          # List all available rules
+    honeybadger rules explain <rule-id>  # Show detailed information about a specific rule
+
+### Scan via SSH URL
+    honeybadger scan git@github.com:someone/some-skill.git
+
+Note: When scanning private repositories via SSH URL, you must have SSH keys properly configured and added to your SSH agent. The repository must be accessible using your default SSH key or the key specified in your SSH configuration.
+
+### SARIF output example
+    honeybadger scan github.com/someone/some-skill --format sarif
+
+### Rules CLI example
+    honeybadger rules list          # List all available rules
+    honeybadger rules explain SECRET_IN_CODE  # Show detailed information about a specific rule
+
+### SSH URL scan example
+    honeybadger scan git@github.com:someone/some-skill.git
+
 ## MCP Server
 
 ### Start as MCP server
@@ -59,6 +81,8 @@
 | `installed_sha` | string | No | SHA256 of currently installed version archive |
 | `installed_tool_hash` | string | No | SHA256 of installed MCP tool definitions |
 | `path` | string | No | Subdirectory within repo to scan |
+| `trust_target_ignore` | bool | No | Trust a target-authored `.honeybadgerignore` (default: `false`) |
+| `ignore_file` | string | No | Operator-supplied `.honeybadgerignore` policy path |
 
 ### Response example
 ```json
@@ -89,8 +113,19 @@ Each line is a self-contained JSON object:
 {"type":"progress","phase":"fetch","message":"Fetching repository..."}
 {"type":"progress","phase":"scan","message":"Running security scanners..."}
 {"type":"finding","severity":"HIGH","check":"secrets","file":"config.go","line":3,"message":"..."}
+{"type":"cve","severity":"HIGH","check":"cve","package":"lodash","version":"4.17.4","id":"GHSA-xxxx","summary":"...","fixed_in":"4.17.5","references":["https://osv.dev/vulnerability/GHSA-xxxx"]}
 {"type":"health","stars":42,"contributors":3,"age_days":365,"last_commit_days":7,...}
 {"type":"result","verdict":"FAIL","reasoning":"...","finding_counts":{...},...}
+```
+
+CVE events carry a `reason` field only when severity could not be graded from a
+CVSS v3/v4 score (neither the osv.dev batch response nor the follow-up
+`/v1/vulns/{id}` record supplied one). In that case `severity` falls back to
+`MEDIUM` and `reason` is set to `"severity_unknown"`, letting operators
+distinguish a graded MEDIUM from an ungraded fallback:
+
+```
+{"type":"cve","severity":"MEDIUM","check":"cve","package":"acme","version":"1.2.3","id":"GHSA-yyyy","reason":"severity_unknown","references":["https://osv.dev/vulnerability/GHSA-yyyy"]}
 ```
 
 ## Exit Codes (CLI)

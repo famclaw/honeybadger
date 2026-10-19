@@ -21,7 +21,7 @@ Every scanner lives in its own package under `internal/scanner/`:
 - `internal/scanner/supplychain/` -- supply chain risk patterns + typosquatting
 - `internal/scanner/cve/` -- osv.dev CVE scanner + dependency parser (8 lockfile formats)
 - `internal/scanner/meta/` -- SKILL.md metadata validation
-- `internal/scanner/attestation/` -- build provenance + cosign verification
+- `internal/scanner/attestation/` -- build provenance + cosign/SHA256SUMS artifact detection
 
 Core types and shared utilities:
 

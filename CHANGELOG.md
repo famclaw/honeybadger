@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased
+
+## v0.6.2 -- 2026-07-15
+
+### Added
+
+- skillsafety: hardened famclaw skill vetting (env allowlist and overbroad-trigger rules) (#75).
+
+### Fixed
+
+- Self-references in comments and text are now classified as describe-not-contain in
+  the paranoid self-scan, so rule corpora and docs no longer self-trigger
+  (fewer false positives); self-check added to CI (#76).
+
+## v0.6.1 -- 2026-07-14
+
+### Fixed
+
+- Release-pipeline build-provenance attestation now targets the `SHA256SUMS`
+  checksums file (`subject-path: dist/SHA256SUMS`) instead of the per-binary
+  glob `dist/honeybadger-*` (#73).
+
+## v0.6.0 -- 2026-07-13
+
+### Added
+- SARIF 2.1.0 output emitter (`--format sarif`, #69)
+- rules CLI list/explain commands (#70)
+- SSH/git@ clone URL support (#71)
+- CVE severity preservation: when the osv.dev batch response lacks a CVSS
+  score, the CVE scanner fetches the full record from `/v1/vulns/{id}` (cached
+  per scan, rate-limited between fetches) and grades severity from it.
+- `CVSS_V4` vector strings are now scored alongside `CVSS_V3`, using the v4
+  impact metric names (`VC`/`VI`/`VA`). The highest score across all CVSS
+  entries wins.
+- `reason` field on findings (`severity_unknown`): when no CVSS score can be
+  found even after the follow-up fetch, severity falls back to `MEDIUM` and the
+  CVE finding is tagged `reason: severity_unknown`, so operators can tell a
+  fallback MEDIUM from a genuinely graded medium-severity vulnerability.
+- CVE findings now carry an osv.dev `references` link
+  (`https://osv.dev/vulnerability/{id}`).
+- `scan.IsTextFile`: classifies a file as text-like (by known extension or a
+  90%-printable-ASCII heuristic over the first 512 bytes) so injection scanning
+  can extend past `.md` to referenced instruction files.
+- `mcp-read-from-other-file` finding (mcptool, MEDIUM): flags a SKILL.md that
+  directs the agent to read/see/consult a separate instruction file, even when
+  the referenced file is clean.
+
+### Fixed
+- Two-file injection blind spot: the skillsafety scanner now scans override
+  phrases across every text-like file, and the mcptool injection scanner also
+  scans the SKILL.md body — previously an attacker could hide the payload in a
+  referenced file (e.g. `REFERENCE.md`) that SKILL.md pointed to. Binary files
+  are skipped via null-byte detection.
+
 ## v0.5.1 -- 2026-05-16
 
 ### Fixed

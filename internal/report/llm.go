@@ -25,7 +25,7 @@ type LLMOptions struct {
 
 // LLMVerdict is the parsed response from the LLM.
 type LLMVerdict struct {
-	Verdict    string `json:"verdict"`     // PASS, WARN, FAIL
+	Verdict    string `json:"verdict"` // PASS, WARN, FAIL
 	Reasoning  string `json:"reasoning"`
 	KeyFinding string `json:"key_finding"` // or null
 }

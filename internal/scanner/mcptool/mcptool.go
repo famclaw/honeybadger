@@ -70,7 +70,7 @@ func runDetections(ctx context.Context, repo *fetch.Repo, opts scan.Options, too
 	}
 
 	// Detection 1 — injection (works in both modes).
-	injFindings, injHitNames := detectInjectionWithHits(tools, opts.Rules)
+	injFindings, injHitNames := detectInjectionWithHits(tools, repo, opts.Rules)
 	emit(injFindings)
 
 	// Detection 2 — unicode (works in both modes).

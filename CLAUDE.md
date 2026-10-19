@@ -4,7 +4,7 @@
 Go security scanner for AI agent skills and MCP servers. Scans for hardcoded secrets, CVEs, supply-chain risk, and build provenance before install. CLI + MCP server modes. MIT licensed.
 
 **Code structure**  
-- Scanners in `internal/scanner/`: secrets, supplychain, cve, meta, attestation  
+- Scanners in `internal/scanner/`: secrets, supplychain, cve, meta, capability, skillsafety, mcptool, attestation  
 - Core types in `internal/scan/`: `Finding`, `Options`, helpers  
 - Engine in `internal/engine/`: scanner list, verdict logic  
 - Entry points: `cmd/honeybadger/main.go` (CLI), `cmd/honeybadger/mcp.go` (MCP)
