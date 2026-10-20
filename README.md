@@ -340,7 +340,7 @@ honeybadger/
 │   │   ├── scan.go          # ScanFunc type, RunAll (concurrent runner with fan-in)
 │   │   ├── scan_test.go
 │   │   ├── helpers.go       # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
-│   │   ├── fileclass.go     # File-role classifier (Code/Test/Doc/Config/Rules), finding re-weighting
+│   │   ├── fileclass.go     # File-role classifier (Code/Prose/Comment/Test/Corpus/Unknown), described-context severity reduction
 │   │   ├── fileclass_test.go
 │   │   ├── markdown.go      # Markdown code-block vs prose discrimination
 │   │   ├── markdown_test.go

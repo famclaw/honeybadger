@@ -47,21 +47,21 @@ func TestClassifyFile(t *testing.T) {
 		want    FileRole
 	}{
 		{"go source", "internal/scanner/supplychain/supplychain.go", nil, RoleCode},
-		{"go test", "internal/scanner/supplychain/supplychain_test.go", nil, RoleUnknown},
-		{"testfixture dir", "internal/testfixture/fixtures.go", nil, RoleUnknown},
-		{"testdata dir", "internal/scanner/cve/testdata/deps.json", nil, RoleUnknown},
-		{"js test", "src/foo.test.ts", nil, RoleUnknown},
-		{"python test", "pkg/test_helper.py", nil, RoleUnknown},
+		{"go test", "internal/scanner/supplychain/supplychain_test.go", nil, RoleTest},
+		{"testfixture dir", "internal/testfixture/fixtures.go", nil, RoleTest},
+		{"testdata dir", "internal/scanner/cve/testdata/deps.json", nil, RoleTest},
+		{"js test", "src/foo.test.ts", nil, RoleTest},
+		{"python test", "pkg/test_helper.py", nil, RoleTest},
 		{"readme", "README.md", nil, RoleProse},
 		{"changelog", "CHANGELOG.md", nil, RoleProse},
 		{"docs dir", "docs/INSTALLATION.md", nil, RoleProse},
 		{"superpowers plan", "docs/superpowers/plans/2026-04-05-x.md", nil, RoleProse},
 		{"license", "LICENSE", nil, RoleProse},
 		{"skill manifest is not doc", "SKILL.md", nil, RoleCode},
-		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleUnknown},
+		{"skill.md inside testdata is a fixture", "internal/testdata/skills/SKILL.md", nil, RoleTest},
 		{"ci workflow", ".github/workflows/release.yml", nil, RoleUnknown},
 		{"json config", "config.json", nil, RoleUnknown},
-		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleUnknown},
+		{"rule yaml", "rules/supplychain/patterns/reverse_shell.yaml", []byte(sampleRuleYAML), RoleCorpus},
 		{"non-rule yaml is config", "config/app.yaml", []byte("server:\n  port: 8080\n"), RoleUnknown},
 		{"plain source", "main.py", nil, RoleCode},
 	}
@@ -76,8 +76,8 @@ func TestClassifyFile(t *testing.T) {
 }
 
 func TestClassifyFileBackslashPaths(t *testing.T) {
-	if got := ClassifyFile(`internal\scanner\foo_test.go`, nil); got != RoleUnknown {
-		t.Errorf("backslash path: got %v, want RoleUnknown", got)
+	if got := ClassifyFile(`internal\scanner\foo_test.go`, nil); got != RoleTest {
+		t.Errorf("backslash path: got %v, want RoleTest", got)
 	}
 }
 
@@ -89,13 +89,18 @@ func TestAdjustSeverity(t *testing.T) {
 	}{
 		{RoleCode, SevCritical, SevCritical},
 		{RoleUnknown, SevHigh, SevHigh},
-		{RoleProse, SevCritical, SevMedium},
-		{RoleProse, SevHigh, SevLow},
+		// Described contexts never escalate: annotated INFO, whatever the raw severity.
+		{RoleProse, SevCritical, SevInfo},
+		{RoleProse, SevHigh, SevInfo},
 		{RoleProse, SevMedium, SevInfo},
 		{RoleProse, SevLow, SevInfo},
 		{RoleProse, SevInfo, SevInfo},
 		{RoleComment, SevCritical, SevInfo},
 		{RoleComment, SevMedium, SevInfo},
+		{RoleTest, SevCritical, SevInfo},
+		{RoleTest, SevHigh, SevInfo},
+		{RoleCorpus, SevCritical, SevInfo},
+		{RoleCorpus, SevHigh, SevInfo},
 	}
 	for _, c := range cases {
 		got := AdjustSeverity(c.raw, c.role)
@@ -250,14 +255,14 @@ func TestApplyFileRoles(t *testing.T) {
 	for _, f := range got {
 		byMsg[f.Message] = f
 	}
-	if f := byMsg["doc match"]; f.FileRole != RoleProse || f.Severity != SevMedium {
-		t.Errorf("doc match: role=%q sev=%q, want prose/MEDIUM", f.FileRole, f.Severity)
+	if f := byMsg["doc match"]; f.FileRole != RoleProse || f.Severity != SevInfo {
+		t.Errorf("doc match: role=%q sev=%q, want prose/INFO", f.FileRole, f.Severity)
 	}
-	if f := byMsg["test fixture"]; f.FileRole != RoleUnknown || f.Severity != SevHigh {
-		t.Errorf("test fixture: role=%q sev=%q, want unknown/HIGH", f.FileRole, f.Severity)
+	if f := byMsg["test fixture"]; f.FileRole != RoleTest || f.Severity != SevInfo {
+		t.Errorf("test fixture: role=%q sev=%q, want test/INFO", f.FileRole, f.Severity)
 	}
-	if f := byMsg["own rule"]; f.FileRole != RoleUnknown || f.Severity != SevCritical {
-		t.Errorf("own rule: role=%q sev=%q, want unknown/CRITICAL", f.FileRole, f.Severity)
+	if f := byMsg["own rule"]; f.FileRole != RoleCorpus || f.Severity != SevInfo {
+		t.Errorf("own rule: role=%q sev=%q, want corpus/INFO", f.FileRole, f.Severity)
 	}
 	if f := byMsg["real code"]; f.FileRole != RoleCode || f.Severity != SevHigh {
 		t.Errorf("real code: role=%q sev=%q, want code/HIGH", f.FileRole, f.Severity)
@@ -285,14 +290,14 @@ func TestApplyFileRolesMarkdown(t *testing.T) {
 	for _, f := range got {
 		byMsg[f.Message] = f
 	}
-	if f := byMsg["prose match"]; f.FileRole != RoleProse || f.Severity != SevMedium {
-		t.Errorf("prose match: role=%q sev=%q, want prose/MEDIUM", f.FileRole, f.Severity)
+	if f := byMsg["prose match"]; f.FileRole != RoleProse || f.Severity != SevInfo {
+		t.Errorf("prose match: role=%q sev=%q, want prose/INFO", f.FileRole, f.Severity)
 	}
 	if f := byMsg["code-block match"]; f.FileRole != RoleProse || f.Severity != SevInfo {
 		t.Errorf("code-block match: role=%q sev=%q, want prose/INFO", f.FileRole, f.Severity)
 	}
-	if f := byMsg["no line info"]; f.FileRole != RoleProse || f.Severity != SevLow {
-		t.Errorf("no line info: role=%q sev=%q, want prose/LOW", f.FileRole, f.Severity)
+	if f := byMsg["no line info"]; f.FileRole != RoleProse || f.Severity != SevInfo {
+		t.Errorf("no line info: role=%q sev=%q, want prose/INFO", f.FileRole, f.Severity)
 	}
 }
 

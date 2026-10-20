@@ -126,10 +126,10 @@ func Extract(repo *fetch.Repo, opts scan.Options) Signals {
 		}
 
 		// Skip test files and the rule corpus (fixtures, not threats). These
-		// classify as RoleUnknown, but so does real config (CI workflows,
-		// Dockerfiles, JSON/YAML/TOML/INI config), which must still be scanned
-		// below — a malicious curl|sh or override phrase in a workflow or config
-		// is a live threat, not a fixture.
+		// classify as RoleTest/RoleCorpus; real config (CI workflows,
+		// Dockerfiles, JSON/YAML/TOML/INI config) classifies as RoleUnknown and
+		// must still be scanned below — a malicious curl|sh or override phrase
+		// in a workflow or config is a live threat, not a fixture.
 		if scan.IsFixtureFile(path) || scan.IsRuleYAMLFile(path, content) {
 			continue
 		}

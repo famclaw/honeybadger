@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- File-role classification no longer collapses test fixtures and the rule
+  corpus into `unknown`: `internal/scan/fileclass.go` adds dedicated `test`
+  and `corpus` roles, and every described-context role (prose, comment,
+  test, corpus) reduces findings to annotated INFO instead of escalating
+  them. The paranoid self-scan now passes by classification rather than
+  per-file suppressions ("described ≠ contained"), restoring the v0.6.2
+  behavior that commit f99d24f (#95) regressed; the repository's
+  stopgap `.honeybadgerignore` suppression list is removed.
+
 ## v0.6.2 -- 2026-07-15
 
 ### Added

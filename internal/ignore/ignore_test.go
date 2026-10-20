@@ -3,7 +3,6 @@ package ignore
 import (
 	"crypto/sha256"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -333,30 +332,3 @@ func TestParseSource(t *testing.T) {
 	}
 }
 
-// TestShippedHoneybadgerignoreSuppressesTempReadme guards the CI self-check.
-// temp_readme.md is an intentional demo/doc artifact whose "What it checks"
-// table names the attack patterns the scanners detect (curl|bash, crypto
-// mining). If the exact (rule_id, file) pairs for it are dropped from the
-// shipped .honeybadgerignore, the paranoid self-scan on `.` regresses to a
-// FAIL verdict because the prose-downgraded MEDIUM sc-crypto-mining finding
-// still meets the paranoid LOW block threshold. This test parses the repo's
-// real .honeybadgerignore and asserts those two pairs still suppress.
-func TestShippedHoneybadgerignoreSuppressesTempReadme(t *testing.T) {
-	data, err := os.ReadFile("../../.honeybadgerignore")
-	if err != nil {
-		t.Fatalf("read ../../.honeybadgerignore: %v", err)
-	}
-	set, err := Parse(data, ".honeybadgerignore")
-	if err != nil {
-		t.Fatalf("parse .honeybadgerignore: %v", err)
-	}
-	cases := []scan.Finding{
-		{RuleID: "sc-crypto-mining", File: "temp_readme.md", Message: "Crypto mining code detected"},
-		{RuleID: "sc-curl-pipe-bash", File: "temp_readme.md", Message: "Downloads and executes remote script via curl"},
-	}
-	for _, f := range cases {
-		if set.Match(&f) == nil {
-			t.Errorf("shipped .honeybadgerignore does not suppress %s on %s", f.RuleID, f.File)
-		}
-	}
-}
