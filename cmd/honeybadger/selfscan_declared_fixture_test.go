@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/famclaw/honeybadger/internal/fetch"
-	"github.com/famclaw/honeybadger/internal/ignore"
 	"github.com/famclaw/honeybadger/internal/rules"
 	"github.com/famclaw/honeybadger/internal/scan"
 	"github.com/famclaw/honeybadger/internal/scanner/supplychain"
@@ -19,15 +18,17 @@ import (
 
 // The repository's own tests, fixtures, and docs deliberately embed attack
 // patterns (curl|bash, reverse shells, exfil paths, ...) so the scanners have
-// known-bad input to exercise. Those patterns are covered by narrowly scoped
-// (rule_id, file) entries in the committed .honeybadgerignore; the CI
-// self-check runs with --trust-target-ignore so those entries take effect.
+// known-bad input to exercise. Those patterns are handled by file-role
+// classification, not suppression: test files classify as RoleTest and
+// patterns on comment lines classify as RoleComment, both reducing findings
+// to INFO, which never fails the paranoid self-check.
 //
-// This test guards the invariant that makes the self-check pass: every
-// supply-chain pattern present in this repository's own Go sources must be
-// declared in .honeybadgerignore. It catches the regression where a new
-// fixture adds intentional-bad content but nobody adds the matching pair,
-// which otherwise only shows up as a FAIL on the CI self-check job.
+// This test guards the invariant that makes the self-check pass: after
+// ApplyFileRoles, no supply-chain pattern in this repository's own Go
+// sources may remain above INFO. It catches the regression where a new
+// fixture adds intentional-bad content that classification fails to downgrade
+// (e.g. a pattern in executable position in a non-test source file), which
+// otherwise only shows up as a FAIL on the CI self-check job.
 func TestOwnGoSourcesDeclareIntentionalPatterns(t *testing.T) {
 	repoRoot := repoRootFromCwd(t)
 
@@ -62,32 +63,24 @@ func TestOwnGoSourcesDeclareIntentionalPatterns(t *testing.T) {
 	close(finder)
 	var findings []scan.Finding
 	for f := range finder {
-		if f.Severity == "INFO" {
-			continue // INFO never fails the self-check
-		}
 		findings = append(findings, f)
 	}
 
-	ignorePath := filepath.Join(repoRoot, ".honeybadgerignore")
-	raw, err := os.ReadFile(ignorePath)
-	if err != nil {
-		t.Fatalf("reading %s: %v", ignorePath, err)
-	}
-	set, err := ignore.Parse(raw, ".honeybadgerignore")
-	if err != nil {
-		t.Fatalf("parsing %s: %v", ignorePath, err)
-	}
-
-	kept, _ := set.Filter(findings)
-	if len(kept) > 0 {
-		lines := make([]string, 0, len(kept))
-		for _, f := range kept {
-			lines = append(lines, fmt.Sprintf("%s %s %s:%d %s", f.Severity, f.RuleID, f.File, f.Line, f.Message))
+	kept := scan.ApplyFileRoles(findings, files)
+	var escalating []string
+	for _, f := range kept {
+		if scan.SeverityRank(f.Severity) >= scan.SeverityRank(scan.SevLow) {
+			escalating = append(escalating, fmt.Sprintf("%s %s %s:%d %s (role=%s)",
+				f.Severity, f.RuleID, f.File, f.Line, f.Message, f.FileRole))
 		}
-		sort.Strings(lines)
-		t.Errorf("own Go sources contain %d undeclared supply-chain pattern(s); "+
-			"either remove the pattern or add one exact '<rule_id> <path>' pair to .honeybadgerignore:\n%s",
-			len(kept), strings.Join(lines, "\n"))
+	}
+	if len(escalating) > 0 {
+		sort.Strings(escalating)
+		t.Errorf("own Go sources contain %d supply-chain pattern(s) that file-role "+
+			"classification failed to reduce to INFO; a pattern in a test file or on a "+
+			"comment line is described-not-contained, anything else is a real finding "+
+			"or a classification regression:\n%s",
+			len(escalating), strings.Join(escalating, "\n"))
 	}
 }
 
