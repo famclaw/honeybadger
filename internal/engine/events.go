@@ -46,22 +46,30 @@ type ResultEarlyEvent struct {
 // ResultEvent is the full final-verdict event emitted after a complete scan.
 // All fields are always populated to preserve a stable NDJSON consumer shape.
 type ResultEvent struct {
-	Type              string         `json:"type"` // always "result"
-	Verdict           string         `json:"verdict"`
-	Reasoning         string         `json:"reasoning"`
-	KeyFinding        string         `json:"key_finding"`
-	FindingCounts     map[string]int `json:"finding_counts"`
-	CVECount          int            `json:"cve_count"`
-	CVEMaxSeverity    string         `json:"cve_max_severity"`
-	Attested          bool           `json:"attested"`
-	LLMModel          string         `json:"llm_model"`
-	LLMUsed           bool           `json:"llm_used"`
-	Paranoia          string         `json:"paranoia"`
-	EffectiveParanoia string         `json:"effective_paranoia"`
-	Tier              string         `json:"tier"`
-	Sandbox           string         `json:"sandbox"`
-	ScannedAt         string         `json:"scanned_at"`
-	DurationMS        int64          `json:"duration_ms"`
+	Type           string         `json:"type"` // always "result"
+	Verdict        string         `json:"verdict"`
+	Reasoning      string         `json:"reasoning"`
+	KeyFinding     string         `json:"key_finding"`
+	FindingCounts  map[string]int `json:"finding_counts"`
+	CVECount       int            `json:"cve_count"`
+	CVEMaxSeverity string         `json:"cve_max_severity"`
+	Attested       bool           `json:"attested"`
+	// AttestedBasis states what Attested actually means for this result.
+	// A source scan cannot verify artifact signatures (the GitHub
+	// attestation API is keyed by a sha256 artifact digest, and source
+	// fetches carry only a commit SHA), so Attested=true means a build
+	// attestation workflow was detected in the repo — presence of
+	// attestation infrastructure, not verification of a signature.
+	// Values: "workflow_configured" (attested), "none" (not attested).
+	AttestedBasis     string `json:"attested_basis"`
+	LLMModel          string `json:"llm_model"`
+	LLMUsed           bool   `json:"llm_used"`
+	Paranoia          string `json:"paranoia"`
+	EffectiveParanoia string `json:"effective_paranoia"`
+	Tier              string `json:"tier"`
+	Sandbox           string `json:"sandbox"`
+	ScannedAt         string `json:"scanned_at"`
+	DurationMS        int64  `json:"duration_ms"`
 }
 
 // SuppressionEvent reports the count of findings suppressed by

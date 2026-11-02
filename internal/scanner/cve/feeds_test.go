@@ -74,6 +74,10 @@ func TestGradeSeverity(t *testing.T) {
 		{"epss cutoff", scan.SevLow, "", false, epssHigh, scan.SevHigh, "high_epss_percentile"},
 		{"cvss retained", scan.SevMedium, "", false, &scan.EPSS{Percentile: .89}, scan.SevMedium, ""},
 		{"unknown preserved", scan.SevMedium, "severity_unknown", false, nil, scan.SevMedium, "severity_unknown"},
+		// EPSS is enrichment only: it must never lower a CVSS-derived severity.
+		{"critical not downgraded", scan.SevCritical, "", false, epssHigh, scan.SevCritical, "high_epss_percentile"},
+		{"high not downgraded", scan.SevHigh, "", false, epssHigh, scan.SevHigh, "high_epss_percentile"},
+		{"reason kept with epss label", scan.SevCritical, "severity_unknown", false, epssHigh, scan.SevCritical, "severity_unknown+high_epss_percentile"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

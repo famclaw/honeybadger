@@ -172,7 +172,7 @@ func TestExamples_ResponseSchemaFieldsMatchSource(t *testing.T) {
 
 	requiredFields := []string{
 		"verdict", "reasoning", "finding_counts", "cve_count",
-		"cve_max_severity", "attested", "llm_used", "paranoia",
+		"cve_max_severity", "attested", "attested_basis", "llm_used", "paranoia",
 		"effective_paranoia", "scanned_at", "duration_ms",
 	}
 	for _, field := range requiredFields {

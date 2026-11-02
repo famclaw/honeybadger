@@ -160,3 +160,47 @@ func TestFindingJSONShapeFileRole(t *testing.T) {
 		t.Error("unclassified finding: file_role key present in JSON, expected omitted")
 	}
 }
+
+func TestParanoiaRankMonotonic(t *testing.T) {
+	ladder := []ParanoiaLevel{ParanoiaOff, ParanoiaMinimal, ParanoiaFamily, ParanoiaStrict, ParanoiaParanoid}
+	for i, lvl := range ladder {
+		if got := ParanoiaRank(lvl); got != i {
+			t.Errorf("ParanoiaRank(%q) = %d, want %d", lvl, got, i)
+		}
+	}
+	if got := ParanoiaRank(ParanoiaLevel("bogus")); got != -1 {
+		t.Errorf("ParanoiaRank(unknown) = %d, want -1", got)
+	}
+}
+
+func TestParanoiaAtLeast(t *testing.T) {
+	// The bug this guards: ParanoiaLevel is a string type, so `paranoia >=
+	// ParanoiaFamily` was a lexicographic compare that is true for "off" and
+	// "minimal" too. AtLeast must use the ordinal ladder.
+	tests := []struct {
+		level, min ParanoiaLevel
+		want       bool
+	}{
+		{ParanoiaOff, ParanoiaFamily, false},
+		{ParanoiaMinimal, ParanoiaFamily, false},
+		{ParanoiaFamily, ParanoiaFamily, true},
+		{ParanoiaStrict, ParanoiaFamily, true},
+		{ParanoiaParanoid, ParanoiaFamily, true},
+		{ParanoiaOff, ParanoiaOff, true},
+		{ParanoiaLevel("bogus"), ParanoiaFamily, false},
+		{ParanoiaLevel("bogus"), ParanoiaOff, false},
+	}
+	for _, tt := range tests {
+		if got := AtLeast(tt.level, tt.min); got != tt.want {
+			t.Errorf("AtLeast(%q, %q) = %v, want %v", tt.level, tt.min, got, tt.want)
+		}
+	}
+	// Lexicographic comparison must not agree with the ordinal ladder for the
+	// levels in this bug: prove the old comparison was wrong, not equivalent.
+	if !("off" >= "family") {
+		t.Fatal("string comparison assumption changed; update reasoning")
+	}
+	if AtLeast(ParanoiaOff, ParanoiaFamily) {
+		t.Error("AtLeast(off, family) must be false despite lexicographic truth")
+	}
+}
