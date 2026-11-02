@@ -55,7 +55,7 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
       --paranoia string      off|minimal|family|strict|paranoid (default: family)
       --format string        ndjson|text|sarif (default: ndjson)
       --llm string           LLM endpoint override
-      --db string            Path to audit trail file
+      --db string            JSONL path for audit trail (one JSON record per scan)
       --installed-sha string SHA256 of installed version
       --installed-tool-hash  SHA256 of installed MCP tool definitions
       --tool-manifest string  Path to MCP tools/list JSON for tool-definition analysis
@@ -207,7 +207,7 @@ suppressions in their own files.
 | Typosquat | supplychain | Edit-distance check against popular package names |
 | SKILL.md fields | meta | Required fields and format validation |
 | Capability drift | capability | Declared `requires.*` vs actual code: network/filesystem/bins/env reads (family+) |
-| Build provenance | attestation | Build-attestation workflow + release-artifact presence checks (strict+) |
+| Build provenance | attestation | GitHub Attestation API + workflow check (strict+) |
 | Cosign/SHA256 | attestation | Cosign signatures and checksum files present (strict+) |
 | Prompt injection | skillsafety | Override phrases in 11 languages, across SKILL.md and any referenced text files (family+) |
 | Homoglyphs | skillsafety | Mixed-script words (Latin+Cyrillic/Greek/Armenian) (family+) |
@@ -271,7 +271,12 @@ HoneyBadger analyzes MCP tool definitions from a caller-supplied manifest and ne
 | minimal | secrets, cve | No | CRITICAL |
 | family | secrets, cve, supplychain, meta, capability, skillsafety | Yes | HIGH+ |
 | strict | family + attestation | Yes | MEDIUM+ (WARN=FAIL) |
-| paranoid | family + attestation + allowlist | Yes | LOW+ |
+| paranoid | family + attestation | Yes | LOW+ |
+
+Note: the allowlist previously advertised for the `paranoid` tier is not yet
+implemented — `paranoid` adds no scanner beyond `strict`; it only blocks on
+LOW+ and escalates WARN to FAIL. See the "Allowlist config for paranoid mode"
+known gap in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Output
 
@@ -282,7 +287,28 @@ In text mode, the severity tag shows `[SEVERITY rule_id]` and a `→ url` line l
 
 CVE severity is graded from the CVSS v3/v4 score, fetching the full osv.dev record when the batch response omits it. When no CVSS score is available, severity falls back to `MEDIUM` and the finding carries `reason: severity_unknown` so a fallback MEDIUM is distinguishable from a graded one.
 
-Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error.
+Exit codes: 0=PASS, 1=WARN, 2=FAIL, 3=error, 4=INCOMPLETE (a required check did not complete).
+
+## Audit trail
+
+`--db <path>` appends one JSON record (JSONL) per scan to `<path>` — a
+line-delimited text file, not a database. Each record carries the same
+fields as the final `result` event, plus an additive `provenance` block that
+lets a downstream approver answer, from the record alone, what was scanned,
+with which rules, and which checks completed:
+
+| Field | Meaning |
+|-------|---------|
+| `provenance.source_digest` | SHA256 of the scanned repository content — the same value `--installed-sha` compares against |
+| `provenance.rules_digest` | SHA256 of the loaded rule set (one line per rule: id, severity, pattern count) |
+| `provenance.rules_dir` | user rule dir merged over the embedded rules (empty when only embedded rules were in effect) |
+| `provenance.policy_trusted` | whether the target-authored `.honeybadgerignore` was trusted (`--trust-target-ignore` / `HONEYBADGER_TRUST_TARGET_IGNORE=1`) |
+| `provenance.suppress` | suppression decisions: count, applied vs ignored policy sources, and the rule IDs that matched |
+| `provenance.checks` | per-scanner status — `"ok"` or `"error: <message>"` — so a failed check cannot masquerade as a completed one |
+
+Records written before the provenance block was added remain decodable; the
+block is purely additive. An audit write failure warns on stderr without
+failing the approval.
 
 ## Project structure
 
@@ -340,7 +366,7 @@ honeybadger/
 │   │   ├── scan.go          # ScanFunc type, RunAll (concurrent runner with fan-in)
 │   │   ├── scan_test.go
 │   │   ├── helpers.go       # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
-│   │   ├── fileclass.go     # File-role classifier (Code/Prose/Comment/Test/Corpus/Unknown), described-context severity reduction
+│   │   ├── fileclass.go     # File-role classifier (Code/Test/Doc/Config/Rules), finding re-weighting
 │   │   ├── fileclass_test.go
 │   │   ├── markdown.go      # Markdown code-block vs prose discrimination
 │   │   ├── markdown_test.go
@@ -381,7 +407,7 @@ honeybadger/
 │   │   │   ├── scanner_test.go
 │   │   │   └── unicode_test.go
 │   │   ├── attestation/
-│   │   │   ├── attestation.go   # Build-provenance / attestation scanner
+│   │   │   ├── attestation.go   # Attestation verification scanner
 │   │   │   └── attestation_test.go
 │   │   └── mcptool/
 │   │       ├── mcptool.go           # MCP tool scanner entry point
@@ -445,13 +471,13 @@ honeybadger/
 
 ## Status
 
-**v0.6.2 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.6.2)
+**v0.7.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.7.0)
 
 Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
 attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
 poisoning, cross-tool shadowing, capability mismatch, and rug-pull drift.
-Detection rules are YAML-defined and runtime-extensible. The release SHA256SUMS
-file is signed with Sigstore cosign; SPDX SBOMs attached to every release.
+Detection rules are YAML-defined and runtime-extensible. Binaries signed with
+Sigstore cosign, SPDX SBOMs attached to every release.
 
 File-role classification distinguishes a threat *described* in documentation
 or defined in a rule corpus from one *present* in executable code, so

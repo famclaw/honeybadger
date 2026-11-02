@@ -26,8 +26,8 @@
 ### Scan a monorepo subdirectory
     honeybadger scan github.com/someone/monorepo --path skills/my-skill
 
-### Write audit trail to SQLite
-    honeybadger scan github.com/someone/some-skill --db ./audit.db
+### Write audit trail (JSONL)
+    honeybadger scan github.com/someone/some-skill --db ./audit.jsonl
 
 ### SARIF output
     honeybadger scan github.com/someone/some-skill --format sarif
