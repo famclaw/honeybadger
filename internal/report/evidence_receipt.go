@@ -35,7 +35,20 @@ type EvidenceReceipt struct {
 	// ArtifactDigest provides the SHA256 digest of the scanned artifact
 	ArtifactDigest string `json:"artifact_digest"`
 
-	// Verification indicates whether artifact digest verification was performed
+	// Verification records the outcome of artifact digest verification.
+	// Values:
+	//   "not_performed"   — the target was not a local readable file
+	//   "calculated"      — the digest was computed, but no trusted baseline
+	//                       was registered, so no comparison was performed
+	//   "verified"        — the digest was compared against a trusted
+	//                       baseline and matched
+	//   "digest_mismatch" — a baseline was registered but the digest differs
+	//   "unavailable"     — the file could not be read, so no digest could be
+	//                       computed (a finding is emitted only when a baseline
+	//                       was registered)
+	//
+	// "verified" is only ever set after a real baseline comparison;
+	// calculating a digest on its own yields "calculated".
 	Verification string `json:"verification"`
 
 	// PublishedAssets indicates if published assets were verified
@@ -49,9 +62,6 @@ type EvidenceReceipt struct {
 
 	// Timestamp of when the receipt was generated
 	Timestamp time.Time `json:"timestamp"`
-
-	// SignedExport indicates if the receipt is signed
-	SignedExport bool `json:"signed_export,omitempty"`
 }
 
 // FindingSummary captures essential details about a finding
@@ -67,40 +77,39 @@ type FindingSummary struct {
 
 // Exception represents a documented exception in the scan
 type Exception struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Justification string `json:"justification"`
-	ExemptedBy  string `json:"exempted_by"`
-	ExemptedAt  time.Time `json:"exempted_at"`
+	ID            string    `json:"id"`
+	Description   string    `json:"description"`
+	Justification string    `json:"justification"`
+	ExemptedBy    string    `json:"exempted_by"`
+	ExemptedAt    time.Time `json:"exempted_at"`
 }
 
 // SecurityException represents a documented security exception
 type SecurityException struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Justification string `json:"justification"`
-	ExceptionType string `json:"exception_type"`
-	Resolved    bool `json:"resolved,omitempty"`
-	ResolvedAt  time.Time `json:"resolved_at,omitempty"`
+	ID            string    `json:"id"`
+	Description   string    `json:"description"`
+	Justification string    `json:"justification"`
+	ExceptionType string    `json:"exception_type"`
+	Resolved      bool      `json:"resolved,omitempty"`
+	ResolvedAt    time.Time `json:"resolved_at,omitempty"`
 }
 
 // NewEvidenceReceipt creates a new evidence receipt
 func NewEvidenceReceipt(subject, scannerVersion, ruleVersion, policyVersion string) *EvidenceReceipt {
 	return &EvidenceReceipt{
-		Subject:         subject,
-		ScannerVersion:  scannerVersion,
-		RuleVersion:     ruleVersion,
-		PolicyVersion:   policyVersion,
-		Checks:          []string{},
-		Findings:        []FindingSummary{},
-		Exceptions:      []Exception{},
-		ArtifactDigest:  "",
-		Verification:    "not_performed",
-		PublishedAssets: []string{},
-		BuildActions:    []string{},
+		Subject:            subject,
+		ScannerVersion:     scannerVersion,
+		RuleVersion:        ruleVersion,
+		PolicyVersion:      policyVersion,
+		Checks:             []string{},
+		Findings:           []FindingSummary{},
+		Exceptions:         []Exception{},
+		ArtifactDigest:     "",
+		Verification:       "not_performed",
+		PublishedAssets:    []string{},
+		BuildActions:       []string{},
 		SecurityExceptions: []SecurityException{},
-		Timestamp:       time.Now(),
-		SignedExport:    false,
+		Timestamp:          time.Now(),
 	}
 }
 
@@ -153,18 +162,17 @@ func (er *EvidenceReceipt) SetVerification(status string) {
 	er.Verification = status
 }
 
-// SetSignedExport marks the receipt as signed
-func (er *EvidenceReceipt) SetSignedExport(signed bool) {
-	er.SignedExport = signed
-}
-
-// GenerateDigest calculates and returns the SHA256 digest of the receipt
+// GenerateDigest calculates and returns the SHA256 digest of the receipt's
+// JSON representation. This is a content digest of the receipt, NOT a
+// cryptographic signature: anyone can compute it, and it cannot be checked
+// against a trusted key. Signed receipt export is not implemented; the
+// acceptance gate for it is documented in README-EVIDENCE-RECEIPTS.md.
 func (er *EvidenceReceipt) GenerateDigest() (string, error) {
 	data, err := json.Marshal(er)
 	if err != nil {
 		return "", err
 	}
-	
+
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:]), nil
 }
