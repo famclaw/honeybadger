@@ -3,12 +3,48 @@
 ## Unreleased
 
 ### Added
+
 - Audit record provenance block (`internal/store/audit.go`): `--db` records
   now carry `provenance` with the source digest (same value `--installed-sha`
   compares against), a rules-set digest, the user rule dir, the
   `.honeybadgerignore` trust decision, the suppression decisions (count,
   applied/ignored sources, matched rule IDs), and per-check completed/failed
   status. The block is additive; pre-existing JSONL records remain decodable.
+
+### Fixed
+
+- File-role classification no longer collapses test fixtures and the rule
+  corpus into `unknown`: `internal/scan/fileclass.go` adds dedicated `test`
+  and `corpus` roles, and every described-context role (prose, comment,
+  test, corpus) reduces findings to annotated INFO instead of escalating
+  them. The paranoid self-scan now passes by classification rather than
+  per-file suppressions ("described ≠ contained"), restoring the v0.6.2
+  behavior that commit f99d24f (#95) regressed; the repository's
+  stopgap `.honeybadgerignore` suppression list is removed.
+
+## v0.6.2 -- 2026-07-15
+
+### Added
+
+- skillsafety: hardened famclaw skill vetting (env allowlist and overbroad-trigger rules) (#75).
+
+### Fixed
+
+- Self-references in comments and text are now classified as describe-not-contain in
+  the paranoid self-scan, so rule corpora and docs no longer self-trigger
+  (fewer false positives); self-check added to CI (#76).
+
+## v0.6.1 -- 2026-07-14
+
+### Fixed
+
+- Release-pipeline build-provenance attestation now targets the `SHA256SUMS`
+  checksums file (`subject-path: dist/SHA256SUMS`) instead of the per-binary
+  glob `dist/honeybadger-*` (#73).
+
+## v0.6.0 -- 2026-07-13
+
+### Added
 - SARIF 2.1.0 output emitter (`--format sarif`, #69)
 - rules CLI list/explain commands (#70)
 - SSH/git@ clone URL support (#71)

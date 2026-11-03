@@ -75,7 +75,7 @@ honeybadger scan <repo-url> --installed-sha <sha256-of-installed-archive>
 - **minimal** — secrets + CVEs only. Fast. No LLM. Blocks on CRITICAL.
 - **family** — full scan + LLM verdict. Default. Blocks on HIGH+.
 - **strict** — adds attestation + build provenance. WARN treated as FAIL.
-- **paranoid** — strict; blocks on LOW+. (An allowlist was advertised for this tier but is not yet implemented; see CONTRIBUTING.md.)
+- **paranoid** — strict; blocks on LOW+. (An allowlist was advertised for this tier but is not yet implemented: it adds no scanner beyond strict, only blocks on LOW+ and escalates WARN to FAIL.)
 
 ## How to interpret output
 

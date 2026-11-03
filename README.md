@@ -366,7 +366,7 @@ honeybadger/
 │   │   ├── scan.go          # ScanFunc type, RunAll (concurrent runner with fan-in)
 │   │   ├── scan_test.go
 │   │   ├── helpers.go       # WalkCode, IsPlaceholder, Redact, EditDistance, IsBinaryFile
-│   │   ├── fileclass.go     # File-role classifier (Code/Test/Doc/Config/Rules), finding re-weighting
+│   │   ├── fileclass.go     # File-role classifier (Code/Prose/Comment/Test/Corpus/Unknown), described-context severity reduction
 │   │   ├── fileclass_test.go
 │   │   ├── markdown.go      # Markdown code-block vs prose discrimination
 │   │   ├── markdown_test.go
@@ -476,8 +476,8 @@ honeybadger/
 Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
 attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
 poisoning, cross-tool shadowing, capability mismatch, and rug-pull drift.
-Detection rules are YAML-defined and runtime-extensible. Binaries signed with
-Sigstore cosign, SPDX SBOMs attached to every release.
+Detection rules are YAML-defined and runtime-extensible. The release SHA256SUMS
+file is signed with Sigstore cosign; SPDX SBOMs attached to every release.
 
 File-role classification distinguishes a threat *described* in documentation
 or defined in a rule corpus from one *present* in executable code, so
