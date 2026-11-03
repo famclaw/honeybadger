@@ -37,7 +37,7 @@ func main() {
 	paranoia := flag.String("paranoia", "family", "paranoia level: off|minimal|family|strict|paranoid")
 	format := flag.String("format", "ndjson", "output format: ndjson|text")
 	llm := flag.String("llm", llmEndpoint, "LLM endpoint override")
-	db := flag.String("db", "", "SQLite path for audit trail")
+	db := flag.String("db", "", "JSONL path for audit trail (one JSON record per scan)")
 	installedSHA := flag.String("installed-sha", "", "installed commit SHA")
 	installedToolHash := flag.String("installed-tool-hash", "", "installed tool hash")
 	force := flag.Bool("force", false, "force scan even if already audited")
@@ -468,6 +468,11 @@ func run(cfg runConfig) (int, error) {
 	checkResults := engine.NewCheckResultsFromErrors(scannerNames, runtimeErrors)
 	verdict, reasoning, keyFinding := engine.ComputeVerdictWithCheckStatus(allFindings, paranoia, llmVerdict, checkResults)
 
+	// sourceDigest is the SHA256 of the fetched repository content — the
+	// same value --installed-sha compares against — recorded in the audit
+	// provenance block so an approval can be tied to exact source content.
+	sourceDigest := engine.ComputeRepoHash(repo)
+
 	// Count findings by severity
 	findingCounts := map[string]int{
 		"critical": 0,
@@ -541,15 +546,60 @@ func run(cfg runConfig) (int, error) {
 		}
 	}
 
-	// Write audit if --db provided
+	// Write audit if --db provided. The record mirrors the final result
+	// fields and appends a provenance block: source digest (same value
+	// --installed-sha compares against), rules/policy version, suppression
+	// decisions, and per-check completed/failed status.
 	if cfg.DBPath != "" {
-		if err := store.WriteAudit(cfg.DBPath, result); err != nil {
+		suppressedRules := make([]string, 0, len(outcome.Suppressed))
+		for _, s := range outcome.Suppressed {
+			suppressedRules = append(suppressedRules, s.MatchedBy.RuleID)
+		}
+		// Rule identities: one "id|severity|patterns" line per loaded rule.
+		ruleIDs := make([]string, 0, len(rs.All()))
+		for _, r := range rs.All() {
+			ruleIDs = append(ruleIDs, fmt.Sprintf("%s|%s|%d", r.ID, r.Severity, len(r.Patterns)))
+		}
+		record := store.NewAuditRecord(
+			verdict, reasoning, keyFinding,
+			findingCounts,
+			cveCount, cveMaxSev,
+			attested, cfg.LLMModel, llmUsed,
+			string(paranoia), effectiveParanoia, tier, sandboxType,
+			time.Now().UTC().Format(time.RFC3339),
+			time.Since(start).Milliseconds(),
+			sourceDigest,
+			store.RulesDigest(ruleIDs),
+			cfg.RulesDir,
+			trustTargetIgnore,
+			suppressedCount,
+			outcome.Applied, outcome.Ignored,
+			suppressedRules,
+			checksToRecord(checkResults),
+		)
+		if err := store.WriteAudit(cfg.DBPath, record); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: audit write failed: %v\n", err)
 		}
 	}
 
 	// 12. Exit code
 	return engine.ExitCodeForVerdict(verdict), nil
+}
+
+// checksToRecord maps each tracked check to "ok" or "error: <message>" for
+// the audit record's provenance block, so the record shows which checks
+// completed and which failed — a failed scanner cannot masquerade as a
+// completed check.
+func checksToRecord(checkResults engine.CheckResults) map[string]string {
+	out := make(map[string]string, len(checkResults.Results))
+	for _, c := range checkResults.Results {
+		if c.Verdict == "FAIL" || c.Error != "" {
+			out[c.Name] = "error: " + c.Error
+		} else {
+			out[c.Name] = "ok"
+		}
+	}
+	return out
 }
 
 // resolveTargetIgnoreContent returns the target .honeybadgerignore content for

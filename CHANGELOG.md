@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Audit record provenance block (`internal/store/audit.go`): `--db` records
+  now carry `provenance` with the source digest (same value `--installed-sha`
+  compares against), a rules-set digest, the user rule dir, the
+  `.honeybadgerignore` trust decision, the suppression decisions (count,
+  applied/ignored sources, matched rule IDs), and per-check completed/failed
+  status. The block is additive; pre-existing JSONL records remain decodable.
+
 ### Fixed
 
 - File-role classification no longer collapses test fixtures and the rule

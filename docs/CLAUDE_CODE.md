@@ -103,12 +103,15 @@ Configure HoneyBadger per-project in `.mcp.json`:
       "args": ["--mcp-server"],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}",
-        "HONEYBADGER_LLM": "http://localhost:11434/v1"
+        "HONEYBADGER_LLM": "http://localhost:11434"
       }
     }
   }
 }
 ```
+
+Note: `HONEYBADGER_LLM` takes a base URL without a `/v1` path — the binary
+appends `/v1/chat/completions` itself.
 
 ## Pre-install hook
 
@@ -202,16 +205,16 @@ Register in `.claude/settings.json`:
 # Higher GitHub API rate limit (60 → 5000 req/hour)
 export GITHUB_TOKEN=your_token_here
 
-# LLM endpoint for security analysis
-export HONEYBADGER_LLM=http://localhost:11434/v1
+# LLM endpoint for security analysis.
+# Base URL only — the binary appends /v1/chat/completions itself.
+export HONEYBADGER_LLM=http://localhost:11434
 export HONEYBADGER_LLM_KEY=your_api_key   # omit for local Ollama
 export HONEYBADGER_LLM_MODEL=llama3.1:8b
 ```
 
 ## Verify the release binary
 
-The release `SHA256SUMS` checksums file is cosign-signed (keyless, Sigstore);
-binaries are checked against the verified checksums file:
+Cosign signs the **SHA256SUMS** checksum file, not individual binaries:
 
 ```bash
 curl -fsSL \
@@ -229,5 +232,6 @@ cosign verify-blob SHA256SUMS \
 curl -fsSL \
   https://github.com/famclaw/honeybadger/releases/latest/download/honeybadger-linux-amd64 \
   -o honeybadger-linux-amd64
+
 sha256sum --check --ignore-missing SHA256SUMS
 ```

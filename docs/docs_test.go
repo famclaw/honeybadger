@@ -3,8 +3,11 @@ package docs_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -498,7 +501,172 @@ func normalizeHook(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
-		lines[i] = strings.TrimRight(l, " \t")
+		lines[i] = strings.TrimRight(l, " 	")
 	}
 	return strings.Trim(strings.Join(lines, "\n"), "\n")
+}
+
+// --- Docs/binary alignment (product-audit P2) ---
+
+// TestDocs_GoPrerequisiteMatchesGoMod asserts the Go prerequisite stated in
+// README.md and INSTALLATION.md matches the `go` directive in go.mod, so the
+// prerequisite cannot silently rot as the module version moves.
+func TestDocs_GoPrerequisiteMatchesGoMod(t *testing.T) {
+	gomod := readSource(t, "go.mod")
+	var goVer string
+	for _, line := range strings.Split(gomod, "\n") {
+		if strings.HasPrefix(line, "go ") {
+			goVer = strings.TrimSpace(strings.TrimPrefix(line, "go "))
+			break
+		}
+	}
+	if goVer == "" {
+		t.Fatal("could not parse the go directive from go.mod")
+	}
+	for name, doc := range map[string]string{
+		"README.md":       readSource(t, "README.md"),
+		"INSTALLATION.md": readDoc(t, "INSTALLATION.md"),
+	} {
+		if !strings.Contains(doc, "Go "+goVer) {
+			t.Errorf("%s does not state the Go %s prerequisite from go.mod", name, goVer)
+		}
+	}
+}
+
+// TestDocs_AuditTrailIsJSONL asserts no doc claims the --db audit trail is a
+// SQLite database: it is JSONL, one JSON record per scan.
+func TestDocs_AuditTrailIsJSONL(t *testing.T) {
+	for name, doc := range map[string]string{
+		"README.md":       readSource(t, "README.md"),
+		"INSTALLATION.md": readDoc(t, "INSTALLATION.md"),
+		"EXAMPLES.md":     readDoc(t, "EXAMPLES.md"),
+	} {
+		if strings.Contains(doc, "SQLite") {
+			t.Errorf("%s still describes the audit trail as SQLite; --db writes JSONL", name)
+		}
+	}
+	examples := readDoc(t, "EXAMPLES.md")
+	if !strings.Contains(examples, "--db ./audit.jsonl") {
+		t.Error("EXAMPLES.md must show the --db example with a .jsonl path")
+	}
+	readme := readSource(t, "README.md")
+	if !strings.Contains(readme, "JSONL path for audit trail") {
+		t.Error("README.md --db flag description must say the audit trail is JSONL")
+	}
+}
+
+var releaseVersionRe = regexp.MustCompile(`\*\*v(\d+\.\d+\.\d+) released\*\*`)
+
+// TestDocs_ReleasedVersionMatchesLatestTag asserts the version claimed by the
+// README Status section equals the latest vX.Y.Z release tag in git — the
+// drift the product audit found (README claimed v0.5.1 while v0.6.2 was the
+// latest release). Skipped when git tags are unavailable.
+func TestDocs_ReleasedVersionMatchesLatestTag(t *testing.T) {
+	readme := readSource(t, "README.md")
+	m := releaseVersionRe.FindStringSubmatch(readme)
+	if m == nil {
+		t.Fatal("README.md Status section: could not find 'vX.Y.Z released'")
+	}
+	claimed := m[1]
+
+	out, err := exec.Command("git", "tag", "--list", "v*").Output()
+	if err != nil {
+		t.Skipf("git tags unavailable: %v", err)
+	}
+	var best [3]int = [3]int{-1, -1, -1}
+	bestTag := ""
+	tagRe := regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
+	for _, line := range strings.Split(string(out), "\n") {
+		tm := tagRe.FindStringSubmatch(strings.TrimSpace(line))
+		if tm == nil {
+			continue
+		}
+		c, err := parseVer(tm)
+		if err != nil {
+			continue
+		}
+		if c[0] > best[0] || (c[0] == best[0] && c[1] > best[1]) ||
+			(c[0] == best[0] && c[1] == best[1] && c[2] > best[2]) {
+			best, bestTag = c, "v"+strings.Join(tm[1:], ".")
+		}
+	}
+	if bestTag == "" {
+		t.Skip("no vX.Y.Z tags found in git; skipping tag-cross-check")
+	}
+	if claimed != bestTag[1:] {
+		t.Errorf("README claims v%s released but the latest git tag is %s", claimed, bestTag)
+	}
+}
+
+func parseVer(tm []string) ([3]int, error) {
+	var out [3]int
+	for i, s := range tm[1:4] {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return out, err
+		}
+		out[i] = n
+	}
+	return out, nil
+}
+
+// TestDocs_ParanoidAllowlistLabeledUnimplemented asserts the docs no longer
+// present the paranoid-tier allowlist as an implemented scanner (product-audit
+// P2: it was advertised but never exists in scanner selection; CONTRIBUTING.md
+// lists it as a known gap).
+func TestDocs_ParanoidAllowlistLabeledUnimplemented(t *testing.T) {
+	readme := readSource(t, "README.md")
+	for _, line := range strings.Split(readme, "\n") {
+		if strings.HasPrefix(line, "| paranoid ") {
+			if strings.Contains(line, "allowlist") {
+				t.Errorf("README.md paranoid row lists the allowlist as an implemented scanner: %q", line)
+			}
+		}
+	}
+	if !strings.Contains(strings.ReplaceAll(readme, "\n", " "), "not yet implemented") {
+		t.Error("README.md must explicitly say the paranoid allowlist is not yet implemented")
+	}
+
+	skill := readSource(t, "SKILL.md")
+	found := false
+	for _, line := range strings.Split(skill, "\n") {
+		if strings.Contains(line, "**paranoid**") {
+			found = true
+			if strings.Contains(line, "allowlist enforcement") {
+				t.Errorf("SKILL.md still presents the allowlist as implemented: %q", line)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("SKILL.md paranoid bullet not found")
+	}
+}
+
+// TestDocs_AuditTrailProvenanceDocumented asserts the README documents the
+// audit record provenance block, field by field.
+func TestDocs_AuditTrailProvenanceDocumented(t *testing.T) {
+	readme := readSource(t, "README.md")
+	fields := []string{
+		"provenance.source_digest",
+		"provenance.rules_digest",
+		"provenance.rules_dir",
+		"provenance.policy_trusted",
+		"provenance.suppress",
+		"provenance.checks",
+	}
+	for _, f := range fields {
+		if !strings.Contains(readme, f) {
+			t.Errorf("README.md audit trail section missing %q", f)
+		}
+	}
+	// Sanity: the fields the docs promise exist on the Go type.
+	audit := readSource(t, filepath.Join("internal", "store", "audit.go"))
+	for _, f := range []string{
+		`json:"source_digest"`, `json:"rules_digest"`, `json:"rules_dir`,
+		`json:"policy_trusted"`, `json:"suppress"`, `json:"checks"`,
+	} {
+		if !strings.Contains(audit, f) {
+			t.Errorf("README documents %q but internal/store/audit.go lacks it", f)
+		}
+	}
 }
