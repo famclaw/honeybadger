@@ -94,3 +94,14 @@ func TestAttestationPresent(t *testing.T) {
 		})
 	}
 }
+
+// attested must never be read as "signature verified": the basis field states
+// what it was derived from. Source scans can only ever say workflow_configured.
+func TestAttestedBasis(t *testing.T) {
+	if got := attestedBasis(true); got != "workflow_configured" {
+		t.Errorf("attestedBasis(true) = %q, want workflow_configured", got)
+	}
+	if got := attestedBasis(false); got != "none" {
+		t.Errorf("attestedBasis(false) = %q, want none", got)
+	}
+}

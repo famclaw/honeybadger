@@ -223,6 +223,96 @@ func TestCLI_ForceFlagBYPASSSSHACache(t *testing.T) {
 	}
 }
 
+// HB-05: "attested" must be self-describing. A source scan cannot verify
+// artifact signatures, so the result event carries attested_basis stating
+// what the flag was derived from. End-to-end over local targets the flag can
+// only be false (the workflow-configured check is gated on the github fetch
+// platform), so the basis must be present and "none" — never absent. The
+// "workflow_configured" value itself is pinned by TestAttestedBasis.
+func TestCLI_ResultCarriesAttestedBasis(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		repo  *fetch.Repo
+		tier  string
+		extra []string
+	}{
+		{"family", testfixture.SecretsRepo(), "family", nil},
+		{"strict", testfixture.SecretsRepo(), "strict", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := testfixture.WriteToDir(t, tt.repo)
+			args := append([]string{"scan", dir, "--paranoia", tt.tier, "--format", "ndjson", "--offline"}, tt.extra...)
+			cmd := exec.Command(testBinary, args...)
+			out, _ := cmd.CombinedOutput()
+			result := findResultEvent(t, out)
+			basis, present := result["attested_basis"].(string)
+			if !present {
+				t.Fatalf("attested_basis missing from result event\noutput: %s", out)
+			}
+			att, _ := result["attested"].(bool)
+			if want := attestedBasis(att); basis != want {
+				t.Errorf("attested_basis = %q, want %q (attested=%v)\noutput: %s", basis, want, att, out)
+			}
+		})
+	}
+}
+
+// HB-05 (MCP path): the honeybadger_scan tool response must carry the same
+// attested_basis field as the CLI result event. A local-directory target can
+// never be attested (the workflow check is github-platform-gated), so the
+// basis must be present and consistent with the flag value.
+func TestMCP_ResponseCarriesAttestedBasis(t *testing.T) {
+	dir := testfixture.WriteToDir(t, testfixture.SecretsRepo())
+
+	s := newMCPServer("")
+	c, err := mcpclient.NewInProcessClient(s)
+	if err != nil {
+		t.Fatalf("NewInProcessClient: %v", err)
+	}
+	defer c.Close()
+
+	ctx := context.Background()
+	initReq := mcp.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "integration-test", Version: "1.0"}
+	if _, err := c.Initialize(ctx, initReq); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	callReq := mcp.CallToolRequest{}
+	callReq.Params.Name = "honeybadger_scan"
+	callReq.Params.Arguments = map[string]any{
+		"repo_url": dir,
+		"paranoia": "family",
+	}
+	result, err := c.CallTool(ctx, callReq)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("tool returned error: %+v", result.Content)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty content")
+	}
+	text, ok := mcp.AsTextContent(result.Content[0])
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	var resultMap map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &resultMap); err != nil {
+		t.Fatalf("failed to parse result JSON: %v\nraw: %s", err, text.Text)
+	}
+	basis, present := resultMap["attested_basis"].(string)
+	if !present {
+		t.Fatalf("attested_basis missing from MCP scan response\nresult: %s", text.Text)
+	}
+	att, _ := resultMap["attested"].(bool)
+	if want := attestedBasis(att); basis != want {
+		t.Errorf("MCP attested_basis = %q, want %q (attested=%v)\nresult: %s", basis, want, att, text.Text)
+	}
+}
+
 func TestCLI_Version(t *testing.T) {
 	cmd := exec.Command(testBinary, "--version")
 	out, err := cmd.CombinedOutput()

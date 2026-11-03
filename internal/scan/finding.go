@@ -76,6 +76,38 @@ func ParseParanoia(s string) (ParanoiaLevel, error) {
 	}
 }
 
+// ParanoiaRank returns the ordinal of a paranoia level in the escalation
+// ladder off < minimal < family < strict < paranoid (higher = more aggressive).
+// Unknown values rank below every valid level so they satisfy no gate.
+//
+// Never compare ParanoiaLevel values with >= directly: ParanoiaLevel is a
+// string type, so >= is a lexicographic comparison — "off" >= "family" and
+// "minimal" >= "family" are both true, which would fire family-and-above
+// gates at every level. Use ParanoiaRank (or AtLeast) for any ordering.
+func ParanoiaRank(l ParanoiaLevel) int {
+	switch l {
+	case ParanoiaOff:
+		return 0
+	case ParanoiaMinimal:
+		return 1
+	case ParanoiaFamily:
+		return 2
+	case ParanoiaStrict:
+		return 3
+	case ParanoiaParanoid:
+		return 4
+	default:
+		return -1
+	}
+}
+
+// AtLeast reports whether paranoia l is at or above min in the escalation
+// ladder using explicit ordinal comparison. This is the only correct way to
+// evaluate "level X and above" gates.
+func AtLeast(l, min ParanoiaLevel) bool {
+	return ParanoiaRank(l) >= ParanoiaRank(min)
+}
+
 // BlockThresholds maps paranoia level to minimum severity that blocks installation.
 var BlockThresholds = map[ParanoiaLevel]string{
 	ParanoiaMinimal:  SevCritical,

@@ -62,7 +62,7 @@ Verify downloads: see [SECURITY.md](SECURITY.md).
       --tool-baseline string  Path to approved tools/list JSON for rug-pull diffing
       --trust-target-ignore  Honor target .honeybadgerignore (default: off; target file is untrusted)
       --ignore-file string   Operator-supplied suppression policy file (always applied; read failure aborts scan)
-      --force                Skip scan, exit 0
+      --force                Bypass the audit cache; run the scan even if already audited
       --offline              Skip network calls, scan local only
       --path string          Subdirectory within repo to scan
         See [docs/sarif-output.md] for details on SARIF output.

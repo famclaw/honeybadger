@@ -144,7 +144,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	// 4. Run scanners
 	effectiveParanoia := string(paranoia)
 	if engine.IsTermux() {
-		if scan.SeverityRank(string(paranoia)) > scan.SeverityRank(string(scan.ParanoiaFamily)) {
+		if scan.ParanoiaRank(paranoia) > scan.ParanoiaRank(scan.ParanoiaFamily) {
 			effectiveParanoia = string(scan.ParanoiaFamily)
 		}
 	}
@@ -217,7 +217,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 	// 6. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
-	if paranoia >= scan.ParanoiaFamily && llmEndpoint != "" {
+	if scan.AtLeast(paranoia, scan.ParanoiaFamily) && llmEndpoint != "" {
 		llmTimeout := parseLLMTimeout(os.Getenv("HONEYBADGER_LLM_TIMEOUT"))
 		llmCtx, llmCancel := context.WithTimeout(ctx, llmTimeout)
 		defer llmCancel()
@@ -285,6 +285,7 @@ func runScan(ctx context.Context, repoURL, paranoiaStr, installedSHA, installedT
 		"cve_count":          cveCount,
 		"cve_max_severity":   cveMaxSev,
 		"attested":           attested,
+		"attested_basis":     attestedBasis(attested),
 		"llm_model":          llmModel,
 		"llm_used":           llmUsed,
 		"paranoia":           string(paranoia),

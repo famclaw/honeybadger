@@ -236,7 +236,7 @@ func run(cfg runConfig) (int, error) {
 	if engine.IsTermux() {
 		sandboxAvailable = false
 		reason = "Termux does not support sandboxing"
-		if scan.SeverityRank(string(paranoia)) > scan.SeverityRank(string(scan.ParanoiaFamily)) {
+		if scan.ParanoiaRank(paranoia) > scan.ParanoiaRank(scan.ParanoiaFamily) {
 			effectiveParanoia = string(scan.ParanoiaFamily)
 		}
 	}
@@ -434,7 +434,7 @@ func run(cfg runConfig) (int, error) {
 	// 9. LLM verdict
 	var llmVerdict *report.LLMVerdict
 	llmUsed := false
-	if paranoia >= scan.ParanoiaFamily && cfg.LLMEndpoint != "" && !cfg.Offline {
+	if scan.AtLeast(paranoia, scan.ParanoiaFamily) && cfg.LLMEndpoint != "" && !cfg.Offline {
 		if err := emitter.Emit(engine.NewProgressEvent("llm", "Asking LLM for verdict...")); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to write progress: %v\n", err)
 		}
@@ -514,6 +514,7 @@ func run(cfg runConfig) (int, error) {
 		CVECount:          cveCount,
 		CVEMaxSeverity:    cveMaxSev,
 		Attested:          attested,
+		AttestedBasis:     attestedBasis(attested),
 		LLMModel:          cfg.LLMModel,
 		LLMUsed:           llmUsed,
 		Paranoia:          string(paranoia),
@@ -609,6 +610,18 @@ func attestationPresent(findings []scan.Finding) bool {
 		}
 	}
 	return false
+}
+
+// attestedBasis names what the Attested flag was derived from, so a consumer
+// never mistakes presence of attestation infrastructure for verification of a
+// signature. Source scans can only ever produce "workflow_configured";
+// signature verification would require release-asset digests and a different
+// basis value entirely.
+func attestedBasis(attested bool) string {
+	if attested {
+		return "workflow_configured"
+	}
+	return "none"
 }
 
 func envOrDefault(key, fallback string) string {

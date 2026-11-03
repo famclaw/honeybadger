@@ -20,7 +20,7 @@
 ### Detect MCP tool definition changes (rug-pull detection)
     honeybadger scan github.com/someone/some-mcp --installed-tool-hash def456...
 
-### Force bypass (logs the bypass)
+### Audit-cache bypass (full scan even when already verified)
     honeybadger scan github.com/someone/some-skill --force
 
 ### Scan a monorepo subdirectory
@@ -84,6 +84,14 @@ Note: When scanning private repositories via SSH URL, you must have SSH keys pro
 | `trust_target_ignore` | bool | No | Trust a target-authored `.honeybadgerignore` (default: `false`) |
 | `ignore_file` | string | No | Operator-supplied `.honeybadgerignore` policy path |
 
+### Attestation fields
+`attested` is a **presence** signal, not verification: `true` means the scan
+found a build-attestation workflow (`actions/attest-build-provenance`)
+configured in the repository source. No artifact signature was verified —
+source scans carry only a commit SHA, never a release-artifact digest the
+GitHub attestation API could be keyed by. `attested_basis` states what the
+flag was derived from (`workflow_configured` when attested, `none` when not).
+
 ### Response example
 ```json
 {
@@ -95,6 +103,7 @@ Note: When scanning private repositories via SSH URL, you must have SSH keys pro
   "cve_count": 0,
   "cve_max_severity": "",
   "attested": false,
+  "attested_basis": "none",
   "llm_model": "",
   "llm_used": false,
   "paranoia": "family",
