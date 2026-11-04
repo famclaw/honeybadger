@@ -1,26 +1,44 @@
 # Changelog
 
-## Unreleased
+## v0.8.0 (preparation)
 
 ### Added
 
-- Audit record provenance block (`internal/store/audit.go`): `--db` records
-  now carry `provenance` with the source digest (same value `--installed-sha`
-  compares against), a rules-set digest, the user rule dir, the
-  `.honeybadgerignore` trust decision, the suppression decisions (count,
-  applied/ignored sources, matched rule IDs), and per-check completed/failed
-  status. The block is additive; pre-existing JSONL records remain decodable.
+- #117: Added structured evidence receipts that record executed checks, findings, exceptions, pinned build actions, and published assets. Receipt digests are content hashes, not signatures; artifact verification is only `verified` when a computed SHA256 matches a trusted registered baseline. Remote fetch-and-compare and signed receipt export remain unimplemented placeholders.
+- #119: Added an additive provenance block to audit records with source digest, rules digest, user rule directory, ignore trust decision, suppression decisions, and per-check completion/failure status. Existing JSONL records remain decodable.
 
 ### Fixed
 
-- File-role classification no longer collapses test fixtures and the rule
-  corpus into `unknown`: `internal/scan/fileclass.go` adds dedicated `test`
-  and `corpus` roles, and every described-context role (prose, comment,
-  test, corpus) reduces findings to annotated INFO instead of escalating
-  them. The paranoid self-scan now passes by classification rather than
-  per-file suppressions ("described ≠ contained"), restoring the v0.6.2
-  behavior that commit f99d24f (#95) regressed; the repository's
-  stopgap `.honeybadgerignore` suppression list is removed.
+- #118: Paranoia comparisons are ordinal; `off` and `minimal` no longer invoke LLM verdict processing. High-EPSS enrichment can raise or annotate severity but never downgrades a CRITICAL CVSS finding (including when KEV is absent).
+- Release self-check now validates the complete NDJSON stream, requires exactly one top-level result record, and cross-checks the scanner exit code against its verdict before accepting PASS/WARN.
+
+### Changed
+
+- #115: Updated the CodeQL action dependency (build/CI only).
+- #116: Updated `mcp-go` from 1.3.0 to 1.4.0.
+- #118: Result events now include `attested_basis`; `workflow_configured` describes detected workflow configuration, not cryptographic verification. A source scan does not verify a release signature.
+- Removed the unapproved AI-generated release-notes action; release notes are authored and deterministic.
+
+## v0.7.0 (2026-10-20)
+
+### Added
+
+- #109: CVE findings incorporate KEV and EPSS exploitation intelligence.
+- #114: File-role classification distinguishes described threats from contained threats; descriptive context is annotated rather than suppressed, including the dedicated test and rule-corpus roles. The paranoid self-scan uses classification instead of repository-specific suppressions.
+- Added remote-content pinning and explicit incomplete-coverage reporting (#101), and nested glob suppression matching (#113).
+
+### Fixed
+
+- #95/#114: Target `.honeybadgerignore` is untrusted by default; described-context roles retain annotated findings instead of silently dropping them.
+- #84: `--force` performs analysis rather than returning PASS without scanning.
+- #94: Scanner runtime errors participate in verdict calculation and cannot produce a clean PASS.
+- #99: Offline mode rejects remote targets before fetching.
+- #96: SARIF output is emitted as one valid document.
+- #107: Corrected attestation claims and version references in documentation.
+
+### Changed
+
+- Dependency and documentation updates included in the v0.7.0 release; see the tagged release for the full commit-level list.
 
 ## v0.6.2 -- 2026-07-15
 
