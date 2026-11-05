@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Execute bit required: invoked directly from release workflow and Makefile.
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
