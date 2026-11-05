@@ -32,73 +32,11 @@ jobs:
 
       - uses: anchore/sbom-action/download-syft@v0
 
-      # Self-check: HoneyBadger scans itself before release at the strictest
-      # paranoia tier. File-role classification (rules corpus, test fixtures,
-      # documentation prose) lets the scanner tell a threat it *describes* from
-      # one it *contains*, so the repo passes its own paranoid scan cleanly.
-      # Build, run, and clean up in a single step to keep git state clean for GoReleaser.
+      # Self-check: run the production gate helper against this repository.
       - name: HoneyBadger self-check
         run: |
           CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w" -o /tmp/honeybadger-selfcheck ./cmd/honeybadger
-          /tmp/honeybadger-selfcheck scan . \
-            --paranoia paranoid --offline --format ndjson | tee /tmp/self-report.json
-          verdict=$(grep '"type":"result"' /tmp/self-report.json | jq -r .verdict)
-          if [ "$verdict" = "FAIL" ]; then
-            echo "::error::Self-check verdict=FAIL — aborting release"
-            cat /tmp/self-report.json
-            exit 1
-          fi
-          echo "Self-check verdict=$verdict"
-
-      # AI-powered release notes
-      - name: Generate AI release notes
-        id: ai_notes
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        if: env.ANTHROPIC_API_KEY != ''
-        run: |
-          # Collect commits since last tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD)
-            DIFF_STAT=$(git diff --stat "$PREV_TAG"..HEAD | tail -1)
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)")
-            DIFF_STAT=$(git diff --stat $(git rev-list --max-parents=0 HEAD)..HEAD | tail -1)
-          fi
-
-          # Call Claude API for release summary (use jq for safe JSON construction)
-          PROMPT_TEXT="Write a concise release summary (3-5 bullet points) for HoneyBadger, a security scanner for AI assistant skills/tools/MCP servers. Focus on what users care about: new capabilities, security improvements, breaking changes. No markdown headers, just bullet points starting with emoji.
-
-          Version: ${{ github.ref_name }}
-          Stats: ${DIFF_STAT}
-
-          Commits since last release:
-          ${COMMITS}"
-
-          RELEASE_SUMMARY=$(jq -n \
-            --arg model "claude-haiku-4-5-20251001" \
-            --arg content "$PROMPT_TEXT" \
-            '{model: $model, max_tokens: 512, messages: [{role: "user", content: $content}]}' | \
-            curl -s https://api.anthropic.com/v1/messages \
-              -H "Content-Type: application/json" \
-              -H "x-api-key: $ANTHROPIC_API_KEY" \
-              -H "anthropic-version: 2023-06-01" \
-              -d @- | \
-            python3 -c "import sys,json; print(json.load(sys.stdin)['content'][0]['text'])" 2>/dev/null || echo "")
-
-          if [ -n "$RELEASE_SUMMARY" ]; then
-            # Write to file for GoReleaser to pick up
-            {
-              echo "### Highlights"
-              echo ""
-              echo "$RELEASE_SUMMARY"
-              echo ""
-            } > /tmp/ai-release-notes.md
-            echo "has_notes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_notes=false" >> "$GITHUB_OUTPUT"
-          fi
+          scripts/release-gate.sh /tmp/honeybadger-selfcheck . /tmp/self-report.json
 
       # GoReleaser: build, sign, Docker, SBOM, release
       - uses: goreleaser/goreleaser-action@v7
@@ -109,6 +47,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COSIGN_YES: "true"
+
+      # Replace GoReleaser's generated notes with the reviewed, authored release body.
+      - name: Set authored release notes
+        run: gh release edit "${{ github.ref_name }}" --notes-file RELEASE_NOTES.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 # Attest build provenance for the release checksums file
       - name: Attest build provenance
@@ -129,15 +73,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Upload self-check report and AI notes to release
+      # Upload self-check report to release
       - name: Upload extra artifacts
         if: always()
         run: |
           if [ -f /tmp/self-report.json ]; then
             gh release upload "${{ github.ref_name }}" /tmp/self-report.json --clobber
-          fi
-          if [ -f /tmp/ai-release-notes.md ]; then
-            gh release upload "${{ github.ref_name }}" /tmp/ai-release-notes.md --clobber
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

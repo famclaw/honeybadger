@@ -25,6 +25,7 @@ android-install:
 
 test:
 	go test ./... -v
+	@tests/release-gate-test.sh
 
 self-check: build
 	# The self-scan on --paranoia strict is expected to FAIL due to
