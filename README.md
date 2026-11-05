@@ -471,7 +471,7 @@ honeybadger/
 
 ## Status
 
-**v0.7.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.7.0)
+**v0.8.0 released** -- [download binaries](https://github.com/famclaw/honeybadger/releases/tag/v0.8.0)
 
 Eight scanners: secrets, cve, supplychain, meta, capability, skillsafety,
 attestation, mcptool. The `mcptool` scanner analyzes MCP tool definitions for
