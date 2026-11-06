@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.1 (preparation)
+
+### Changed
+
+- v0.8.1 is the recut of the v0.8.0 preparation content. The v0.8.1 tag will be cut against merged main (current head `539ecdc4` plus this content-alignment commit) immediately after this preparation PR is merged (Step 2 of the recovery).
+- `README.md` Status and `RELEASE_NOTES.md` now reference the v0.8.1 release locations (Go install, Docker, binary download, cosign verify, compare URL).
+
+### Fixed
+
+- Release-tag correction: the existing `v0.8.0` tag points at commit `d991bc33` (#120), the main head before the README status repair (#121) landed; the Release workflow run for that tag failed and no v0.8.0 release was published. The v0.8.0 tag object is preserved unchanged as an un-released artifact.
+- The README status repair from #121 ships as part of the v0.8.1 content rather than being re-released under the v0.8.0 identifier.
+
 ## v0.8.0 (preparation)
 
 ### Added
